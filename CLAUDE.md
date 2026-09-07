@@ -197,11 +197,12 @@ sequencing constraint on the build, not just an architectural preference — and
 deliberately *not* "primitives precede any widget", which is a different and
 much more expensive claim.
 
-**Rule 3 — the ABI is a protocol, not a class.** Most widgets run in a sandbox
-(§8.1), so the contract between host and widget is **messages across a
-boundary**, and a JavaScript object with methods is one binding of it rather
-than the thing itself. Any capability that cannot be expressed as an async
-message is a capability extensions do not get — see §4.2.
+**Rule 3 — keep the surface serializable in principle.** Widgets run in the main
+realm (§8.1), so `HcContext` is a plain object and calls are direct. But keep
+every capability *expressible* as a message — narrow, data-in-data-out, no
+handing over host internals — so the sandbox path stays available for the kinds
+that want it without an ecosystem-breaking rewrite. A discipline on the design,
+not a tax on the caller.
 
 ---
 
@@ -211,22 +212,6 @@ This is the ABI. It is the most expensive thing to change later. Lock it before
 writing UI.
 
 ### 4.1 Widget interface
-
-**The contract is a protocol.** Most widgets run in a sandboxed frame (§8.1) and
-are therefore not objects in the host's realm at all, so the ABI is the sequence
-of messages, and the TypeScript below is the **in-realm binding** of it — what
-the SDK hands an author, and what the two unsandboxable kinds implement
-directly.
-
-```
-host → widget    config      the resolved config; widget replies ok | error
-host → widget    state       the granted devices, on connect and on change
-host → widget    mode        "view" | "edit"
-host → widget    tokens      resolved design tokens, again on theme change
-widget → host    size        preferred size (see below)
-widget → host    request     any HcContext call (§4.2), correlated, awaited
-widget → host    log         author diagnostics, surfaced in the inspector
-```
 
 ```ts
 export interface HcWidget extends HTMLElement {
@@ -243,10 +228,10 @@ export interface HcWidget extends HTMLElement {
 }
 ```
 
-A custom element is a convenient binding, not the boundary. **If a capability
-cannot be phrased as one of those messages, extensions do not have it** — which
-is Rule 3, and the discipline that keeps the two kinds from drifting into two
-ABIs.
+A widget is a custom element and the host calls it directly. Keep the surface
+narrow enough that it *could* be messages (Rule 3) — that is what leaves the
+sandbox available later for the cases that want it (§8.1), without making every
+author write `await` today for a call that does not cross anything.
 
 ### 4.2 HcContext — the capability boundary
 
@@ -269,8 +254,8 @@ export interface HcContext {
   query(q: DeviceQuery): QueryResult;
 
   /** P5 — open a dialog, bottom sheet, or popover owned by the host.
-   *  Content is a widget *spec*, never a DOM node — a sandboxed widget has no
-   *  nodes the host could mount. */
+   *  Prefer a widget *spec* over a DOM node: a spec is storable as config,
+   *  which is what makes "tap opens a room sheet" a setting rather than code. */
   overlay: OverlayApi;
 
   /** P8 — history and statistics, downsampled server-side. */
@@ -279,16 +264,14 @@ export interface HcContext {
   /** P9 — run a configured action with the shared safety/confirm policy. */
   action(cfg: ActionConfig, source: ActionSource): Promise<void>;
 
-  /** Resolve an asset reference to a URL, namespaced to this extension.
-   *  A sandboxed frame has an opaque origin and `default-src 'none'`, so the
-   *  host must also admit the asset origin into that frame's CSP (§9) — a URL
-   *  the frame cannot fetch is worse than no URL. */
-  asset(ref: string): Promise<string>;
+  /** Resolve an asset reference to a URL, namespaced to this extension. */
+  asset(ref: string): string;
 
-  /** Read-only spatial geometry, when a model is loaded. Queried, not handed
-   *  over: a house is too large to copy into every frame, and a widget wants
-   *  one room's polygon rather than the document. */
-  spatial?: SpatialQuery;
+  /** Shared Rive runtime — never bundle your own. */
+  rive: RiveRuntime;
+
+  /** Read-only spatial model, when one is loaded. */
+  spatial?: SpatialModel;
 
   /** Resolved DTCG design tokens. */
   tokens: DesignTokens;
@@ -311,20 +294,12 @@ card on every state change, which causes all cards to re-render on unrelated
 updates. Declaring bindings up front and fanning out per-device avoids this and
 matters most on the low-powered tablets.
 
-**Every call is async, and that is not a detail.** Each member above is a
-request across a frame boundary (§8.1), so the whole surface returns promises
-and nothing here may be a live object the widget holds. That is why `spatial` is
-a query rather than a model, why `overlay` takes a widget spec rather than a
-node, and why **`rive` is not on this list at all** — a frame cannot share the
-host's runtime instance, and shipping a copy of it into every frame is megabytes
-per widget. Rive is reached the way §10.2 already describes: a first-party
-`hc-rive` widget configured by *data*, which any extension can instantiate and
-no extension needs to bundle.
-
-**The test for anything added here later:** phrase it as a message with a
-correlated reply. If it cannot be phrased that way, it is a capability only the
-first-party client would have, and Rule 1 says that is the ABI being wrong
-rather than a reasonable exception.
+**Why the narrow surface.** If widgets only ever talk through `HcContext`,
+isolating one later — the code element's frame (§8.1), or a per-extension
+sandbox for something that misbehaves — is a transport swap rather than an
+ecosystem-breaking rewrite. Design as if sandboxed even while running in-realm:
+data in, data out, no host internals handed across. That is Rule 3, and it costs
+nothing while everything is in one realm.
 
 ### 4.3 Extension manifest
 
@@ -451,13 +426,12 @@ Three consequences, stated so they are not discovered in Phase 3:
   That is what makes the scoped-subscription promise structural instead of
   advisory — a widget cannot read what it did not declare, in exactly the same
   sense §6.4 means it.
-- **`CodeAttachment` is a sandboxed document, not an in-realm ESM module.**
+- **`CodeAttachment` describes a sandboxed document, not an ESM module.**
   `entry` is *"the document the sandbox loads"*; `grant` names the devices it
-  may reach — and the grant is these same `bindings`, not a second list.
-  **Settled in §8.1:** sandbox by default, in-realm only for the kinds that
-  cannot be framed. §4.1's custom-element `HcWidget` interface therefore
-  describes the in-realm kinds; a sandboxed widget's equivalent is the shim
-  inside its frame, and `HcContext` reaches it over `postMessage`.
+  may reach — and that grant is these same `bindings`, not a second list. It is
+  the right shape for a **code element** (§8.1) and the wrong one for an
+  installed extension, which loads as a module in the main realm. The descriptor
+  needs to say which, which is one more field alongside the `graphical` kind.
 
 **The two kinds.**
 
@@ -631,27 +605,20 @@ interface HcWidgetMeta {
 ```
 
 Layouts (stack, grid, swipe, tabs, accordion) are container widgets built on
-this — not special-cased card types.
+this — not special-cased card types, and not first-party-only. An extension
+ships a container the same way it ships anything else (§3, Rule 1).
 
-**Containers are the one place Rule 1 does not fully hold, and it is worth
-saying rather than discovering.** A container's children are host-rendered
-widgets, each in its own frame; a container that was itself sandboxed could not
-hold them, because a frame cannot mount another frame's element. So containers
-run in-realm (§8.1) and an extension cannot currently ship one.
+**A declarative container is worth more than a coded one where it fits.** A
+container whose behaviour is data — slot names, direction, gaps, per-breakpoint
+placement — is expressible as a portable `RenderElement` (§4.6), so hc-tui can
+draw a stack. A coded container is web-only by construction. Every container in
+§7.3 is expressible as data, so ship them that way and let code containers be
+the exception that earns itself.
 
-Two ways out, neither free, and this needs deciding before §7.3's containers are
-built rather than after:
-
-- **A container declares layout, the host performs it.** The container is data —
-  slot names, direction, gaps, breakpoints — evaluated by the host, which owns
-  the children. Extensions can then ship containers, but only declarative ones.
-- **Containers stay code and stay first-party**, and the manifest simply has no
-  container kind, said plainly in the SDK docs rather than left as a gap someone
-  discovers.
-
-The first is more in keeping with §3's Rule 1 and is probably right, since every
-container in §7.3 is expressible as data. It is listed here as an open decision
-because it constrains the slot model, which is this primitive.
+**A sandboxed widget cannot be a container** — a frame cannot mount another
+frame's element — so the per-extension sandbox flag (§8.1) and slots are
+mutually exclusive. Worth knowing when flagging a misbehaving extension, not a
+constraint on the design.
 
 *Obviates:* stack-in-card, vertical-stack-in-card, swipe-card, and the whole
 "in-card" family that exists purely to suppress double borders.
@@ -900,10 +867,8 @@ navigate. Shipping only Tier 1 produces an ecosystem of workaround extensions.
 
 ### 7.2 The shared layout shell
 
-Every Tier 1 widget is a thin specialization of one shell. The shell ships in
-the SDK and is bundled *into* each widget, since a sandboxed widget cannot
-import from the host — so keep it small, and keep anything large (icon sets,
-the token table) on the host side of the boundary where it is sent as data.
+Every Tier 1 widget is a thin specialization of one shell. Build the shell in the
+SDK; the domain widgets are then small.
 
 ```
 ┌─────────────────────────────────────────┐
@@ -996,83 +961,67 @@ SDK, that is a finding, not an excuse to special-case it.
 
 ## 8. Loading and trust model
 
-### 8.1 Loading — two mechanisms, chosen by kind
+### 8.1 Trust — in-realm by default
 
-**Settled: sandboxed by default, in-realm by declared exception.**
+**Settled: in-realm by default. Isolation is a tool, not a policy.**
 
-The earlier draft said "start trusted, build for hybrid." The argument against
-it is the driver itself (§1.2): the point of this rewrite is that somebody
-outside this repo can add a widget. **In-realm means every such widget can read
-the session token**, so "trusted by default" quietly limits the ecosystem to
-code the admin has personally audited — which is the small, cautious ecosystem
-this project is trying not to have. A sandbox is what makes a widget from a
-stranger a reasonable thing to install.
+An earlier revision made every widget sandboxed. That was wrong, and the reason
+is worth recording so it does not get re-litigated:
 
-It is also the decision that cannot be walked back. Once extensions assume
-main-realm DOM, sandboxing them later breaks all of them at once.
+- **Extension install is already a deliberate admin act.** Upload a `.tar.gz`,
+  admin-only, never auto-fetched from a URL. The trust decision happens there.
+- **homeCore plugins are native binaries.** `plugin_install.rs` unpacks them and
+  `plugin_runtimes.rs` supervises them as processes with the broker, the devices
+  and the filesystem. An admin who would install a hostile package has a far
+  larger door already open, and hardening the browser layer while that one
+  stands is defense pointed away from the risk.
+- **Mandatory isolation is paid for by extension authors**, in a currency this
+  project cannot afford: no shared Rive runtime, no spatial model, no
+  extension-authored containers, everything async, the layout shell copied into
+  every widget. A worse product for the exact person this rewrite exists to
+  serve.
+- **And it would not even be complete.** Floorplan layers and slot containers
+  cannot be framed at all, so anyone wanting the session token ships a layer.
+  A partial boundary at full price.
 
-**The mechanism is specified in core**, as `CodeAttachment { entry, grant }`,
-and hc-web-flutter's `code_runtime.dart` is one implementation of it — evidence
-the shape works in a browser, not the reason to choose it. What that
-implementation gets right and this one should keep:
+**Isolation is offered where it earns its place**, not imposed everywhere:
 
-- `sandbox="allow-scripts"` **without** `allow-same-origin`, so the frame gets an
-  opaque origin and cannot reach this app's cookies, storage or DOM. *The two
-  must never be set together — that combination lets a frame remove its own
-  sandbox attribute.*
-- A CSP meta inside the document, `default-src 'none'`, inline script only, with
-  network opened per element and only when reaching the LAN is the point.
-- A per-frame nonce carried on every message in both directions, so a stale
-  frame in an old tab cannot be mistaken for a live one.
-- Messages are JSON **strings**, not structured clones — no conversion surface
-  at a boundary where getting it wrong means a sandbox escape.
-- **The device grant is the whole permission model.** An element names a
-  selection and is handed exactly those devices, and may act on exactly those.
-  Naming nothing renders and can do nothing, which is the right default for code
-  someone pasted from the internet.
-- Skin tokens go in as CSS custom properties, so a sandboxed element restyles
-  with the house instead of being a permanent literal.
-
-**The grant and the bindings are the same thing** (§4.6). A descriptor's
-`bindings` are the subscription set in-realm and the grant across the frame
-boundary; they must not become two lists that can disagree.
-
-**Which mechanism a kind gets:**
-
-| Kind | Mechanism | Why |
+| Case | Mechanism | Why |
 |---|---|---|
-| Code element (pasted, authored in-product) | **sandbox** | untrusted by definition; ships today |
-| Extension widget | **sandbox** | owns a rectangle, talks in messages — nothing more is needed |
-| Floorplan layer | **in-realm ESM** | renders into a *shared* SVG/canvas target; cannot be framed |
-| Container widget (P4 slots) | **in-realm, first-party** | its children are host-rendered widgets, which an iframe cannot hold |
-| Pipeline node UI | **sandbox** | same shape as a widget |
+| Installed extension | **in-realm ESM** | the admin chose it; full capability |
+| Floorplan layer | **in-realm ESM** | shares an SVG/canvas target; no other option |
+| Code element — pasted, authored in-product | **sandboxed frame** | no install step and no act of trust; someone pasted it from a forum |
+| A widget that misbehaves | **sandboxed, per-extension flag** | crash containment on a tablet that runs for months |
 
-So the in-realm ESM path is not deleted — it is **scoped to the kinds that
-cannot be framed**, and those kinds are higher-trust by nature. The install UI
-says which kind an extension is contributing, because "this adds a floorplan
-layer" is a different consent than "this adds a card."
+The last row is the argument for keeping the frame path alive that has nothing
+to do with security: a runaway loop takes down the tab, and on a wall display
+that is the whole dashboard. In a frame it takes down only itself. That is a
+reason to *offer* isolation, not to mandate it — and Rule 3 is what keeps it
+cheap to offer.
 
-**The gap is the whole job.** That existing shim exposes four functions —
-`states`, `onUpdate`, `set`, `log` — which is enough for a card that draws a
-gauge and enough to prove a frame is safe. It is nowhere near `HcContext`
-(§4.2), and the difference is not a detail: `query`, `overlay`, `history`,
-`action`, `expr` and the presentation primitive all have to cross
-`postMessage` before a sandboxed widget is a **first-class** widget rather than
-a tolerated one. §4.2 claims that is a transport swap. Phase 3 is where the
-claim is tested, and §3's Rule 1 is what it is tested against: if a first-party
-widget would be unreasonable to write against the proxied context, the proxy is
-wrong — not the rule.
+**The sandbox is real and specified**, as core's `CodeAttachment { entry, grant }`
+— the document a frame loads and the devices it may reach. Its properties are
+worth stating because they are what make the code element safe:
 
-**Measure the frame cost, do not assume it.** Thirty iframes on a Fire tablet is
-the objection to this design and it deserves a number, not a shrug — the same
-treatment §11.7 gives Rive. Profile it in Phase 0 alongside the other probes. If
-frames are too expensive at dashboard scale, the fallback is a **shared worker
-frame** hosting several widgets behind one origin, not a retreat to the main
-realm.
+- `sandbox="allow-scripts"` **without** `allow-same-origin`, so the frame has an
+  opaque origin. *The two must never be set together — that combination lets a
+  frame remove its own sandbox attribute.*
+- A CSP inside the document: `default-src 'none'`, inline script only, network
+  opened per element and only when reaching the LAN is the point.
+- A per-frame nonce on every message, so a stale frame cannot be mistaken for a
+  live one.
+- **The grant is the whole permission model.** Name a selection, get exactly
+  those devices, act on exactly those. Name nothing and the element renders and
+  can do nothing — the right default for code someone pasted.
 
-**Loading, for the in-realm kinds.** Native ESM. No Module Federation — it
-exists to share a bundler runtime across builds you control, which is not this
-situation.
+**A descriptor therefore has to say which it is** (§4.6). `CodeAttachment`
+describes a sandboxed document; an installed extension's widget is an ESM
+module. That is one more field on the descriptor, alongside the `graphical`
+kind, and it is a core change to make deliberately rather than a distinction to
+leave implicit.
+
+**Loading.** Native ESM. No Module Federation — it exists to share a bundler
+runtime across builds you control, which is not this situation.
 
 ```ts
 const manifest = await api.get(`/api/extensions/${id}/manifest`);
@@ -1085,22 +1034,24 @@ const mod = await import(
 The `?v=` cache-buster keyed on manifest version means extension updates take
 effect on reload without service-worker gymnastics.
 
-### 8.2 What in-realm still costs
+### 8.2 What in-realm costs, stated plainly
 
-An ESM module imported into the main realm has full DOM access and can read the
-session token and everything the app can read. Home Assistant accepts this for
-everything; their guidance is to host resources locally and let the risk sit
-with the admin who installed the extension. We accept it for **two kinds only**,
-and that narrowing is the point of §8.1's table.
+An ESM module in the main realm has full DOM access and can read the session
+token and everything the app can read. Home Assistant accepts this, and so do
+we. The risk sits with the admin who installed the extension, which is where it
+belongs — the alternative is a product that protects admins from their own
+decisions at the cost of the ecosystem those decisions exist to build.
 
-For those kinds:
+What follows from accepting it:
 
-- The install UI names the kind and what it implies, rather than presenting one
-  undifferentiated "install extension" button.
-- Minisign verification over the manifest, before any public registry exists.
-- A layer that only needs to draw should still be written against
-  `HcFloorplanLayer` and nothing else — §19.4 applies with more force here, not
-  less, because nothing is enforcing it.
+- **Minisign verification over the manifest**, before any public registry
+  exists. Signing tells an admin the package is the one its author published;
+  it is the cheap half of this and worth having early.
+- **`HcContext` stays the only channel** (§19.4) as a rule rather than a
+  boundary. It is not enforced, which is exactly why it is a stated constraint
+  and why the SDK lint (§5.8) checks for reaching around it.
+- **The per-extension sandbox flag** (§8.1) is the answer when an admin does
+  want containment, or when a widget has proven it needs it.
 
 Install flow is explicit and admin-only: upload a `.tar.gz`, host validates the
 manifest, extracts to the extension store, restarts nothing. Never auto-fetch
@@ -1126,11 +1077,10 @@ The capability Flutter's build-time `AssetManifest` made impossible.
 ```
 
 - Served at `/api/assets/**` with content-hash cache headers.
-- **A sandboxed widget's frame must be able to fetch them.** The frame has an
-  opaque origin and a `default-src 'none'` policy, so the host admits the asset
-  origin into that frame's CSP for `img-src` and `font-src` and nothing else.
-  An asset URL a frame cannot load is the failure mode to design against: it
-  renders as a broken image with no error anywhere.
+- **A code element's frame must be able to fetch them too** (§8.1). That frame
+  has an opaque origin and `default-src 'none'`, so the host admits the asset
+  origin into its CSP for `img-src` and `font-src` and nothing else. An asset
+  URL a frame cannot load renders as a broken image with no error anywhere.
 - `ctx.asset("icons/dial.svg")` resolves within the calling extension's namespace.
 - `ctx.asset("/user/icons/garage.svg")` reaches the shared user store.
 - Users upload through the designer; no rebuild, no restart.
@@ -1207,13 +1157,10 @@ instead of a flat icon (§11.4).
 
 - Use **`@rive-app/canvas`**, not `@rive-app/webgl2`. Fire tablet GPU/driver
   support is inconsistent; the canvas renderer is the safer default.
-- **The runtime is bundled once, in the shell, and never handed to an
-  extension.** There is no `ctx.rive`: a sandboxed frame cannot share the host's
-  runtime instance, and shipping a copy into every frame costs megabytes per
-  widget. Rive is reached the way §10.2 describes — the first-party `hc-rive`
-  widget, configured by data. An extension that wants an animated widget ships a
-  `.riv` file and a config, which is the point of §10.2 and a *lower* barrier
-  than a runtime binding would be.
+- Bundle the runtime **once in the shell**, not per extension. Expose it through
+  `ctx.rive` so extensions never bundle their own copy. Most extensions will not
+  need it at all — §10.2's `hc-rive` takes a `.riv` plus a config, so an animated
+  widget is an asset and a mapping rather than any code.
 - **Lifecycle:** `rive.cleanup()` on `disconnectedCallback`. Pause instances
   scrolled out of view via `IntersectionObserver`; on the floorplan, pause
   instances outside the current viewport transform.
@@ -1819,10 +1766,6 @@ not a failure of it.
       invalidate §6 entirely; it does not belong behind the primitive set.
 - [ ] **Probe 2 — Fire tablet UA captured**, browserslist set, and §16's
       "verify before relying on" list actually verified on the device
-- [ ] **Probe 3 — frame cost on the Fire tablet** (§8.1). How many sandboxed
-      widgets a dashboard can hold before it stops feeling live. This is the
-      standing objection to the sandbox-by-default decision and it deserves a
-      number.
 - [ ] Deploy it next to the Flutter client and use it for a week
 
 **Phase 1 — Contract & tokens**
@@ -1862,10 +1805,8 @@ not a failure of it.
 
 **Phase 3 — Extension host + ABI proof**
 - [ ] `ext-host`: manifest load, API version gate, module load, error isolation
-- [ ] Sandbox host: frame lifecycle, nonce handshake, CSP, grant enforcement
-- [ ] **`HcContext` proxied across `postMessage`** — query, overlay, history,
-      action, expr, presentation. The gate is Rule 1: a first-party widget must
-      be reasonable to write against the proxied context (§8.1)
+- [ ] Sandbox host for code elements: frame lifecycle, nonce handshake, CSP,
+      grant enforcement (§8.1) — and the per-extension flag that reuses it
 - [ ] In-realm ESM loader for the two kinds that cannot be framed (§8.1)
 - [ ] Asset store endpoints + SVG sanitization + attachments
 - [ ] `HcWidgetBase`, `HcLayoutShell` in the SDK
@@ -2003,10 +1944,9 @@ types (left as a third-party proving ground, §7.5).
 17. **Rules command; pipelines produce state.** The boundary in §22 is enforced
     by MQTT ACL, not by convention. No feature that blurs it ships in either
     system.
-18. **Every capability is expressible as a message** (§3, Rule 3). Most widgets
-    run in a frame, so a capability that only works as a shared in-realm object
-    is one only the first-party client can have — which is Rule 1 being broken,
-    not an exception to it.
+18. **Keep every capability expressible as a message** (§3, Rule 3). Calls are
+    direct and in-realm; the discipline is that they *could* be messages, so
+    isolating a widget stays a transport swap rather than a rewrite.
 
 ---
 
@@ -2019,9 +1959,9 @@ types (left as a third-party proving ground, §7.5).
    cases, but state-dependent fields need per-update evaluation. Where is the
    boundary, and does the widget ever call `ctx.expr` directly?
 3. **Extension distribution.** Manual upload only, or an eventual registry?
-   Affects whether signing is Phase 11 or Phase 3 — and it matters most for the
-   in-realm kinds (§8.1), since a sandboxed widget is contained whether or not
-   its manifest is signed.
+   Affects whether signing is Phase 11 or Phase 3 — and it matters more now that
+   extensions run in-realm (§8.1), since the signature is what tells an admin the
+   package is the one its author published.
 4. ~~**Konva vs tldraw** for the dashboard designer canvas.~~ **Settled:
    neither** (§14). The designer draws real custom elements in a transformed
    DOM scene, because no canvas library can render a sandboxed extension
