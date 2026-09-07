@@ -1313,56 +1313,124 @@ create friction precisely at our extension boundary.
 
 ---
 
-## 14. Runtime vs designer rendering
+## 14. Authoring modes, rendering, and the document
 
-**One renderer. The designer draws real widgets.**
+### 14.1 Two authoring modes, one document, one renderer
+
+The designer is **not one surface**. It is two, and the document already says
+so — `flow` is `packed` or `free`, layouts carry an optional `frame`, and
+placements carry an optional `rect` and `angle`. Treating "the designer" as a
+single thing is how this gets designed wrong.
+
+| | **Grid** | **Free** |
+|---|---|---|
+| What it is for | laying out controls | composing a page |
+| Placement | cells (`x, y, w, h`), packed | rectangles in the frame (`rect`), plus `angle` |
+| Snapping | cell edges — the coarse magnet | the fine grid, guides, other elements' edges |
+| Resize | one grip; the card is anchored top-left | eight handles; no privileged corner |
+| Rotation | none | yes, per element and per group |
+| Overlap | forbidden — the engine pushes | the point; elements lift above the grid |
+| Feels like | arranging a page | a design application |
+
+Both are real requirements and neither is a degraded version of the other. A
+household control page wants the grid: put six lights down and have them line
+up without thinking about it. A wall display wants the other: a reading over a
+photograph, a control floating on a floor plan, a headline across a hero — none
+of which a tiling of rectangles can express.
+
+**hc-web-flutter already built both**, and the parts worth carrying over are
+decisions more than code:
+
+- **Lifting is a property of the element, not the layout** (`free_layer.dart`).
+  A lifted card is lifted at every breakpoint, because a design decision that
+  changes when you rotate a tablet is not one anybody asked for. It rides in the
+  widget's `config`, so there is no schema change behind it.
+- **Free mode means drag-to-create, not catalogue-then-place**
+  (`design_tools.dart`). You hold a tool and drag, and the thing exists at the
+  size and place you dragged it. Choosing from a list and then moving and
+  resizing what appears is a content-management interaction, and it is the
+  single thing that makes an editor read as a form with a preview rather than as
+  a design application. The catalogue stays — a device grid genuinely is chosen
+  from a list of what the house can show — it just stops being the only way in.
+- **Decorative elements are first-class.** An image, an icon, a text block —
+  bound to no device, carrying an action or no action at all. `type` is a plain
+  string and core accepts unknown ones (§14.2), so this needs nothing from the
+  schema.
+- **One geometry function, two magnets.** `resizedBy(coarse:)` is the whole
+  distinction in one parameter: a packed card can only land on a cell edge, a
+  composed one lands on the fine grid.
+
+**The mode changes the gesture and constraint layer. It does not change the
+renderer.** Both modes draw the same elements, in the same scene, from the same
+document — which is what makes switching a page from grid to composed an edit
+rather than a migration.
+
+### 14.2 The renderer: DOM, in both modes
 
 An earlier draft had the designer drawing to a Konva canvas while the viewer
-drew custom elements. That is settled the other way, and the extension ABI is
-what settles it rather than taste: a `CodeAttachment` is a sandboxed document
+drew custom elements. That is settled the other way, and the extension ABI
+settles it rather than taste: a `CodeAttachment` is a sandboxed document
 (§4.6), a Rive widget is its own canvas (§10), and a third-party widget is a
-custom element nobody has seen. **None of those can be drawn inside a Konva
-stage.** A canvas designer would therefore show real first-party cards and grey
-placeholders for everything else — making extensions second-class at exactly
-the surface where somebody is deciding whether to use one, and breaking §19.8
-where it is most visible.
-
-So:
+custom element nobody has seen. **None of those can be composited into a canvas
+stage.** A canvas designer would show real first-party cards and grey
+placeholders for everything else — extensions made second-class at exactly the
+surface where somebody is deciding whether to use one, and §19.8 broken where it
+is most visible.
 
 - **Designer → the same custom elements the viewer draws**, inside a scene
   element carrying one `transform: translate(tx, ty) scale(k)`, with selection
   handles, guides and marquee in a **separate, untransformed overlay** so they
-  stay a constant pixel size at any zoom. One source of truth for
-  `{ tx, ty, k }`; every hit test and every overlay position derives from it.
-- **Viewer → the same elements, laid out by §5.7.** Native touch scrolling,
-  text selection, accessibility, correct focus order.
+  hold a constant pixel size at any zoom. One source of truth for
+  `{ tx, ty, k }`; every hit test and overlay position derives from it.
+- **Viewer → the same elements**, laid out by §5.7.
 - **Floorplan is its own surface** and follows neither. Marker drag is always on
   (§11.2); the room-markup mode exists only for the raster fallback importer.
 
 **What makes drawing live widgets in an editor safe** is already in the ABI:
-`ctx.mode` is `"view" | "edit"` (§4.2) and widgets suppress side effects while
-editing. Two rules make that real rather than advisory:
+`ctx.mode` is `"view" | "edit"` (§4.2). Two rules make that real rather than
+advisory:
 
 - **The designer captures pointer events before the widget sees them.** Dragging
-  a card that happens to contain a slider moves the card; it does not set
-  brightness. A widget receives interaction only when the designer hands it over
-  deliberately — a preview toggle, not the default.
-- **`mode: "edit"` is enforced by the host, not honoured by the widget.**
-  `ctx.action` refuses to dispatch in edit mode, so a widget that ignores its
-  mode still cannot actuate anything. Same reasoning as §5.10's safety policy:
-  the guarantee lives where no extension can opt out of it.
+  a card that contains a slider moves the card; it does not set brightness. A
+  widget receives interaction only when the designer hands it over deliberately.
+- **`mode: "edit"` is enforced by the host.** `ctx.action` refuses to dispatch
+  in edit mode, so a widget that ignores its own mode still cannot actuate
+  anything — the §5.10 reasoning, applied here.
 
-**What this costs**, stated so it is not discovered in Phase 10: transform
-handles, snapping, alignment guides, marquee selection and the undo stack are
-hand-built rather than inherited from a canvas library. That is real work, and
-it is the same work the Flutter designer already did once — a body of decisions
-worth reading before repeating.
+**No canvas library, and the reason is specific.** The temptation is to take
+Konva for its `Transformer` rather than hand-build handles. The geometry is
+already written and already argued, in about 1,270 lines of Dart —
+`frame.dart`, `canvas_view.dart`, `design_tools.dart`, `free_layer.dart`,
+`group_frame.dart`, `constraints.dart` — and what it encodes is exactly what a
+generic transformer does not:
 
-**Canvas is not banished, it is scoped.** The floorplan's field layers — light
-spill, heatmaps, coverage — are canvas (§11.6), because that is where thousands
-of geometry primitives and per-pixel fields actually live. A dashboard holds
-tens of cards, which is the regime where DOM is comfortable and a canvas
-library's advantages do not apply.
+- two snapping magnets, chosen by mode;
+- snapping the **edge under the pointer, never the width**, or a card whose left
+  sits off-grid can never have a right side on it;
+- per-element minimum sizes — a slider that loses its knob below 64 should not
+  be draggable to 48;
+- group rotation about the **group's** centre, which an element's own rotation
+  cannot express.
+
+Adopting `Transformer` means overriding it through `boundBoxFunc` for precisely
+those behaviours, and it *adds* work of its own: it attaches to canvas nodes, so
+every DOM element needs a proxy node, and three representations — placement,
+proxy, element — have to stay in sync. Sync bugs there present as "I cannot tell
+what is selected," which this designer has already shipped once.
+
+So free mode's interaction layer is a **port of known-good geometry**, not a
+build from nothing. **The one genuine gap:** `resizedBy` takes an axis-aligned
+rectangle and a raw offset, and `rotation` appears nowhere in those modules — so
+resize-while-rotated is unsolved. The delta has to be rotated into the element's
+frame before the anchor math runs. Small, but it is the piece that is not free,
+and it belongs in Phase 10's estimate.
+
+**Canvas is scoped, not banished.** The floorplan's field layers — light spill,
+heatmaps, coverage — are canvas (§11.6), where thousands of primitives and
+per-pixel fields actually live. A dashboard holds tens of elements, which is the
+regime DOM is comfortable in.
+
+### 14.3 The document
 
 **Dashboard document format — already exists.** It is
 `hc_types::dashboard::DashboardDefinition`, it is what is in redb today, and
@@ -1648,11 +1716,20 @@ not a failure of it.
 - [ ] Level stacking / exploded view
 - [ ] Time scrubber over the history API
 
-**Phase 10 — Designer**
-- [ ] Designer surface: transformed DOM scene + screen-space overlay,
-      placement, snapping, alignment guides, transform handles, multi-select
+**Phase 10 — Designer** *(two modes, §14.1)*
+- [ ] Shared surface: transformed DOM scene + screen-space overlay, one
+      `{ tx, ty, k }`, marquee, multi-select
+- [ ] **Grid mode:** cell placement, the coarse magnet, one grip, no rotation
+- [ ] **Free mode:** `frame` + `rect` + `angle`, eight handles, the fine magnet,
+      guides, lift above the grid, groups and group rotation
+- [ ] Transform geometry ported from the Dart (`frame.dart`, `design_tools.dart`,
+      `free_layer.dart`, `group_frame.dart`, `constraints.dart`) — **plus
+      resize-while-rotated, which is not in it** (§14.2)
+- [ ] Tool palette with drag-to-create; the catalogue stays but is not the only
+      way in (§14.1)
+- [ ] Decorative elements: image, icon, text — no device binding, action optional
 - [ ] Host-enforced `mode: "edit"`: pointer capture, `ctx.action` refuses to
-      dispatch (§14)
+      dispatch (§14.2)
 - [ ] Undo/redo stack
 - [ ] Expression editor with `hc-expr` validation and live preview
 - [ ] Template authoring UI
