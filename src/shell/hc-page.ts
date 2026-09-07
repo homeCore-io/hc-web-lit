@@ -28,7 +28,7 @@ export class HcPage extends LitElement {
   static override styles = css`
     :host {
       display: block;
-      color: var(--hc-ink, #f5efe8);
+      color: var(--hc-ink, #e9edf2);
       font-family: var(--hc-font-body, system-ui, sans-serif);
     }
     .frame {
@@ -56,9 +56,9 @@ export class HcPage extends LitElement {
       place-items: center;
       height: 100%;
       box-sizing: border-box;
-      border: 1px dashed var(--hc-hairline, #4a3f34);
-      border-radius: var(--hc-radius, 10px);
-      color: var(--hc-muted, #9b9086);
+      border: 1px dashed var(--hc-stroke-hairline, #262d38);
+      border-radius: var(--hc-radius-md, 14px);
+      color: var(--hc-ink-muted, #8b95a4);
       font-size: 0.75rem;
       text-align: center;
       padding: 0.25rem;

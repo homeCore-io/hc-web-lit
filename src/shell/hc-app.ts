@@ -10,6 +10,9 @@
 import { LitElement, css, html, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HcApi, HcApiError } from '../core/api.js';
+import { applyTokens } from '../design/css.js';
+import { builtInSeeds, defaultSkin } from '../design/seeds.js';
+import { deriveTokens } from '../design/tokens.js';
 import type { DashboardBreakpoint, DashboardDefinition } from '../core/dashboard.js';
 import { EventStream } from '../core/events.js';
 import { DeviceStore } from '../core/store.js';
@@ -25,8 +28,8 @@ export class HcApp extends LitElement {
     :host {
       display: block;
       min-height: 100vh;
-      background: var(--hc-ground, #16120e);
-      color: var(--hc-ink, #f5efe8);
+      background: var(--hc-surface-base, #0b0e13);
+      color: var(--hc-ink, #e9edf2);
       font-family: var(--hc-font-body, system-ui, sans-serif);
     }
     header {
@@ -34,11 +37,11 @@ export class HcApp extends LitElement {
       align-items: center;
       gap: 1rem;
       padding: 0.75rem 1rem;
-      border-bottom: 1px solid var(--hc-hairline, #4a3f34);
+      border-bottom: 1px solid var(--hc-stroke-hairline, #262d38);
       font-size: 0.875rem;
     }
     .brand {
-      color: var(--hc-accent, #ffb661);
+      color: var(--hc-accent-active, #ffb661);
       font-weight: 600;
       letter-spacing: 0.02em;
     }
@@ -56,15 +59,15 @@ export class HcApp extends LitElement {
       width: 0.5rem;
       height: 0.5rem;
       border-radius: 50%;
-      background: var(--hc-muted, #6b6259);
+      background: var(--hc-accent-inactive, #2a313b);
     }
     .dot[data-live] {
-      background: var(--hc-ok, #7ac48a);
+      background: var(--hc-accent-success, #6fd1a6);
     }
     select {
-      background: var(--hc-raised, #241c15);
+      background: var(--hc-surface-raised, #141922);
       color: inherit;
-      border: 1px solid var(--hc-hairline, #4a3f34);
+      border: 1px solid var(--hc-stroke-hairline, #262d38);
       border-radius: 6px;
       padding: 0.25rem 0.5rem;
       font: inherit;
@@ -78,7 +81,7 @@ export class HcApp extends LitElement {
       opacity: 0.7;
     }
     .error {
-      color: var(--hc-error, #e2725b);
+      color: var(--hc-accent-danger, #ff7b72);
     }
   `;
 
@@ -91,14 +94,38 @@ export class HcApp extends LitElement {
   @state() private docs: DashboardDefinition[] = [];
   @state() private current: DashboardDefinition | undefined;
   @state() private breakpoint: DashboardBreakpoint = 'desktop';
+  @state() private skin = defaultSkin;
 
   private readonly store = new DeviceStore();
   private api: HcApi | undefined;
   private stream: EventStream | undefined;
 
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.paint();
+  }
+
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.stream?.stop();
+  }
+
+  /**
+   * Tokens go on the document root, not on this element.
+   *
+   * A widget in a shadow root inherits custom properties through the tree, and
+   * an overlay the host opens is not inside this element at all (§5.6). One
+   * place, so a skin change repaints everything including third-party widgets
+   * and floorplan layers (§15).
+   */
+  private paint(): void {
+    const seeds = builtInSeeds[this.skin];
+    if (seeds === undefined) return;
+    applyTokens(document.documentElement, deriveTokens(seeds));
+  }
+
+  override willUpdate(changed: Map<string, unknown>): void {
+    if (changed.has('skin')) this.paint();
   }
 
   private async connect(username: string, password: string): Promise<void> {

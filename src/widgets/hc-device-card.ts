@@ -32,9 +32,9 @@ export class HcDeviceCard extends LitElement {
       height: 100%;
       box-sizing: border-box;
       padding: 0.75rem;
-      border-radius: var(--hc-radius, 10px);
-      background: var(--hc-raised, #241c15);
-      color: var(--hc-ink, #f5efe8);
+      border-radius: var(--hc-radius-md, 14px);
+      background: var(--hc-surface-raised, #141922);
+      color: var(--hc-ink, #e9edf2);
       font-family: var(--hc-font-body, system-ui, sans-serif);
     }
     .dot {
@@ -42,10 +42,10 @@ export class HcDeviceCard extends LitElement {
       width: 0.75rem;
       height: 0.75rem;
       border-radius: 50%;
-      background: var(--hc-muted, #6b6259);
+      background: var(--hc-accent-inactive, #2a313b);
     }
     .dot[data-on] {
-      background: var(--hc-accent, #ffb661);
+      background: var(--hc-accent-active, #ffb661);
     }
     .body {
       min-width: 0;
