@@ -148,3 +148,23 @@ describe('shapes a real deployment publishes', () => {
     expect(isOn(device({ attributes: { state: 'finished', remaining_secs: 0 } }))).toBe(false);
   });
 });
+
+describe('area arrives as null, not absent', () => {
+  it('treats a null area as no area', () => {
+    // 73 of 184 devices in the reference house send `"area": null`. Core's
+    // `area` has no skip_serializing_if while `area_override` does, so the two
+    // halves of the same override pair are asymmetric on the wire.
+    const d = { ...device(), area: null } as DeviceState;
+    expect(effectiveArea(d)).toBeUndefined();
+    expect(normalizeAreaName(effectiveArea(d))).toBe('');
+  });
+
+  it('lets an override win over a null plugin area', () => {
+    const d = { ...device(), area: null, area_override: 'study' } as DeviceState;
+    expect(effectiveArea(d)).toBe('study');
+  });
+
+  it('normalizes null without throwing', () => {
+    expect(normalizeAreaName(null)).toBe('');
+  });
+});

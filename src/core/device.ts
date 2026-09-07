@@ -19,8 +19,14 @@ export interface DeviceState {
   name_override?: string;
   /** A user-chosen status icon, overriding whatever the type would imply. */
   status_icon?: string;
-  area?: string;
-  area_override?: string;
+  /**
+   * **Arrives as `null`, not absent** — 73 of 184 devices in the reference
+   * house send `"area": null`. Core's `area` has no `skip_serializing_if`
+   * while `area_override` does, so the two optional halves of the same pair
+   * are asymmetric on the wire. Every reader has to handle both.
+   */
+  area?: string | null;
+  area_override?: string | null;
   device_type?: string;
   ui_hint?: string;
   parent_device_id?: string;

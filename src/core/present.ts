@@ -16,9 +16,15 @@ export function effectiveName(d: DeviceState): string {
   return d.name_override ?? d.name;
 }
 
-/** The room: the user's override, else what the plugin delivered. */
+/**
+ * The room: the user's override, else what the plugin delivered.
+ *
+ * Returns `undefined` for "no area", never `null` — the wire sends `null` for
+ * an unassigned area on most devices (see `DeviceState.area`) and callers
+ * should not each have to remember that.
+ */
 export function effectiveArea(d: DeviceState): string | undefined {
-  return d.area_override ?? d.area;
+  return d.area_override ?? d.area ?? undefined;
 }
 
 /**
@@ -30,8 +36,8 @@ export function effectiveArea(d: DeviceState): string | undefined {
  * normalizing is everything else — a hand-typed value, a plugin's own spelling,
  * a page exported from a house that spelled it differently.
  */
-export function normalizeAreaName(area: string | undefined): string {
-  if (area === undefined) return '';
+export function normalizeAreaName(area: string | null | undefined): string {
+  if (area === undefined || area === null) return '';
   return area
     .trim()
     .toLowerCase()
