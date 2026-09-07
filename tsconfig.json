@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["vitest/globals"],
+
+    // Strict, and then the four `tsc` leaves off even under `strict`. The ABI
+    // types are the contract (§13) — a contract with implicit `any` in it is
+    // not one.
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": true,
+
+    // Lit decorators. `useDefineForClassFields: false` is required with
+    // experimental decorators — without it, class field initialisers clobber
+    // the accessors @property installs, and reactivity silently stops.
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false,
+
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["src", "test", "*.config.ts"]
+}

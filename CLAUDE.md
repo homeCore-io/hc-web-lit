@@ -152,10 +152,6 @@ hc-api (Rust, axum)
   ├── /api/spatial/**         hc-spatial documents, SH3D import          [NEW]
   └── /api/tokens.json        resolved DTCG design tokens                [NEW]
 
-hc-expr (Rust crate)                                                     [NEW]
-  ├── Rhai-based pure expression evaluator, shared with the rule engine
-  └── wasm build for the browser
-
 hc-spatial (Rust crate)
   ├── model                   normalized home geometry, versioned schema
   ├── import/sh3d             Sweet Home 3D → hc-spatial     [NEW — see §12.2]
@@ -167,7 +163,7 @@ hc-web (TypeScript, Lit 3, Vite)
   ├── core                    device store, subscription fan-out, service calls
   ├── primitives/             THE HOST PRIMITIVES (§5)
   │   ├── present             is_on, facet, effective name/area (§1.1)
-  │   ├── expr                expression evaluation (hc-expr wasm)
+  │   ├── expr                JS expression compile + cache (§6)
   │   ├── query               device queries
   │   ├── templates           parameterized widget templates
   │   ├── compose             chrome-free widget nesting
@@ -765,30 +761,66 @@ long-press works differently from another's.
 
 ### 6.1 The decision
 
-Config values may hold **pure expressions**. The evaluator is **Rhai, compiled to
-wasm**, shared with the server-side rule engine via the `hc-expr` crate.
+Config values may hold **pure expressions, written in JavaScript, evaluated in
+the client**. There is no wasm evaluator and no second language.
 
 | Option | Trade-off |
 |---|---|
-| No expressions | Simple and safe; users hit walls and reimplement button-card as an extension anyway |
-| Restricted DSL (CEL, JSONata, jsonlogic, jexl) | Sandboxed, analyzable, CSP-clean — but a second language to learn |
-| **Rhai → wasm** | **Same language as rule conditions and topic transforms; one syntax across the whole system** |
-| Full JS `eval` | Maximum power; requires `unsafe-eval` in CSP; unsandboxable |
+| No expressions | Simple; users hit walls and reimplement button-card as an extension anyway |
+| Restricted DSL (CEL, JSONata, jsonlogic, jexl) | Analyzable — but a second language to learn, for a domain where nobody asked for one |
+| Rhai → wasm | One syntax across rules and dashboards — bought with an interpreter in every client |
+| **JavaScript** | **Already present, already known, zero bundle. `unsafe-eval` is the cost.** |
 
-homeCore already uses Rhai for rule conditions and topic-map transforms. Shipping
-the same evaluator to the browser means a user learns one syntax and it works in
-automations, transforms, and dashboard config. Nothing else in this space can
-offer that, and it falls out of decisions already made.
+An earlier draft chose Rhai-to-wasm on the strength of *one syntax across the
+whole system*. That argument is real but it was buying elegance, not capability,
+and the price was hidden in a place §1.2 makes visible: it is one language **and
+one engine**, and the engine is a per-client cost. hc-tui and hc-mcp cannot pay
+it. Expression-capable labels would have become a web-only feature by accident
+rather than by decision.
+
+Three things settle it the other way:
+
+- **This is a display concern, and display is client work.** Core says so:
+  `dashboard_vocabulary` validates configs and *"does not know what a card looks
+  like"*. A rule condition is a system-level statement about the house and
+  belongs on the server; whether a label reads "Warm" or "21.5°" does not.
+- **The audience already writes JavaScript.** The population most likely to
+  reach for an expression is people arriving from Home Assistant's button-card,
+  where `[[[ ]]]` is JS against entity state. They would be learning Rhai to do
+  something they can already do.
+- **The client is TypeScript.** A widget author writes JS in their widget and
+  would have written Rhai in its config. That seam buys nothing.
+
+**Rhai does not go away — it stays where it already is.** Rule conditions and
+topic-map transforms are server-side, in `hc-scripting` and `hc-topic-map`,
+validated and executed there. Nothing in this section changes them. What is
+dropped is the plan to *also* ship that evaluator to the browser.
+
+**Portability, stated so it is not lost.** Expressions are the escape hatch, not
+the binding mechanism. The portable path is core's declarative `Binding`
+(§4.6) — a name, a device, a key, and an optional range mapping — which every
+client evaluates, hc-tui included. A widget that uses only bindings is portable;
+a widget that uses expressions is web-only, and that is a property of the widget
+its author chooses knowingly.
 
 ### 6.2 Purity constraint
 
-Expressions **read state and return a value**. No side effects, no service calls,
-no network, no DOM, no `window`. This is the same constraint already placed on
-rule conditions, and for the same reason: pure expressions are safe to evaluate
-speculatively, to preview in the designer, and to run identically on the server.
+Expressions **read state and return a value**. No side effects, no service
+calls, no network, no DOM, no `window`. An expression that needs to *do*
+something is an action (§5.10).
 
-An expression that needs to *do* something is an action (§5.10), not an
-expression.
+JavaScript cannot enforce this, and pretending otherwise would be worse than
+saying it plainly: this is a **rule with a reason**, in the same category as
+§19.4. The reason is that pure expressions are safe to evaluate speculatively —
+which is what lets the designer preview a value while you type it, and lets a
+value be recomputed whenever a dependency changes without wondering what else
+happened.
+
+Enforcement is by scope rather than by language (§6.4): an expression is
+compiled with named parameters and given nothing else, so reaching `window` is
+awkward and obvious rather than natural. Not a boundary — extensions run
+in-realm (§8.1) and an extension can already do anything — just the absence of
+an invitation.
 
 ### 6.3 Syntax and placement
 
@@ -796,24 +828,27 @@ Two forms, both unambiguous in JSON and both schema-checkable:
 
 ```json
 {
-  "label":   "{{ device.name }}",
-  "icon":    { "$expr": "if is_on(device) { \"lamp-on\" } else { \"lamp\" }" },
-  "device_ids":{ "$query": { "area": ["kitchen"], "deviceType": ["light"] } }
+  "label":     "{{ device.name }}",
+  "icon":      { "$expr": "isOn(device) ? 'lamp-on' : 'lamp'" },
+  "device_ids": { "$query": { "area": ["kitchen"], "deviceType": ["light"] } }
 }
 ```
 
 - `"{{ … }}"` — interpolation shorthand for simple reads inside a string.
-- `{ "$expr": "…" }` — full expression, any return type.
+- `{ "$expr": "…" }` — an expression, any return type. The body is a JS
+  *expression*, not a statement list: no `return`, which also means no early
+  exit and no accidental side-effect block.
 - `{ "$query": { … } }` — device query (§5.3), not an expression.
 
 A field accepts expressions only if its schema declares `x-hc-expr: true`. The
 designer shows an "ƒx" toggle on those fields; everything else stays a plain
 value. This keeps the property panel honest and keeps expressions out of places
-where they would be surprising.
+they would surprise.
 
 ### 6.4 Evaluation scope
 
-Read-only, and explicitly enumerated:
+Read-only, explicitly enumerated, and passed as **named parameters** — so this
+list is the whole scope by construction rather than by promise:
 
 ```
 device          the primary bound device (attributes, available, last_seen)
@@ -825,23 +860,40 @@ user            locale, units, theme — not identity
 now             evaluation timestamp
 ```
 
-Nothing else is in scope. A widget cannot reach a device it did not declare —
-expressions do not bypass the subscription model.
+Plus the presentation helpers (§1.1) — `isOn`, `effectiveName`, `effectiveArea`,
+`levelOf`, `facetOf` — because an expression that had to re-derive on-ness would
+be re-deriving it *wrongly*, which is the whole reason that primitive exists.
 
-### 6.5 Server-side parity
+A widget cannot reach a device it did not declare: expressions do not bypass the
+subscription model, because an undeclared device is simply not in `devices`.
 
-The same `hc-expr` crate validates and previews expressions in the API. A
-malformed expression is rejected at save time with a line/column error, not
-discovered at render time on a wall tablet.
+### 6.5 Validation
 
-### 6.6 Risks to measure early
+A malformed expression is rejected **at save time in the designer**, not
+discovered at render time on a wall display. Compile it with `new Function` when
+the field loses focus; a `SyntaxError` is the error message, with the offset.
 
-- **Wasm bundle size and cold start.** Measure before widgets depend on it. If it is unacceptable, fall back to a restricted DSL — but make that
-  call before widgets depend on Rhai syntax, not after.
-- **Evaluation frequency.** Cache compiled ASTs per config value; re-evaluate
-  only when a dependency in scope changes, not on every state push.
-- **CSP.** The chosen approach must not require `unsafe-eval`. Rhai-in-wasm does
-  not; JS `eval` does. This is a reason to avoid the JS option beyond taste.
+There is no server-side parity to maintain, and that is a simplification rather
+than a loss. Core validates *config*, not presentation — a display expression is
+not something it has an opinion about, and asking it to acquire one would be the
+category error §1.2 warns about pointed the other way.
+
+### 6.6 What to get right
+
+- **Compile once, cache by source.** `new Function` per render is the obvious
+  performance mistake. Compile on config change, keep the function, discard it
+  when the config does.
+- **Re-evaluate on dependency change, not on every state push.** Which devices
+  an expression reads is known from the widget's declared bindings, so a push
+  that touches none of them recomputes nothing.
+- **`unsafe-eval` in the CSP is the accepted cost**, and it should be stated
+  rather than discovered. It was the argument against JS in the earlier draft;
+  it lost most of its force when extensions became in-realm (§8.1), since an
+  installed extension can already run anything an expression could. The code
+  element's frame keeps its own strict CSP and does **not** get this.
+- **An expression that throws renders a fallback, never a blank card.** Show the
+  literal, or the device's name, and put the error in the inspector — the same
+  rule §10.3 applies to a Rive file that fails to load.
 
 ---
 
@@ -1427,7 +1479,7 @@ Users *will* edit the house in Sweet Home 3D after setup.
 | Language | TypeScript, strict | ABI types are the contract |
 | Build | Vite | Fast, native ESM, good library-mode for the SDK |
 | State | Signals (`@lit-labs/signals` or nanostores) | Fine-grained; avoids whole-tree re-render |
-| Expressions | `hc-expr` (Rhai → wasm) | §6 |
+| Expressions | JavaScript, compiled with `new Function` | §6 — already present, already known |
 | Routing | `@lit-labs/router` | Few top-level views |
 | Charts | uPlot (Tier 1) | Dense time-series, small, fast on tablets |
 | Designer surface | **DOM** — transformed scene + screen-space overlay | Draws the real widgets, extensions included (§14) |
@@ -1673,7 +1725,6 @@ state and a clear stale indicator.
 | `POST /api/query` | Resolve a device query (§5.3) |
 | `POST /api/history` | History + statistics, server-downsampled (§5.9). **`GET /devices/{id}/history` already ships** — this is the batched, downsampled form |
 | `GET/PUT /api/templates/{id}` | Parameterized widget templates (§5.4) |
-| `POST /api/expr/validate` | Validate/preview an expression (§6.5) |
 | `GET /api/extensions` | Installed extension list with manifests |
 | `GET /api/extensions/{id}/manifest` | Single manifest |
 | `GET /api/extensions/{id}/{path}` | ESM bundle + packaged assets |
@@ -1765,10 +1816,6 @@ not a failure of it.
       piece that is cheaper to get right than to redo, because a wrong
       `normalize` loses edits
 - [ ] Three widgets, however they come out: `hc-device`, `hc-light`, `hc-chart`
-- [ ] **Probe — how much expression evaluation has to happen in the browser at
-      all** (§6, §20.1). Answerable from a real dashboard, and it decides
-      whether `hc-expr` needs a wasm build or whether the server resolves and
-      streams. It can invalidate §6; it does not belong behind the primitives.
 - [ ] Deploy it next to the Flutter client and use it for a week
 
 **Phase 1 — Contract & tokens**
@@ -1786,8 +1833,8 @@ not a failure of it.
 
 **Phase 2 — Host primitives** *(§5, plus presentation — before the SDK ships)*
 - [ ] Presentation primitive: `is_on`, facet classification, effective name/area (§1.1)
-- [ ] **P1** whatever the expression probe settled on — server-resolved, a
-      compiled AST walked in the client, or a wasm build (§6)
+- [ ] **P1** expression compile + cache, the named-parameter scope (§6.4), and
+      the throw-renders-a-fallback rule (§6.6)
 - [ ] **P1** expression scope, AST caching, dependency-driven re-evaluation
 - [ ] **P2** device query type, `/api/query`, live client-side maintenance
 - [ ] **P3** template storage, parameter substitution, by-reference instantiation
@@ -1883,7 +1930,7 @@ not a failure of it.
 - [ ] Host-enforced `mode: "edit"`: pointer capture, `ctx.action` refuses to
       dispatch (§14.2)
 - [ ] Undo/redo stack
-- [ ] Expression editor with `hc-expr` validation and live preview
+- [ ] Expression editor: SyntaxError on blur, live preview against real state
 - [ ] Template authoring UI
 - [ ] Device/query picker, asset picker, room picker, extension browser
 - [ ] Validate → diff → apply deployment flow
@@ -1956,13 +2003,11 @@ types (left as a third-party proving ground, §7.5).
 
 ## 20. Open questions
 
-1. **Where expressions evaluate.** §6 assumes a wasm `hc-expr` in every client.
-   That is one language *and* one engine, and the second half is a cost hc-tui
-   and hc-mcp can never pay — so expression-capable labels would become web-only
-   (§1.2). Three shapes: the server resolves and streams values with state, one
-   implementation for every client; core hands out a compiled AST that a few KB
-   of JS walks; or wasm as §6 currently assumes. **Decide before widgets depend
-   on it.**
+1. ~~**`hc-expr` wasm cost.**~~ **Settled** (§6): expressions are JavaScript,
+   evaluated in the client. Rhai stays server-side for rules and topic-map
+   transforms. What remains open is smaller — whether `vars` (§6.4) can itself
+   hold expressions, which makes evaluation order something the document has to
+   define rather than something the evaluator can improvise.
 2. **Expression evaluation location.** Host-side before `setConfig` covers most
    cases, but state-dependent fields need per-update evaluation. Where is the
    boundary, and does the widget ever call `ctx.expr` directly?

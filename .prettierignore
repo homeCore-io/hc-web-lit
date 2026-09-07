@@ -1,0 +1,7 @@
+dist
+coverage
+package-lock.json
+
+# Prose, hand-wrapped, and the plan of record. Prettier reflows markdown tables
+# and paragraphs in ways that make the diffs unreadable and the tables worse.
+CLAUDE.md

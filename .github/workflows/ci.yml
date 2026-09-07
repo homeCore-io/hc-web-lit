@@ -1,0 +1,15 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  ci:
+    uses: homeCore-io/hc-scripts/.github/workflows/node-ci.yml@main
