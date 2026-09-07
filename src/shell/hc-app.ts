@@ -1,13 +1,23 @@
 /**
  * The application shell.
  *
- * Deliberately thin. Routing, auth, the connection and theming land here
- * (§3); everything else is a widget, and widgets do not reach around this
- * (§19.4). Right now it renders the one honest thing it knows: that nothing is
- * connected yet.
+ * Deliberately thin. Routing, auth, the connection and theming land here (§3);
+ * everything else is a widget, and widgets do not reach around this (§19.4).
+ *
+ * Phase 0's version: log in, load the device store and a dashboard, keep the
+ * store fed from the event stream, and draw the page. No router yet.
  */
-import { LitElement, css, html } from 'lit';
-import { customElement, state } from 'lit/decorators.js';
+import { LitElement, css, html, nothing } from 'lit';
+import { customElement, property, state } from 'lit/decorators.js';
+import { HcApi, HcApiError } from '../core/api.js';
+import type { DashboardBreakpoint, DashboardDefinition } from '../core/dashboard.js';
+import { EventStream } from '../core/events.js';
+import { DeviceStore } from '../core/store.js';
+import './hc-page.js';
+import '../widgets/hc-text.js';
+import '../widgets/hc-device-card.js';
+
+type Phase = 'idle' | 'connecting' | 'ready' | 'failed';
 
 @customElement('hc-app')
 export class HcApp extends LitElement {
@@ -15,41 +25,176 @@ export class HcApp extends LitElement {
     :host {
       display: block;
       min-height: 100vh;
-      /* Tokens, not literals (§15). The DTCG file replaces these defaults in
-         Phase 1; the fallbacks are here so the shell renders before it. */
       background: var(--hc-ground, #16120e);
       color: var(--hc-ink, #f5efe8);
       font-family: var(--hc-font-body, system-ui, sans-serif);
     }
-    main {
-      display: grid;
-      place-items: center;
-      min-height: 100vh;
-      gap: 0.5rem;
-      text-align: center;
+    header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--hc-hairline, #4a3f34);
+      font-size: 0.875rem;
     }
     .brand {
       color: var(--hc-accent, #ffb661);
       font-weight: 600;
       letter-spacing: 0.02em;
     }
-    .muted {
-      opacity: 0.65;
-      font-size: 0.875rem;
+    .spacer {
+      flex: 1;
+    }
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      opacity: 0.75;
+      font-variant-numeric: tabular-nums;
+    }
+    .dot {
+      width: 0.5rem;
+      height: 0.5rem;
+      border-radius: 50%;
+      background: var(--hc-muted, #6b6259);
+    }
+    .dot[data-live] {
+      background: var(--hc-ok, #7ac48a);
+    }
+    select {
+      background: var(--hc-raised, #241c15);
+      color: inherit;
+      border: 1px solid var(--hc-hairline, #4a3f34);
+      border-radius: 6px;
+      padding: 0.25rem 0.5rem;
+      font: inherit;
+    }
+    main {
+      padding: 1rem;
+    }
+    .note {
+      padding: 2rem;
+      text-align: center;
+      opacity: 0.7;
+    }
+    .error {
+      color: var(--hc-error, #e2725b);
     }
   `;
 
-  @state() private connected = false;
+  /** Where core is. The shell's business, not any widget's. */
+  @property({ type: String }) baseUrl = '/api/v1';
+
+  @state() private phase: Phase = 'idle';
+  @state() private message = '';
+  @state() private live = false;
+  @state() private docs: DashboardDefinition[] = [];
+  @state() private current: DashboardDefinition | undefined;
+  @state() private breakpoint: DashboardBreakpoint = 'desktop';
+
+  private readonly store = new DeviceStore();
+  private api: HcApi | undefined;
+  private stream: EventStream | undefined;
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.stream?.stop();
+  }
+
+  private async connect(username: string, password: string): Promise<void> {
+    this.phase = 'connecting';
+    this.message = '';
+    try {
+      const api = new HcApi({ baseUrl: this.baseUrl });
+      await api.login(username, password);
+      this.api = api;
+
+      // Schemas inline: one request, and the controls a device offers are known
+      // on first paint rather than after N more round trips (§5.11).
+      this.store.reset(await api.listDevices({ includeSchema: true }));
+      this.docs = (await api.listDashboards()) as DashboardDefinition[];
+      this.current = this.docs[0];
+
+      this.stream = new EventStream({
+        url: api.streamUrl({ type: ['device_state_changed', 'device_availability_changed'] }),
+        onEvent: (e) => this.store.apply(e),
+        onStatus: (connected) => {
+          this.live = connected;
+        },
+      });
+      this.stream.start();
+
+      this.phase = 'ready';
+    } catch (e) {
+      this.phase = 'failed';
+      this.message =
+        e instanceof HcApiError ? e.message : `Could not reach ${this.baseUrl} — ${String(e)}`;
+    }
+  }
 
   override render() {
     return html`
-      <main>
-        <div class="brand">homeCore</div>
-        <div class="muted">
-          ${this.connected ? 'Connected.' : 'Not connected — no API client yet.'}
-        </div>
-      </main>
+      <header>
+        <span class="brand">homeCore</span>
+        ${
+          this.phase === 'ready'
+            ? html`
+                <select
+                  @change=${(e: Event) => {
+                    const id = (e.target as HTMLSelectElement).value;
+                    this.current = this.docs.find((d) => d.id === id);
+                  }}
+                >
+                  ${this.docs.map((d) => html`<option value=${d.id}>${d.name}</option>`)}
+                </select>
+                <select
+                  .value=${this.breakpoint}
+                  @change=${(e: Event) => {
+                    this.breakpoint = (e.target as HTMLSelectElement).value as DashboardBreakpoint;
+                  }}
+                >
+                  ${(['mobile', 'tablet', 'desktop', 'tv'] as const).map(
+                    (b) =>
+                      html`<option value=${b} ?selected=${b === this.breakpoint}>${b}</option>`,
+                  )}
+                </select>
+              `
+            : nothing
+        }
+        <span class="spacer"></span>
+        ${
+          this.phase === 'ready'
+            ? html`<span class="status">
+                <span class="dot" ?data-live=${this.live}></span>
+                ${this.live ? 'live' : 'reconnecting'} · ${this.store.size} devices
+              </span>`
+            : nothing
+        }
+      </header>
+      <main>${this.body()}</main>
     `;
+  }
+
+  private body() {
+    if (this.phase === 'idle') {
+      return html`<div class="note">
+        <button
+          @click=${() => {
+            void this.connect('admin', 'password');
+          }}
+        >
+          Connect
+        </button>
+      </div>`;
+    }
+    if (this.phase === 'connecting') return html`<div class="note">Connecting…</div>`;
+    if (this.phase === 'failed') return html`<div class="note error">${this.message}</div>`;
+
+    return html`<hc-page
+      .doc=${this.current}
+      .store=${this.store}
+      breakpoint=${this.breakpoint}
+    ></hc-page>`;
   }
 }
 

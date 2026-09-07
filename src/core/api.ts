@@ -184,13 +184,27 @@ export class HcApi {
     return this.request<unknown>('GET', `/dashboards/${encodeURIComponent(id)}`);
   }
 
-  /** The URL for the event stream, token in the query (§ events/stream). */
+  /**
+   * The URL for the event stream, token in the query (§ events/stream).
+   *
+   * Resolves a relative base against the page, because the base *is* relative
+   * in every real deployment: core sends no CORS headers, so a browser client
+   * has to be same-origin behind whatever serves it. `ws://` and `wss://`
+   * follow the page's scheme rather than being assumed.
+   */
   streamUrl(params: { type?: string[]; deviceId?: string } = {}): string {
     if (this.token === undefined) throw new Error('not authenticated');
     const q = new URLSearchParams({ token: this.token });
     if (params.type !== undefined && params.type.length > 0) q.set('type', params.type.join(','));
     if (params.deviceId !== undefined) q.set('device_id', params.deviceId);
-    return `${this.baseUrl.replace(/^http/, 'ws')}/events/stream?${q.toString()}`;
+
+    const absolute = /^https?:\/\//.test(this.baseUrl)
+      ? this.baseUrl
+      : new URL(this.baseUrl, globalThis.location?.href ?? 'http://localhost/')
+          .toString()
+          .replace(/\/+$/, '');
+
+    return `${absolute.replace(/^http/, 'ws')}/events/stream?${q.toString()}`;
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {

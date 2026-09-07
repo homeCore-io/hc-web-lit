@@ -101,3 +101,29 @@ describe('HcApi', () => {
     expect(() => api(stubFetch(() => json({}))).streamUrl()).toThrow(/not authenticated/);
   });
 });
+
+describe('relative base urls', () => {
+  it('resolves a relative base against the page for the stream', () => {
+    // The base is relative in every real deployment: core sends no CORS
+    // headers, so a browser client is always same-origin behind whatever
+    // serves it, exactly as hc-web-flutter is behind nginx.
+    const client = new HcApi({
+      baseUrl: '/api/v1',
+      token: 'jwt-2',
+      fetch: stubFetch(() => json({})),
+    });
+    const url = client.streamUrl();
+    expect(url).toBe(
+      `${globalThis.location.origin.replace(/^http/, 'ws')}/api/v1/events/stream?token=jwt-2`,
+    );
+  });
+
+  it('still honours an absolute base', () => {
+    const client = new HcApi({
+      baseUrl: 'https://house.example/api/v1',
+      token: 't',
+      fetch: stubFetch(() => json({})),
+    });
+    expect(client.streamUrl()).toBe('wss://house.example/api/v1/events/stream?token=t');
+  });
+});
