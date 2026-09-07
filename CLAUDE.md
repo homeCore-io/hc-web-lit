@@ -19,7 +19,7 @@ available over the hc-api REST/WebSocket surface.
 It has two modes:
 
 - **Viewer** — renders dashboards. Runs on phones, tablets, wall-mounted
-  kiosks (Fire tablets), and desktop browsers.
+  kiosks, and desktop browsers.
 - **Designer** — authors dashboards on a canvas, binds widgets to devices,
   manages assets and extensions.
 
@@ -130,7 +130,7 @@ be driven by the *extension ABI*, not by language preference.
 
 The web platform is selected because dynamic module loading and runtime asset
 resolution are native to it, and because it is the only option that reaches
-desktop browser, phone, and Fire tablet with one codebase.
+desktop browser, phone, and wall tablet with one codebase.
 
 **Accepted cost:** we give up pixel-identical cross-platform rendering and the
 native mobile app target. We take on browser-compatibility testing as ongoing
@@ -720,7 +720,7 @@ export interface HistoryRequest {
 
 Downsampling happens server-side against the SQLite history DB. A chart widget
 asks for 400 points over 7 days and gets 400 points, not 200,000 rows — which is
-the difference between usable and unusable on a Fire tablet.
+the difference between usable and unusable.
 
 This also backs the floorplan time scrubber (§11.5).
 
@@ -836,8 +836,7 @@ discovered at render time on a wall tablet.
 
 ### 6.6 Risks to measure early
 
-- **Wasm bundle size and cold start.** Benchmark `hc-expr` on the Fire tablet in
-  Phase 2. If it is unacceptable, fall back to a restricted DSL — but make that
+- **Wasm bundle size and cold start.** Measure before widgets depend on it. If it is unacceptable, fall back to a restricted DSL — but make that
   call before widgets depend on Rhai syntax, not after.
 - **Evaluation frequency.** Cache compiled ASTs per config value; re-evaluate
   only when a dependency in scope changes, not on every state push.
@@ -1155,8 +1154,9 @@ instead of a flat icon (§11.4).
 
 ### 10.3 Runtime notes
 
-- Use **`@rive-app/canvas`**, not `@rive-app/webgl2`. Fire tablet GPU/driver
-  support is inconsistent; the canvas renderer is the safer default.
+- Use **`@rive-app/canvas`**, not `@rive-app/webgl2`. Not a browser-support
+  question — Chrome has WebGL2 — but a GPU and driver one, where the canvas
+  renderer degrades gracefully on hardware WebGL2 does not.
 - Bundle the runtime **once in the shell**, not per extension. Expose it through
   `ctx.rive` so extensions never bundle their own copy. Most extensions will not
   need it at all — §10.2's `hc-rive` takes a `.riv` plus a config, so an animated
@@ -1316,7 +1316,7 @@ Sonos-zone, or sprinkler-zone overlay requires no change to hc-web.
 - **Level of detail.** Below a zoom threshold, drop area labels, cluster markers,
   skip furniture.
 
-### 11.7 Performance profiles — the Fire tablet problem
+### 11.7 Performance profiles
 
 - Render heatmaps at **reduced resolution into an offscreen canvas** and scale up.
 - Recompute field layers on **state change, not per frame**.
@@ -1324,8 +1324,10 @@ Sonos-zone, or sprinkler-zone overlay requires no change to hc-web.
   device setting, not a document edit: the wall tablet may get `rooms + markers`
   only, the desktop everything.
 - Pause off-viewport Rive marker instances (§10.3).
-- Budget: **profile 20 simultaneous Rive markers plus the light-spill layer on
-  the real Fire tablet before committing to either.**
+- Budget: **profile 20 simultaneous Rive markers plus the light-spill layer**
+  before committing to either. Both are plausible-looking features that can
+  quietly cost a frame budget, which is the reason to measure rather than the
+  device they run on.
 
 ---
 
@@ -1641,17 +1643,19 @@ Build it first.
 | Desktop browser (`desktop`) | Primary designer environment |
 | Phone (`mobile`) | Viewer; designer read-only/limited |
 | Tablet (`tablet`) | Viewer + light editing; primary floorplan surface |
-| **Fire tablet (kiosk)** | **The compatibility and performance floor** |
+| Wall tablet (kiosk) | Chrome, same as the others. No separate compatibility target |
 | TV (`tv`) | A breakpoint core already has and this document does not target. Layouts exist; nothing is designed for it yet |
 
-**Fire tablet is the constraint.** Fire OS's Silk/WebView lags mainline Chromium.
-Custom Elements v1 and Shadow DOM are fine; anything newer is not assumed.
+**One target: current Chrome.** Kiosk deployment specifies the browser, so the
+web platform features this design wants — container queries, `:has()`,
+`::part()`, `structuredClone` — are simply available, and there is no
+lowest-common-denominator device shaping the architecture.
 
-- Set the Vite `browserslist` target from an **actual Fire tablet UA**.
-- Verify before relying on: container queries, `:has()`, Popover API, View
-  Transitions, `structuredClone`, `OffscreenCanvas`, `::part()` behaviour.
-- Test on the real device from **phase 1**, not at the end. The `hc-expr` wasm
-  benchmark (§6.6) happens here.
+Performance on modest hardware is still a design concern, and §11.7 is where it
+is addressed — as techniques that are right anyway (recompute on state change
+rather than per frame, reduced-resolution field layers, pause what is off
+screen), not as a gate against a specific device. Profile when there is
+something worth profiling.
 
 **Touch:** 44px minimum targets. Pointer Events throughout, so marker drag and
 pinch-zoom work identically for mouse and finger.
@@ -1741,7 +1745,7 @@ is something it can never do at all (§2).
 - [ ] Both authoring modes work (§14.1): grid placement, and free composition
       with rotation, groups and decorative elements
 - [ ] A floorplan that renders from geometry rather than from a picture (§11.1)
-- [ ] Kiosk mode on the real Fire tablet, at the performance budget (§11.7)
+- [ ] Kiosk mode: no chrome, wake lock, auto-reconnect
 - [ ] The rule editor (§21), or an agreed decision that rules stay in the other
       client for now
 
@@ -1761,11 +1765,10 @@ not a failure of it.
       piece that is cheaper to get right than to redo, because a wrong
       `normalize` loses edits
 - [ ] Three widgets, however they come out: `hc-device`, `hc-light`, `hc-chart`
-- [ ] **Probe 1 — `hc-expr` wasm on the Fire tablet** (§6.6, §20.1). Bundle
-      size and cold start. This needs only a wasm build and a tablet, and it can
-      invalidate §6 entirely; it does not belong behind the primitive set.
-- [ ] **Probe 2 — Fire tablet UA captured**, browserslist set, and §16's
-      "verify before relying on" list actually verified on the device
+- [ ] **Probe — how much expression evaluation has to happen in the browser at
+      all** (§6, §20.1). Answerable from a real dashboard, and it decides
+      whether `hc-expr` needs a wasm build or whether the server resolves and
+      streams. It can invalidate §6; it does not belong behind the primitives.
 - [ ] Deploy it next to the Flutter client and use it for a week
 
 **Phase 1 — Contract & tokens**
@@ -1779,12 +1782,12 @@ not a failure of it.
       `x-hc-picker: room`, `x-hc-picker: device-or-query`, `x-hc-expr`,
       `hc://schema/action` — names checked against
       `hc_types::dashboard_vocabulary`'s naming ratchet
-- [ ] Fire tablet UA captured; browserslist set; hello-world verified on device
+- [ ] Vite target pinned to a Chrome version and stated in `vite.config.ts`
 
 **Phase 2 — Host primitives** *(§5, plus presentation — before the SDK ships)*
 - [ ] Presentation primitive: `is_on`, facet classification, effective name/area (§1.1)
-- [ ] **P1** `hc-expr` crate + wasm build — or the restricted-DSL fallback, if
-      Probe 1 said so
+- [ ] **P1** whatever the expression probe settled on — server-resolved, a
+      compiled AST walked in the client, or a wasm build (§6)
 - [ ] **P1** expression scope, AST caching, dependency-driven re-evaluation
 - [ ] **P2** device query type, `/api/query`, live client-side maintenance
 - [ ] **P3** template storage, parameter substitution, by-reference instantiation
@@ -1853,7 +1856,7 @@ not a failure of it.
 - [ ] Artboard/state-machine/input introspection in the property panel
 - [ ] Rive marker renderer on the floorplan
 - [ ] Viewport pause + `cleanup()` lifecycle
-- [ ] **Profile 20 simultaneous instances on the Fire tablet**
+- [ ] **Profile 20 simultaneous instances** (§11.7)
 
 **Phase 9 — Floorplan beyond parity**
 - [ ] `light-spill`, `climate`, `presence` layers
@@ -1934,7 +1937,8 @@ types (left as a third-party proving ground, §7.5).
 10. **The floorplan renders from geometry, not from a picture.**
 11. **`hc-spatial` is independent of Sweet Home 3D.** SH3D is one importer.
 12. **Anchors never key off importer-supplied element IDs.**
-13. **Fire tablet is the compatibility and performance floor.**
+13. **One browser target: current Chrome** (§16). No device-specific
+    compatibility floor shapes the architecture.
 14. **Dashboards, templates, and spatial documents are versioned** with explicit
     schema versions and migrations.
 15. **Offline-capable.** No CDN dependencies at runtime.
@@ -1952,9 +1956,13 @@ types (left as a third-party proving ground, §7.5).
 
 ## 20. Open questions
 
-1. **`hc-expr` wasm cost.** Bundle size and cold start on the Fire tablet. If
-   unacceptable, fall back to a restricted DSL — **decide in Phase 2, before
-   widgets depend on Rhai syntax.**
+1. **Where expressions evaluate.** §6 assumes a wasm `hc-expr` in every client.
+   That is one language *and* one engine, and the second half is a cost hc-tui
+   and hc-mcp can never pay — so expression-capable labels would become web-only
+   (§1.2). Three shapes: the server resolves and streams values with state, one
+   implementation for every client; core hands out a compiled AST that a few KB
+   of JS walks; or wasm as §6 currently assumes. **Decide before widgets depend
+   on it.**
 2. **Expression evaluation location.** Host-side before `setConfig` covers most
    cases, but state-dependent fields need per-update evaluation. Where is the
    boundary, and does the widget ever call `ctx.expr` directly?
@@ -1971,8 +1979,9 @@ types (left as a third-party proving ground, §7.5).
 5. **Multi-user.** Do dashboards, templates and floorplans become per-user?
    hc-api plans per-user JWT scopes; all three formats should reserve ownership.
 6. **Camera streams.** Confirm the codec/transport path (WebRTC vs HLS vs MJPEG)
-   works in Silk before committing `hc-camera` — and decide whether a floorplan
-   camera marker shows a live thumbnail or only opens a stream.
+   performs on tablet hardware before committing `hc-camera` — decoding several
+   streams is a CPU question, not a browser-support one — and decide whether a
+   floorplan camera marker shows a live thumbnail or only opens a stream.
 7. **Rive licensing.** Confirm runtime license terms before Phase 8.
 8. **Designer offline.** The earlier native design assumed an offline designer
    with a cached device catalog. Does that requirement survive in a browser?
@@ -2137,8 +2146,7 @@ compromise each.
 ### 21.9 Validate early
 
 Build the block editor against a genuinely complex real rule — nested conditions,
-a parallel group, and a repeat — and open it on the **Fire tablet** at `mobile`
-width. If a deep tree becomes unreadable there, a collapse/summary mode is
+a parallel group, and a repeat — and open it at `mobile` width. If a deep tree becomes unreadable there, a collapse/summary mode is
 required, and that is far cheaper to discover before the editor exists than
 after.
 
