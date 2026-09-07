@@ -43,18 +43,61 @@ fixed here rather than after Phase 1.
 |---|---|---|
 | entity | **device** | `hc_types::device::DeviceState` |
 | `entity_id` | **`device_id`** | plugin-assigned, stable from registration |
-| domain (`light.*`) | **`device_type`** | `"light"`, `"switch"`, `"cover"`, `"thermostat"`, `"media_player"`, `"timer"`, `"button"`, `"camera"`, `"scene"` |
+| domain (`light.*`) | **`device_type`** | an open string, not an enum — see below |
 | — | **`ui_hint`** | user override of `device_type` for presentation (`"door"`, `"window"`, `"garage"`) |
 | `friendly_name` | **`name`** / `name_override` | `effective_name()` = override ?? plugin name |
 | area | **`area`** / `area_override` | slug (`living_room`); `effective_area()` = override ?? plugin area |
 | `state` (scalar) | **`attributes`** (map) | there is no scalar state — see below |
 | more-info | **details** | homeCore has no "more info" dialog |
 
+**`device_type` is an open set, and wider than a domain list.** Observed across
+184 devices in the reference house, with the plugins that produce them:
+
+| | | |
+|---|---|---|
+| `scene` 58 | `switch` 28 | `light` 16 |
+| `temperature_sensor` 14 | `zwave` 9 | `pico_remote` 8 |
+| `contact_sensor` 8 | `media_player` 7 | `water_sensor` 7 |
+| `occupancy_sensor` 5 | `fan` 4 | `timer` 4 |
+| `keypad` 3 | `lock` 2 | `motion_sensor` 1 |
+| `bridge` 1 | `gateway` 1 | `vcrx` 1 |
+| `lightning_sensor` 1 | `rain_sensor` 1 | `weather_station` 1 |
+| `vibration_sensor` 1 | **absent** 3 | |
+
+Three things to take from that list rather than from a guess:
+
+- **`device_type` is absent on real devices.** Three of 184 have none at all
+  (`core.mode`, `wled`). Every consumer treats it as `string | undefined`, and
+  the facet primitive has to answer for a device that declines to say what it
+  is.
+- **Half the vocabulary is vendor-shaped**, not domain-shaped: `pico_remote`,
+  `vcrx`, `keypad`, `bridge`, `gateway`, `zwave`. These are what a bridge calls
+  its own hardware, and they arrive because a plugin published them. A widget
+  family organised around Home Assistant's domain list has nothing to say about
+  a third of this house.
+- **`cover` and `thermostat` do not appear here at all**, though core knows
+  both. So the observed set is a snapshot of one deployment, not the schema —
+  which is exactly why `device_type` is a plain string that core accepts
+  unknown values for, and why a client must never close the set.
+
+`ui_hint` carries `"light"` in this house — switches wired to lights, corrected
+by hand. That is the field doing its job, and it is why the facet primitive
+refines `device_type` rather than trusting it.
+
 **The one that is not a rename.** A homeCore device has no scalar state string.
 It has `available: bool` and `attributes: HashMap<String, Value>`, and
 "on-ness" is *derived* from whichever attribute the device actually publishes —
-`on`, `locked` (inverted), `open`, `motion`, `occupancy`, a `state` string for
-transports, or a non-zero level. `entity.state == "on"` has no translation.
+`on`, `locked` (inverted), `open`, `motion`, `occupancy`/`occupied`, `active`
+for an applied scene, a `state` string for transports (`"running"`,
+`"playing"`), or, last, a non-zero level. `entity.state == "on"` has no
+translation.
+
+**And the level is not one number either.** A Hue bulb publishes `brightness`
+(0–255) *and* `brightness_pct` (0–100) for the same lamp; half the lights in the
+reference house publish only the percentage. A fan publishes `speed_pct`. Any
+code that reads "whichever level attribute appears first" is right on some
+fixtures and 2.55× wrong on others — which is why this is a host primitive and
+not something each widget works out.
 
 That derivation is a **host primitive in its own right**: `is_on(device)` and
 the device→facet classification (`device_type` refined by `ui_hint` and by which
@@ -919,7 +962,9 @@ navigate. Shipping only Tier 1 produces an ecosystem of workaround extensions.
 ### 7.2 The shared layout shell
 
 Every Tier 1 widget is a thin specialization of one shell. Build the shell in the
-SDK; the domain widgets are then small.
+SDK; the type-specific widgets are then small, and `hc-device` is the shell with
+nothing added — which is what makes an unknown `device_type` render as a plain
+card rather than as an error.
 
 ```
 ┌─────────────────────────────────────────┐
@@ -940,28 +985,35 @@ recolors every widget including third-party ones.
 
 ### 7.3 Tier 1 family
 
-Ship these. The list is deliberately close to Mushroom's, because it is a proven
-vocabulary rather than a guess.
+Ordered by what a real deployment actually contains (§1.1), not by Home
+Assistant's domain list. The counts are one house and will not generalise
+exactly, but the *shape* will: scenes and switches dominate, sensors are
+numerous and undifferentiated, and a large tail is vendor hardware that no
+domain vocabulary has a name for.
+
+| Widget | Covers | Control row |
+|---|---|---|
+| `hc-scene` | `scene` ×58 | activate; shows `active` where the plugin reports it |
+| `hc-switch` | `switch` ×28 | toggle |
+| `hc-light` | `light` ×16 | brightness (§1.1 — a percentage, whichever way the plugin publishes it), color temp, color |
+| `hc-sensor` | `temperature_sensor` ×14, `water_sensor` ×7, `rain_sensor`, `lightning_sensor`, `vibration_sensor`, `weather_station` | reading + unit + battery; no controls |
+| `hc-contact` | `contact_sensor` ×8 | open/closed, battery; `ui_hint` picks the door/window/garage face |
+| `hc-media` | `media_player` ×7 | transport, volume, source select |
+| `hc-presence` | `occupancy_sensor` ×5, `motion_sensor` | occupied/clear, last-changed |
+| `hc-fan` | `fan` ×4 | percentage slider, named speeds |
+| `hc-timer` | `timer` ×4 | remaining, start / pause / reset |
+| `hc-keypad` | `keypad` ×3, `pico_remote` ×8, `vcrx` | per-button labels from `button_names`; presents what a button *did*, since these send rather than hold state |
+| `hc-lock` | `lock` ×2 | lock / unlock, confirm-gated (§11.3) |
+| `hc-device` | anything, including the 3 with no `device_type` at all | generic: attributes and an optional toggle |
+
+Presentation widgets, bound to a query or an expression rather than to one
+device type:
 
 | Widget | Control row |
 |---|---|
-| `hc-device` | generic; attributes + optional toggle |
-| `hc-light` | brightness slider, color temp, color picker |
-| `hc-cover` | position slider, up / stop / down, tilt |
-| `hc-fan` | percentage slider, oscillate, preset |
-| `hc-thermostat` | setpoint +/−, mode select, current temp |
-| `hc-lock` | lock / unlock (confirm-gated) |
-| `hc-media` | transport, volume, source select |
-| `hc-alarm` | keypad, mode buttons (confirm-gated) |
-| `hc-vacuum` | start / pause / return, fan speed |
-| `hc-humidifier` | target humidity, mode |
-| `hc-timer` | remaining, start / pause / reset |
-| `hc-button` (device) | keypad buttons, per-button labels from `button_names` |
-| `hc-person` | presence + location |
-| `hc-update` | version, install |
+| `hc-list` | device list; takes a query (§5.3) |
 | `hc-chips` | horizontal row of compact status pills |
 | `hc-title` | section heading, expression-capable |
-| `hc-list` | device list; takes a query (§5.3) |
 | `hc-chart` | time series over the history API (§5.9) |
 | `hc-gauge` | radial/linear gauge with token-driven severity bands |
 | `hc-markdown` | text with expression interpolation |
@@ -971,11 +1023,20 @@ vocabulary rather than a guess.
 Containers (built on P4): `hc-stack`, `hc-grid`, `hc-swipe`, `hc-tabs`,
 `hc-accordion`.
 
-**Not in this list, deliberately:** `hc-alarm`, `hc-vacuum`, `hc-humidifier`,
-`hc-person`, `hc-update`, `hc-select`, `hc-number`. Those are Home Assistant
-domains; homeCore has no `device_type` for them. A widget precedes its
-`device_type` only if a plugin is shipping one — otherwise it is a widget for
-devices that cannot exist.
+**`hc-device` is the one that must be good**, and the domain widgets are
+refinements of it rather than the other way round. Three devices in the
+reference house declare no `device_type`, a fifth of the rest declare something
+no widget will ever be written for (`bridge`, `gateway`, `zwave`), and the next
+plugin will invent a type nobody has seen. A vocabulary that renders those as an
+error state is a vocabulary that breaks every time the house grows.
+
+**Not shipping, and why:** `hc-cover`, `hc-thermostat` — core knows both types
+and this house has neither, so they are written when there is a device to test
+them against. `hc-alarm`, `hc-vacuum`, `hc-humidifier`, `hc-person`,
+`hc-update`, `hc-select`, `hc-number` — Home Assistant domains with no homeCore
+`device_type` behind them at all. A widget precedes its `device_type` only when
+a plugin is shipping one; otherwise it is a widget for devices that cannot
+exist.
 
 ### 7.4 Tier 2 — `hc-button`
 
