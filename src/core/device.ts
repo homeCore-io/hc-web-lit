@@ -17,6 +17,8 @@ export interface DeviceState {
 
   canonical_name?: string;
   name_override?: string;
+  /** A user-chosen status icon, overriding whatever the type would imply. */
+  status_icon?: string;
   area?: string;
   area_override?: string;
   device_type?: string;
@@ -25,4 +27,17 @@ export interface DeviceState {
   manufacturer?: string;
   model?: string;
   sw_version?: string;
+  /** User-set names for a keypad's buttons, keyed by component number. */
+  button_names?: Record<string, string>;
+  /** Where the most recent meaningful state change came from, when known. */
+  last_change?: DeviceChange;
+}
+
+/** Provenance of a state change. */
+export interface DeviceChange {
+  changed_at: string;
+  kind: string;
+  actor_user_id?: string;
+  actor_username?: string;
+  correlation_id?: string;
 }

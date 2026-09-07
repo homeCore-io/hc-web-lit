@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { DeviceState } from '../src/core/device.js';
-import { effectiveArea, effectiveName, isOn, normalizeAreaName } from '../src/core/present.js';
+import {
+  effectiveArea,
+  effectiveName,
+  isOn,
+  levelOf,
+  normalizeAreaName,
+} from '../src/core/present.js';
 
 function device(over: Partial<DeviceState> = {}): DeviceState {
   return {
@@ -74,5 +80,71 @@ describe('normalizeAreaName', () => {
 
   it('is empty for an absent area', () => {
     expect(normalizeAreaName(undefined)).toBe('');
+  });
+});
+
+/**
+ * Shapes taken from a real house, not invented.
+ *
+ * Every case below reproduces something the live API actually publishes. They
+ * are here because the hand-written cases above all passed while `levelOf` was
+ * wrong for half the lights in the building — a fixture you made up agrees with
+ * the code you made up.
+ */
+describe('shapes a real deployment publishes', () => {
+  it('reads a percentage from a light that only publishes brightness_pct', () => {
+    // Eight of sixteen lights in the reference house carry brightness_pct and
+    // no raw brightness at all.
+    expect(levelOf(device({ attributes: { on: true, brightness_pct: 100 } }))).toBe(100);
+    expect(levelOf(device({ attributes: { on: true, brightness_pct: 43.1 } }))).toBeCloseTo(43.1);
+  });
+
+  it('converts raw brightness out of 0-255, and prefers the percentage', () => {
+    // The same bulb publishes both, in different units. Reading whichever came
+    // first would be 2.55x wrong on the fixtures that only have the raw one.
+    expect(levelOf(device({ attributes: { brightness: 255 } }))).toBe(100);
+    expect(levelOf(device({ attributes: { brightness: 64 } }))).toBeCloseTo(25.1, 1);
+    expect(levelOf(device({ attributes: { brightness: 64, brightness_pct: 25 } }))).toBe(25);
+  });
+
+  it('reads a fan speed as a percentage', () => {
+    expect(
+      levelOf(device({ attributes: { on: true, speed: 'medium', speed_pct: 50.6 } })),
+    ).toBeCloseTo(50.6);
+  });
+
+  it('does not confuse a remembered level with being on', () => {
+    // A dimmer that is off still reports the level it will return to.
+    const off = device({ attributes: { on: false, brightness: 110, brightness_pct: 43.1 } });
+    expect(isOn(off)).toBe(false);
+    expect(levelOf(off)).toBeCloseTo(43.1);
+  });
+
+  it('reads an applied scene', () => {
+    // Hue scenes publish `active`; Lutron scenes publish `on`; some publish
+    // neither and are simply never on.
+    expect(isOn(device({ attributes: { active: true, area: 'office' } }))).toBe(true);
+    expect(isOn(device({ attributes: { active: false, area: 'office' } }))).toBe(false);
+    expect(isOn(device({ attributes: {} }))).toBe(false);
+  });
+
+  it('handles the sensor types that have no on-ness at all', () => {
+    // A temperature sensor is not "on". Fourteen devices in the reference house
+    // publish nothing isOn can read, and false is the right answer for them.
+    expect(isOn(device({ attributes: { temperature: 21.5, temperature_unit: 'C' } }))).toBe(false);
+    expect(isOn(device({ attributes: { battery: 100 } }))).toBe(false);
+  });
+
+  it('reads a lock and a contact sensor the way the plugins publish them', () => {
+    expect(isOn(device({ attributes: { locked: false, door_open: false, battery: 50 } }))).toBe(
+      true,
+    );
+    expect(isOn(device({ attributes: { locked: true, battery: 100 } }))).toBe(false);
+    expect(isOn(device({ attributes: { open: false, battery: 100 } }))).toBe(false);
+  });
+
+  it('reads a timer by its state string', () => {
+    expect(isOn(device({ attributes: { state: 'running', remaining_secs: 300 } }))).toBe(true);
+    expect(isOn(device({ attributes: { state: 'finished', remaining_secs: 0 } }))).toBe(false);
   });
 });

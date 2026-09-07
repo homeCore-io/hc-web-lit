@@ -39,13 +39,34 @@ export function normalizeAreaName(area: string | undefined): string {
     .replace(/[^a-z0-9_]/g, '');
 }
 
-/** A numeric level (0–100) when the device publishes one. */
+/**
+ * A numeric level, **always 0–100**, when the device publishes one.
+ *
+ * The `_pct` attributes are checked first and the raw ones are converted,
+ * because plugins publish both and they are not in the same units. A Hue light
+ * carries `brightness` 0–255 *and* `brightness_pct` 0–100 for the same bulb;
+ * half the lights in a real house carry only the `_pct` one. Reading whichever
+ * appeared first in a list would give a slider that is right on some fixtures
+ * and 2.55× wrong on others — which is the kind of thing that looks like a
+ * rendering bug for a week.
+ *
+ * `on` is a separate question and answered separately: a dimmer that is off
+ * still remembers the level it will return to, so a non-zero level here does
+ * not mean the device is on (see `isOn`, which only consults this as a last
+ * resort).
+ */
 export function levelOf(d: DeviceState): number | undefined {
-  for (const key of ['brightness', 'level', 'position', 'percentage']) {
+  // Already a percentage.
+  for (const key of ['brightness_pct', 'speed_pct', 'level_pct', 'position', 'percentage']) {
     const v = d.attributes[key];
     if (typeof v === 'number') return v;
   }
-  return undefined;
+  // 0–255, the raw byte a bulb actually takes.
+  const raw = d.attributes['brightness'];
+  if (typeof raw === 'number') return (raw / 255) * 100;
+  // Unqualified, and assumed already a percentage.
+  const level = d.attributes['level'];
+  return typeof level === 'number' ? level : undefined;
 }
 
 /**
@@ -65,6 +86,10 @@ export function isOn(d: DeviceState): boolean {
 
   const occupancy = a['occupancy'] ?? a['occupied'];
   if (typeof occupancy === 'boolean') return occupancy;
+
+  // A scene that is currently applied. Hue publishes this; Lutron scenes carry
+  // `on`, and some carry nothing at all and are simply never "on".
+  if (typeof a['active'] === 'boolean') return a['active'];
 
   const s = a['state'];
   if (typeof s === 'string') {
