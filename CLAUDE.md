@@ -142,7 +142,7 @@ hc-web (TypeScript, Lit 3, Vite)
   │   ├── history             history/statistics query client
   │   └── actions             tap/hold/double-tap + confirmation model
   ├── runtime                 dashboard viewer
-  ├── designer                authoring canvas (Konva)
+  ├── designer                authoring surface (DOM, transformed scene)
   ├── ext-host                manifest loading, module import, HcContext
   ├── floorplan               floorplan surface + layer host
   └── widgets/                first-party widget family — built AS extensions
@@ -1298,7 +1298,7 @@ Users *will* edit the house in Sweet Home 3D after setup.
 | Expressions | `hc-expr` (Rhai → wasm) | §6 |
 | Routing | `@lit-labs/router` | Few top-level views |
 | Charts | uPlot (Tier 1) | Dense time-series, small, fast on tablets |
-| Canvas (designer) | Konva | Layers, hit-testing, `Transformer` handles |
+| Designer surface | **DOM** — transformed scene + screen-space overlay | Draws the real widgets, extensions included (§14) |
 | Floorplan | SVG + canvas hybrid, own viewport | §11.6 |
 | Geometry ops | polygon-clipping or similar | Point-in-polygon, offsetting, booleans |
 | Animation assets | Rive (`@rive-app/canvas`) | §10 |
@@ -1315,12 +1315,54 @@ create friction precisely at our extension boundary.
 
 ## 14. Runtime vs designer rendering
 
-- **Designer → Konva canvas.** Free placement, snapping, alignment guides,
-  multi-select, transform handles, undo stack.
-- **Viewer → the layout engine (§5.7) + real custom elements.** Native touch
-  scrolling, text selection, accessibility, correct focus order.
+**One renderer. The designer draws real widgets.**
+
+An earlier draft had the designer drawing to a Konva canvas while the viewer
+drew custom elements. That is settled the other way, and the extension ABI is
+what settles it rather than taste: a `CodeAttachment` is a sandboxed document
+(§4.6), a Rive widget is its own canvas (§10), and a third-party widget is a
+custom element nobody has seen. **None of those can be drawn inside a Konva
+stage.** A canvas designer would therefore show real first-party cards and grey
+placeholders for everything else — making extensions second-class at exactly
+the surface where somebody is deciding whether to use one, and breaking §19.8
+where it is most visible.
+
+So:
+
+- **Designer → the same custom elements the viewer draws**, inside a scene
+  element carrying one `transform: translate(tx, ty) scale(k)`, with selection
+  handles, guides and marquee in a **separate, untransformed overlay** so they
+  stay a constant pixel size at any zoom. One source of truth for
+  `{ tx, ty, k }`; every hit test and every overlay position derives from it.
+- **Viewer → the same elements, laid out by §5.7.** Native touch scrolling,
+  text selection, accessibility, correct focus order.
 - **Floorplan is its own surface** and follows neither. Marker drag is always on
   (§11.2); the room-markup mode exists only for the raster fallback importer.
+
+**What makes drawing live widgets in an editor safe** is already in the ABI:
+`ctx.mode` is `"view" | "edit"` (§4.2) and widgets suppress side effects while
+editing. Two rules make that real rather than advisory:
+
+- **The designer captures pointer events before the widget sees them.** Dragging
+  a card that happens to contain a slider moves the card; it does not set
+  brightness. A widget receives interaction only when the designer hands it over
+  deliberately — a preview toggle, not the default.
+- **`mode: "edit"` is enforced by the host, not honoured by the widget.**
+  `ctx.action` refuses to dispatch in edit mode, so a widget that ignores its
+  mode still cannot actuate anything. Same reasoning as §5.10's safety policy:
+  the guarantee lives where no extension can opt out of it.
+
+**What this costs**, stated so it is not discovered in Phase 10: transform
+handles, snapping, alignment guides, marquee selection and the undo stack are
+hand-built rather than inherited from a canvas library. That is real work, and
+it is the same work the Flutter designer already did once — a body of decisions
+worth reading before repeating.
+
+**Canvas is not banished, it is scoped.** The floorplan's field layers — light
+spill, heatmaps, coverage — are canvas (§11.6), because that is where thousands
+of geometry primitives and per-pixel fields actually live. A dashboard holds
+tens of cards, which is the regime where DOM is comfortable and a canvas
+library's advantages do not apply.
 
 **Dashboard document format — already exists.** It is
 `hc_types::dashboard::DashboardDefinition`, it is what is in redb today, and
@@ -1607,7 +1649,10 @@ not a failure of it.
 - [ ] Time scrubber over the history API
 
 **Phase 10 — Designer**
-- [ ] Konva canvas: placement, snapping, transform handles, multi-select
+- [ ] Designer surface: transformed DOM scene + screen-space overlay,
+      placement, snapping, alignment guides, transform handles, multi-select
+- [ ] Host-enforced `mode: "edit"`: pointer capture, `ctx.action` refuses to
+      dispatch (§14)
 - [ ] Undo/redo stack
 - [ ] Expression editor with `hc-expr` validation and live preview
 - [ ] Template authoring UI
@@ -1679,8 +1724,12 @@ types (left as a third-party proving ground, §7.5).
    boundary, and does the widget ever call `ctx.expr` directly?
 3. **Extension distribution.** Manual upload only, or an eventual registry?
    Affects whether signing is Phase 11 or Phase 3.
-4. **Konva vs tldraw** for the dashboard designer canvas. Defer until the widget
-   vocabulary stabilizes.
+4. ~~**Konva vs tldraw** for the dashboard designer canvas.~~ **Settled:
+   neither** (§14). The designer draws real custom elements in a transformed
+   DOM scene, because no canvas library can render a sandboxed extension
+   document, a Rive artboard, or a third-party custom element. tldraw would
+   additionally bring its own shape store, and the document is
+   `DashboardDefinition`.
 5. **Multi-user.** Do dashboards, templates and floorplans become per-user?
    hc-api plans per-user JWT scopes; all three formats should reserve ownership.
 6. **Camera streams.** Confirm the codec/transport path (WebRTC vs HLS vs MJPEG)
@@ -1945,4 +1994,5 @@ object would merge the two systems back together through the extension layer.
   solved. Prior art, not legacy (§12.2).
 - **Rive runtime docs** — state machines, typed inputs, events, text runs.
 - **Lit** — reactive properties, `ReactiveController` for subscription teardown.
-- **Konva** — `Transformer`, layer management, hit graph.
+- **hc-web-flutter's designer** — the transform/overlay/snapping/undo work,
+  already done once against this same document. Read before rebuilding it.
