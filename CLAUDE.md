@@ -138,6 +138,32 @@ So the failure mode to guard against is not ignoring prior art — it is
 has, or solved it in a way an extension author could never reproduce, the answer
 is to design, not to port.
 
+**Presentation belongs to the client.** §1.2 says what binds; this says what
+core should have been asked for in the first place. The line:
+
+| | Core | Client |
+|---|---|---|
+| What a plugin declares — capabilities, device schema (§5.11) | ✅ | |
+| What a document *is* — structure, references, validity | ✅ | |
+| What is true about the house — devices, areas, rules, history | ✅ | |
+| **How any of it looks** — skins, token derivation, control choice, chrome | | ✅ |
+| **What a stored layout means** — gravity, packing | ⚠️ both | ⚠️ |
+
+The last row is the boundary case and it is worth naming rather than pretending
+away. `hc_types::dashboard_layout` is a full layout engine living in a crate
+whose own comment says *"core does not lay anything out"*. The defensible half
+is `is_legal` — core rejects illegal placements, so a client that disagrees
+loses the user's edit, and the fixtures are how the two stay in step. The rest
+of it is presentation that ended up in core because one client needed another
+client to agree with it.
+
+**So the default is: ask core to store it, not to compute it.** Skins are the
+worked example. Core holds ~26 seeds and refuses to judge them; the derivation
+to 74 tokens is a pure function in the client, where a better rule can ship
+without a core release and a terminal client can ignore the whole question.
+That is the right shape, and §15 originally proposed the opposite — a
+`/api/tokens.json` serving resolved tokens — which is removed.
+
 **The driver is extensibility.** Every structural question in this document
 resolves toward the answer that lets somebody outside this repo add a widget, a
 layer, a template or a pipeline node without a rebuild and without a pull
@@ -193,7 +219,7 @@ hc-api (Rust, axum)
   ├── /api/extensions/**      extension manifests + ESM bundles          [NEW]
   ├── /api/assets/**          user + extension asset store               [NEW]
   ├── /api/spatial/**         hc-spatial documents, SH3D import          [NEW]
-  └── /api/tokens.json        resolved DTCG design tokens                [NEW]
+  └── /api/skins              skin *seeds*; the client derives the tokens
 
 hc-spatial (Rust crate)
   ├── model                   normalized home geometry, versioned schema
@@ -313,7 +339,7 @@ export interface HcContext {
   /** Read-only spatial model, when one is loaded. */
   spatial?: SpatialModel;
 
-  /** Resolved DTCG design tokens. */
+  /** Resolved design tokens, derived from the active skin's seeds (§15). */
   tokens: DesignTokens;
 
   /** Derived presentation: is_on, facet, effective name/area, level.
@@ -736,7 +762,7 @@ The reason card-mod exists is that HA cards are shadow-DOM encapsulated with no
 styling hooks, forcing users to inject CSS into internals. Design that away:
 
 - Every widget exposes **documented CSS custom properties** for color, spacing,
-  radius, and typography, defaulting to DTCG token values (§15).
+  radius, and typography, defaulting to token values (§15).
 - Every meaningful internal element carries a **`part` attribute**, so
   `hc-device::part(icon)` is a supported, versioned styling surface.
 - The SDK ships a lint rule: a widget with unnamed internal structure and no
@@ -1835,20 +1861,45 @@ config.
 
 ## 15. Design tokens
 
-The DTCG token file is the root of the visual system and feeds five consumers:
+Core stores **skin seeds**; this client derives the tokens. That split already
+exists — `hc_types::skin::SkinSeeds` holds ~26 chosen values and core refuses
+to judge them, because *"whether `active` is legible on a card is a contrast
+measurement that lives with the derivation"*. It is the right shape (§1.2), and
+the reason §17 has no `/api/tokens.json`: resolved tokens are a client's
+opinion, and a client that disagreed would be re-deriving them anyway.
 
-1. Shell CSS (`:root` custom properties, generated at build).
-2. `ctx.tokens` for extensions.
+**The seeds are chosen; the tokens are derived.** hc-web-flutter measured this
+and the finding is worth inheriting rather than rediscovering: no single ratio
+reproduces the four shipped skins. Midnight's corner scale is .29/.57/1.57 and
+Control Room's is .4/.6/1.6; no lightness step yields all four surface sets. A
+formula contorted to hit those numbers is curve-fitting wearing the clothes of a
+rule. So a palette is *seeded* — ground, raised, sunken, overlay, ink, accent,
+active, success, warn, danger, offline, hairline — and everything with an actual
+rule behind it is *derived*: the type ramp (28 fields from one number), density
+(4 from one preset), motion (6), the radii, and the shadows.
+
+Five consumers, all client-side:
+
+1. Shell CSS — the resolved tokens as `:root` custom properties.
+2. `ctx.tokens` for extensions (§4.2), so a third-party widget restyles with the
+   house instead of carrying literals.
 3. The **styling contract** (§5.8) — every widget's custom properties default to
    token values, which is what makes card-mod unnecessary.
 4. **Floorplan layers** — room fills, wall strokes, marker states, choropleth
    ramps.
-5. `/api/tokens.json` — for any future non-web consumer.
+5. The designer's own chrome, so an editor on a wall panel is legible in the
+   skin the wall is running.
+
+**The built-in skins stay compiled in**, and core says so: they are *"the floor:
+a house should never be one bad row away from an unstyled app"*, and a stored
+skin names which built-in it was forked from so a skin that fails to load has
+somewhere to fall back to. That also means the derivation cannot live only on
+the server even if someone later wants it there.
 
 Known values: brand `#FFB661`, espresso glyph `#412402`.
 
-State colors (on/off/unavailable/warning/error) and choropleth ramps are
-token-defined and must be colorblind-safe. Do not hardcode a rainbow ramp.
+State colours (on/off/unavailable/warning/error) and choropleth ramps are token
+-defined and must be colourblind-safe. Do not hardcode a rainbow ramp.
 
 This is the one artifact that survives every remaining architectural branch.
 Build it first.
@@ -1907,7 +1958,6 @@ state and a clear stale indicator.
 | `POST /api/spatial/{id}/merge` | Apply a confirmed re-import diff |
 | `GET /api/spatial/{id}/areas` | Suggested room→area matches |
 | `GET/PUT /api/dashboards/{id}` | Dashboard documents |
-| `GET /api/tokens.json` | Resolved DTCG tokens |
 
 WebSocket gains per-device subscribe/unsubscribe so `ctx.subscribe` maps to real
 server-side filtering rather than client-side discard.
@@ -1986,7 +2036,9 @@ not a failure of it.
 - [ ] Deploy it next to the Flutter client and use it for a week
 
 **Phase 1 — Contract & tokens**
-- [ ] DTCG token file + build pipeline, including state colors and ramps
+- [ ] Skin seeds + the derivation to tokens, ported from the Dart, with the
+      four built-ins as fixtures — each must rebuild from its seeds field for
+      field (§15)
 - [ ] `@homecore/widget-sdk` skeleton: `HcWidget`, `HcContext`, types
 - [ ] `hc-extension.json` schema (incl. `provides`) + validator, Rust side too —
       `provides.widgets[]` entries are `WidgetDescriptor`s (§4.6)
