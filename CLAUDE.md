@@ -206,6 +206,7 @@ hc-web (TypeScript, Lit 3, Vite)
   ├── core                    device store, subscription fan-out, service calls
   ├── primitives/             THE HOST PRIMITIVES (§5)
   │   ├── present             is_on, facet, effective name/area (§1.1)
+  │   ├── capability          device + plugin schemas, control generation (§5.11)
   │   ├── expr                JS expression compile + cache (§6)
   │   ├── query               device queries
   │   ├── templates           parameterized widget templates
@@ -385,11 +386,16 @@ than failing silently.
 
 ### 4.4 Config schema → generated property panel
 
-Each widget ships JSON Schema for its config. The designer renders the property
-panel from the schema — extension authors get an editor for free.
+Each widget declares its config, and the designer renders the property panel
+from that declaration — extension authors get an editor for free.
 
-This mirrors the `schemars::JsonSchema` approach already planned server-side, so
-widget config validation can run identically on both ends.
+**The schema-versus-descriptor question is already settled server-side** (§5.11)
+and this should follow it rather than re-open it. Core publishes both for plugin
+config: `config_schema` (JSON Schema, for validation) *and* `config_descriptor`
+(semantic kinds, `help` prose, `visible_when` conditionals, for rendering) —
+because a JSON Schema cannot express units, conditionals, live data sources or
+prose. A widget's config wants the same pair, and `WidgetField` (§4.6) is
+already the descriptor half.
 
 Custom vocabulary for binding-aware fields:
 
@@ -530,7 +536,7 @@ capability later. The workarounds then calcify: card-mod exists because HA cards
 are shadow-DOM encapsulated with no styling hooks, and now thousands of
 dashboards depend on injecting CSS into other people's internals.
 
-**Sequencing constraint:** the primitives below — the nine here plus
+**Sequencing constraint:** the primitives below — the ten here plus
 presentation (§1.1) — are built in Phase 2,
 before the widget family (Phase 4) and — the part that is unrecoverable — before
 the SDK is published in Phase 3. A primitive bolted on after third parties are
@@ -795,8 +801,93 @@ events.
 `hold` defaults to `details` everywhere, so there is always a non-actuating way
 to inspect a device.
 
+**Where the action list comes from.** For a device action, `ActionConfig` names
+an `id` from that device's own `actions[]` (§5.11) and supplies its declared
+parameters — not a hand-written service string. The designer's action picker is
+then a list of what the device says it can do, and `requires_role` is checked
+before the control is offered rather than after it is pressed.
+
 *Obviates:* per-card action handling, and the class of bugs where one card's
 long-press works differently from another's.
+
+### 5.11 P10 — Capability schemas
+
+**These already exist, and the plan had missed all four.** Core publishes what a
+plugin can do, what its config means, what a device accepts, and what a device
+can be told — declared by the plugin, served over the API, and consumed
+identically by every client.
+
+| Surface | Where | What it answers |
+|---|---|---|
+| `DeviceSchema` | `GET /devices/{id}/schema` | what this *device* accepts |
+| `PluginCapabilities` | `GET /plugins` → `capabilities` | what this *plugin* can be asked to do |
+| `config_descriptor` | `GET /plugins` → `config_descriptor` | how to *render* the plugin's settings |
+| `config_schema` | `GET /plugins` → `config_schema` | how to *validate* them (JSON Schema) |
+
+**Device: attributes and actions, complementary not alternative.** A writable
+attribute is a state you set; an action is a thing you do.
+
+```
+attributes{}   kind, display_name, writable, min/max, options
+actions[]      id, label, description, category, icon, requires_role, sentence,
+               params[] { name, kind, required, default, options, options_from }
+```
+
+A Hue light has four writable attributes — `on`, `brightness_pct`, `color_temp`,
+`color_xy` — and no actions. A Lutron keypad has **zero** writable attributes
+and two actions, `press_button` and `set_led`, because pressing a button is an
+event and not a state that can be assigned. `AttributeKind` is closed: `bool`,
+`integer`, `float`, `string`, `enum`, `color_xy`, `color_rgb`, `color_temp`,
+`json` — a control per kind, decided once.
+
+`options_from` binds a parameter's options to a live attribute of the same
+device:
+
+```json
+{ "name": "button", "kind": "int", "options_from":
+  { "attribute": { "attribute": "available_buttons",
+                   "label_key": "name", "value_key": "number" } } }
+```
+
+So a keypad's button picker is populated from what the bridge currently reports,
+carrying the bridge's own engraved labels, and nothing in the client knows what
+a Lutron keypad is.
+
+**Plugin: operations with a declared shape.** `refresh_devices` on the Hue
+plugin declares `requires_role`, `concurrency: "single"`, `cancelable`,
+`timeout_ms`, `stream: true`, an `item_key` naming what it iterates, and a typed
+`result` (`{ok, failed, bridges}`). A UI can therefore show progress, disable a
+second run, offer cancel, and render the outcome — without knowing what Hue is.
+
+**Config: a descriptor *and* a schema, deliberately both.** `config_descriptor`
+carries `toggle`, `duration`, `enum`, `list`, `table`, `note`, `host`, `port`,
+`secret` — semantic kinds with `help` prose and `visible_when` conditionals.
+`config_schema` is the JSON Schema for the same settings. Core ships both
+because, in `config_descriptor`'s own words, a JSON Schema cannot express units,
+conditionals, live data sources or prose. **That is the answer to §4.4's
+question, already made and already shipping:** schema validates, descriptor
+renders, and they are not the same artifact.
+
+**What this changes.**
+
+- **The control row is generated, not written** (§7.2). `bool` → toggle,
+  `integer` + `min`/`max` → slider, `enum` → select, `color_temp` → temperature
+  picker. A widget hardcoding "lights have a brightness slider" is re-deriving,
+  less well, something the plugin already said.
+- **P9's `ActionConfig` should reference these, not duplicate them** (§5.10). A
+  hand-authored service string is a guess about a device; `actions[]` is the
+  device's own answer, with typed parameters and a `requires_role` the host can
+  check *before* rendering the control.
+- **`sentence`** — *"press button {button} on {device}"* — is a natural-language
+  template for the same action, which is how hc-mcp drives a device nobody
+  taught it about. Another reason to keep this surface declarative.
+- **Absence is normal.** `lutron_28` returns `{"error":"schema not found"}` and
+  is a perfectly good fan. Attributes displayed, no controls offered, no error
+  shown.
+
+*Obviates:* per-widget knowledge of what each device type can do — which is the
+thing that makes a widget family expensive to extend, and the reason §7.3 is as
+short as it is.
 
 ---
 
@@ -977,7 +1068,13 @@ card rather than as an error.
 
 Shell responsibilities: icon slot with state-driven color, primary/secondary
 text (both expression-capable), optional badge, optional collapsible control
-row, and the shared action model (§5.10). Layout options: horizontal/vertical,
+row, and the shared action model (§5.10).
+
+**The control row builds itself from the device schema (§5.11)** — one control
+per writable attribute by `kind`, one button per declared action. A type-specific
+widget overrides that where it can do better (a light wants a colour wheel, not
+an `x`/`y` pair), but it starts from what the plugin declared rather than from
+what the widget assumes, and a device with no schema simply gets no controls. Layout options: horizontal/vertical,
 icon-only, fill-container, hide-name, hide-state.
 
 Icon color mapping comes from tokens (§15), not hardcoded — so a theme change
@@ -1002,7 +1099,7 @@ domain vocabulary has a name for.
 | `hc-presence` | `occupancy_sensor` ×5, `motion_sensor` | occupied/clear, last-changed |
 | `hc-fan` | `fan` ×4 | percentage slider, named speeds |
 | `hc-timer` | `timer` ×4 | remaining, start / pause / reset |
-| `hc-keypad` | `keypad` ×3, `pico_remote` ×8, `vcrx` | per-button labels from `button_names`; presents what a button *did*, since these send rather than hold state |
+| `hc-keypad` | `keypad` ×3, `pico_remote` ×8, `vcrx` | one control per entry in `available_buttons`, **pressable** where the device declares `press_button` (§5.11); LED state from `led_N`; last press from `last_button_name` |
 | `hc-lock` | `lock` ×2 | lock / unlock, confirm-gated (§11.3) |
 | `hc-device` | anything, including the 3 with no `device_type` at all | generic: attributes and an optional toggle |
 
@@ -1022,6 +1119,15 @@ device type:
 
 Containers (built on P4): `hc-stack`, `hc-grid`, `hc-swipe`, `hc-tabs`,
 `hc-accordion`.
+
+**Buttons are a worked example of why P10 matters.** `available_buttons` arrives
+in two shapes from two plugins — Caséta sends `[2, 3, 4, 5, 6]`, Lutron sends
+`[{name, number}, …]` with the engraving on the wall — and a label resolves as
+`button_names[n]` (the user's rename) ?? the plugin's `name` ?? `"Button n"`. A
+keypad's buttons are *pressable* because that device declares a `press_button`
+action, and a Pico's are not because it declares none: it is a transmitter, and
+core says so rather than the widget assuming it. Same widget, and the difference
+is data.
 
 **`hc-device` is the one that must be good**, and the domain widgets are
 refinements of it rather than the other way round. Three devices in the
@@ -1907,6 +2013,8 @@ not a failure of it.
       SDK lint rule
 - [ ] **P8** history/statistics endpoint with LTTB downsampling + client
 - [ ] **P9** action model, central dispatch, **safety policy (§11.3) enforced here**
+- [ ] **P10** capability schemas: device + plugin, control generation by kind,
+      graceful absence (§5.11)
 - [ ] Every primitive reachable from `HcContext`, documented, with tests
 - [ ] **Exit gate:** Phase 0's three widgets rebuilt on the primitives, with
       nothing reaching around `HcContext`. This is what stops "we'll refactor
