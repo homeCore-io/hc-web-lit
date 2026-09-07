@@ -68,6 +68,40 @@ reference fields in a widget config be named `device_id` / `device_ids` /
 `scene_id` / `scene_ids` / `add` / `remove` / `order`. A config field named
 `entity_id` is rejected by core's validator, not by review.
 
+
+### 1.2 Where authority lives
+
+homeCore is an API with several clients — hc-tui, hc-mcp, hc-web-flutter,
+hc-web-lit, and whatever comes next. This document is one client's design. It is
+bound by core's contracts and by nothing else.
+
+| | Binding | Why |
+|---|---|---|
+| **hc-api, and the documents it stores** | **yes** | `DashboardDefinition`, `WidgetDescriptor`, `dashboard_vocabulary`, `dashboard_layout` + its fixtures. Every client answers to these; disagreeing does not produce a different-looking page, it corrupts a shared document (§5.7). |
+| **hc-web-flutter** | **no** | One client's interpretation. Worth reading; never the reason for a decision. |
+
+The line between them is not a judgement call — it has already been drawn, in
+code. `hc_types::dashboard_layout` says of itself: *"Ported from the Dart,
+faithfully."* The semantics that had to be shared were lifted **into core**, so
+citing them is citing core. **What remains only in the Dart is, by
+construction, what core declined to standardise** — that client's own product
+choices, informative and not binding.
+
+**And this document exists because that client hit a wall** (§2): AOT
+compilation, no runtime code loading, no extension ABI. A design shaped around
+that limit is the wrong starting point for the design that exists to escape it.
+So the failure mode to guard against is not ignoring prior art — it is
+*inheriting* it. Where the Dart solved a problem this architecture no longer
+has, or solved it in a way an extension author could never reproduce, the answer
+is to design, not to port.
+
+**The driver is extensibility.** Every structural question in this document
+resolves toward the answer that lets somebody outside this repo add a widget, a
+layer, a template or a pipeline node without a rebuild and without a pull
+request. When a decision looks balanced on its other merits, that is the
+tie-break — and a decision that is convenient for the first-party client but
+closes a door for extensions is not balanced, it is wrong (§3, Rule 1).
+
 ---
 
 ## 2. Decision record: why not Flutter
@@ -895,16 +929,23 @@ SDK, that is a finding, not an excuse to special-case it.
 
 ### 8.1 Loading — two mechanisms, chosen by kind
 
-**Settled: sandboxed by default, in-realm by declared exception.** The earlier
-draft said "start trusted, build for hybrid," and that was written without
-noticing that a sandbox already ships. Starting trusted would be a regression
-from what homeCore does today, and trust is the one decision that cannot be
-walked back — once extensions assume main-realm DOM, sandboxing them later
-breaks them all.
+**Settled: sandboxed by default, in-realm by declared exception.**
 
-**What already exists.** hc-web-flutter's `code_runtime.dart` runs code elements
-in a `srcdoc` iframe, and core's `CodeAttachment { entry, grant }` is the
-declaration for it. The security properties are not aspirational:
+The earlier draft said "start trusted, build for hybrid." The argument against
+it is the driver itself (§1.2): the point of this rewrite is that somebody
+outside this repo can add a widget. **In-realm means every such widget can read
+the session token**, so "trusted by default" quietly limits the ecosystem to
+code the admin has personally audited — which is the small, cautious ecosystem
+this project is trying not to have. A sandbox is what makes a widget from a
+stranger a reasonable thing to install.
+
+It is also the decision that cannot be walked back. Once extensions assume
+main-realm DOM, sandboxing them later breaks all of them at once.
+
+**The mechanism is specified in core**, as `CodeAttachment { entry, grant }`,
+and hc-web-flutter's `code_runtime.dart` is one implementation of it — evidence
+the shape works in a browser, not the reason to choose it. What that
+implementation gets right and this one should keep:
 
 - `sandbox="allow-scripts"` **without** `allow-same-origin`, so the frame gets an
   opaque origin and cannot reach this app's cookies, storage or DOM. *The two
@@ -942,12 +983,16 @@ cannot be framed**, and those kinds are higher-trust by nature. The install UI
 says which kind an extension is contributing, because "this adds a floorplan
 layer" is a different consent than "this adds a card."
 
-**Honest about the gap.** The shipped shim exposes four functions —
-`states`, `onUpdate`, `set`, `log`. That proves the sandbox, not the full ABI
-over it: `HcContext` (§4.2) is much wider, and proxying `query`, `overlay`,
-`history` and `action` across `postMessage` is real work. §4.2 claims it is a
-transport swap; Phase 3 is where that claim gets tested, and the four-function
-shim is the floor to beat, not the target.
+**The gap is the whole job.** That existing shim exposes four functions —
+`states`, `onUpdate`, `set`, `log` — which is enough for a card that draws a
+gauge and enough to prove a frame is safe. It is nowhere near `HcContext`
+(§4.2), and the difference is not a detail: `query`, `overlay`, `history`,
+`action`, `expr` and the presentation primitive all have to cross
+`postMessage` before a sandboxed widget is a **first-class** widget rather than
+a tolerated one. §4.2 claims that is a transport swap. Phase 3 is where the
+claim is tested, and §3's Rule 1 is what it is tested against: if a first-party
+widget would be unreasonable to write against the proxied context, the proxy is
+wrong — not the rule.
 
 **Measure the frame cost, do not assume it.** Thirty iframes on a Fire tablet is
 the objection to this design and it deserves a number, not a shrug — the same
@@ -1303,8 +1348,10 @@ uploaded to the asset store and referenced by address plus a
 centimetres-per-tile scale.
 
 Moving it to Rust behind `POST /api/spatial/import/sh3d` is a **rewrite into a
-new normalized model**, not a port, and Phase 6 should be priced that way. Read
-the Dart first; the notes below are the parts it learned the hard way.
+new normalized model**, not a port, and Phase 6 should be priced that way. The
+model is the design work and `hc-spatial` is deliberately not shaped like either
+SH3D or the Dart (§12.1); what the Dart offers is a worked example of the
+parsing and the list below of things that bite.
 
 - **Non-convex rooms.** L-shaped rooms are common. Point-in-polygon must handle
   concave polygons and holes — bounding boxes are not sufficient.
@@ -1454,12 +1501,11 @@ advisory:
   in edit mode, so a widget that ignores its own mode still cannot actuate
   anything — the §5.10 reasoning, applied here.
 
-**No canvas library, and the reason is specific.** The temptation is to take
-Konva for its `Transformer` rather than hand-build handles. The geometry is
-already written and already argued, in about 1,270 lines of Dart —
-`frame.dart`, `canvas_view.dart`, `design_tools.dart`, `free_layer.dart`,
-`group_frame.dart`, `constraints.dart` — and what it encodes is exactly what a
-generic transformer does not:
+**No canvas library.** The temptation is to take Konva for its `Transformer`
+rather than hand-build handles. The reason not to is that a generic transformer
+is generic about the wrong things — it transforms pixels, and this designer
+transforms *placements in a document core validates*. Concretely, it does not
+know about:
 
 - two snapping magnets, chosen by mode;
 - snapping the **edge under the pointer, never the width**, or a card whose left
@@ -1472,15 +1518,24 @@ generic transformer does not:
 Adopting `Transformer` means overriding it through `boundBoxFunc` for precisely
 those behaviours, and it *adds* work of its own: it attaches to canvas nodes, so
 every DOM element needs a proxy node, and three representations — placement,
-proxy, element — have to stay in sync. Sync bugs there present as "I cannot tell
-what is selected," which this designer has already shipped once.
+proxy, element — have to stay in sync.
 
-So free mode's interaction layer is a **port of known-good geometry**, not a
-build from nothing. **The one genuine gap:** `resizedBy` takes an axis-aligned
-rectangle and a raw offset, and `rotation` appears nowhere in those modules — so
-resize-while-rotated is unsolved. The delta has to be rotated into the element's
-frame before the anchor math runs. Small, but it is the piece that is not free,
-and it belongs in Phase 10's estimate.
+**Read hc-web-flutter's geometry before writing ours** — `frame.dart`,
+`design_tools.dart`, `free_layer.dart`, `group_frame.dart`, `constraints.dart`
+are roughly 1,270 lines with the reasoning in the comments, and the bugs they
+name are bugs worth not shipping twice. Read it as a **record of problems
+encountered**, not as a specification (§1.2): it was written for a client with
+no extension story, so it has no notion of a rectangle belonging to a widget
+nobody in this repo wrote. Two things this design needs that it does not have:
+
+- **A sandboxed element must be transformable without being inspectable.** The
+  designer sizes and rotates a frame it cannot see inside, so every gesture has
+  to work from the placement alone. Anything that reached into a widget to
+  measure it does not survive the extension boundary.
+- **Resize-while-rotated is unsolved there** — the geometry takes an
+  axis-aligned rectangle and a raw offset, and `rotation` appears nowhere in
+  those modules. The delta has to be rotated into the element's frame before the
+  anchor math runs.
 
 **Canvas is scoped, not banished.** The floorplan's field layers — light spill,
 heatmaps, coverage — are canvas (§11.6), where thousands of primitives and
@@ -1648,12 +1703,18 @@ useful:
   A degraded path, not a broken one.
 
 **hc-web-flutter can be retired when all of these are true.** Until then it is
-maintained, not deprecated:
+maintained, not deprecated. Note that the bar is **what the product needs**, not
+feature-parity with the other client: some of what that client does was shaped
+by its own constraints and does not need reproducing, and the first item below
+is something it can never do at all (§2).
 
+- [ ] **A third party can ship a widget** — install a `.tar.gz`, place the
+      widget, configure it in the GUI, no rebuild. This is the reason the
+      project exists, and no amount of parity substitutes for it.
 - [ ] Every dashboard in redb renders in hc-web-lit, including plugin widgets
-- [ ] The designer authors what the Flutter designer authors: placement, frames,
-      groups, rotation, backgrounds, per-breakpoint layouts
-- [ ] The floorplan is at least at the Flutter client's `floor_plan_card` (§12.2)
+- [ ] Both authoring modes work (§14.1): grid placement, and free composition
+      with rotation, groups and decorative elements
+- [ ] A floorplan that renders from geometry rather than from a picture (§11.1)
 - [ ] Kiosk mode on the real Fire tablet, at the performance budget (§11.7)
 - [ ] The rule editor (§21), or an agreed decision that rules stay in the other
       client for now
@@ -1722,9 +1783,10 @@ not a failure of it.
 
 **Phase 3 — Extension host + ABI proof**
 - [ ] `ext-host`: manifest load, API version gate, module load, error isolation
-- [ ] Sandbox host: frame lifecycle, nonce handshake, CSP, grant enforcement —
-      ported from `code_runtime.dart`, widened from its four functions toward
-      `HcContext` (§8.1)
+- [ ] Sandbox host: frame lifecycle, nonce handshake, CSP, grant enforcement
+- [ ] **`HcContext` proxied across `postMessage`** — query, overlay, history,
+      action, expr, presentation. The gate is Rule 1: a first-party widget must
+      be reasonable to write against the proxied context (§8.1)
 - [ ] In-realm ESM loader for the two kinds that cannot be framed (§8.1)
 - [ ] Asset store endpoints + SVG sanitization + attachments
 - [ ] `HcWidgetBase`, `HcLayoutShell` in the SDK
@@ -1749,8 +1811,9 @@ not a failure of it.
 
 **Phase 6 — Spatial model**
 - [ ] `hc-spatial` schema v1 + Rust crate
-- [ ] Reimplement the SH3D importer in Rust against `hc-spatial` — a rewrite,
-      not a port; hc-web-flutter's Dart one is the reference (§12.2)
+- [ ] Write the SH3D importer in Rust against `hc-spatial` — a rewrite, and the
+      normalized model is the design work; the Dart one is a worked example of
+      the parsing, not a spec (§12.2)
 - [ ] Opening derivation at import; non-convex point-in-polygon
 - [ ] Anchor model; spatial endpoints; round-trip a real house
 
@@ -1786,9 +1849,10 @@ not a failure of it.
 - [ ] **Grid mode:** cell placement, the coarse magnet, one grip, no rotation
 - [ ] **Free mode:** `frame` + `rect` + `angle`, eight handles, the fine magnet,
       guides, lift above the grid, groups and group rotation
-- [ ] Transform geometry ported from the Dart (`frame.dart`, `design_tools.dart`,
-      `free_layer.dart`, `group_frame.dart`, `constraints.dart`) — **plus
-      resize-while-rotated, which is not in it** (§14.2)
+- [ ] Transform geometry — written against the placement model, gestures working
+      from the placement alone so a sandboxed element is transformable without
+      being inspectable (§14.2). Read the Dart's for the bugs it names; it has
+      no resize-while-rotated and no extension boundary
 - [ ] Tool palette with drag-to-create; the catalogue stays but is not the only
       way in (§14.1)
 - [ ] Decorative elements: image, icon, text — no device binding, action optional
@@ -2134,10 +2198,14 @@ object would merge the two systems back together through the extension layer.
 - **Home Assistant automation editor + YAML toggle** — the visual/text
   round-trip works because automations are already data. Same reason ours will.
 - **Sweet Home 3D `Home.xml` format** — the importer's source of truth.
-- **hc-web-flutter's `sweet_home.dart` / `floor_plan_card.dart`** — a working
-  SH3D importer and plan renderer, with the texture-to-asset-store path already
-  solved. Prior art, not legacy (§12.2).
+- **hc-web-flutter** — read for problems already encountered, never as a
+  specification (§1.2). `sweet_home.dart` and `floor_plan_card.dart` for SH3D
+  parsing and the texture-to-asset-store path; `code_runtime.dart` for a sandbox
+  that works in a browser; the designer for transform, snapping and undo. All of
+  it was written for a client with no extension story, which is the axis this
+  design changes.
 - **Rive runtime docs** — state machines, typed inputs, events, text runs.
 - **Lit** — reactive properties, `ReactiveController` for subscription teardown.
-- **hc-web-flutter's designer** — the transform/overlay/snapping/undo work,
-  already done once against this same document. Read before rebuilding it.
+- **Figma, Sketch, Illustrator** — for §14.1's free mode. The reference for
+  what a composition surface feels like is a design tool, not a dashboard
+  editor.
