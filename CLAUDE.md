@@ -373,11 +373,11 @@ Three consequences, stated so they are not discovered in Phase 3:
   sense §6.4 means it.
 - **`CodeAttachment` is a sandboxed document, not an in-realm ESM module.**
   `entry` is *"the document the sandbox loads"*; `grant` names the devices it
-  may reach. That is §8.2's iframe path, already specified in core. §8.1's
-  "start trusted, native ESM, main realm" is therefore a **deviation** from what
-  core describes, not the default. It may still be the right call — decide it
-  on the record, and note that §4.1's custom-element `HcWidget` interface
-  assumes the in-realm answer.
+  may reach — and the grant is these same `bindings`, not a second list.
+  **Settled in §8.1:** sandbox by default, in-realm only for the kinds that
+  cannot be framed. §4.1's custom-element `HcWidget` interface therefore
+  describes the in-realm kinds; a sandboxed widget's equivalent is the shim
+  inside its frame, and `HcContext` reaches it over `postMessage`.
 
 **The two kinds.**
 
@@ -893,10 +893,72 @@ SDK, that is a finding, not an excuse to special-case it.
 
 ## 8. Loading and trust model
 
-### 8.1 Loading
+### 8.1 Loading — two mechanisms, chosen by kind
 
-Native ESM. No Module Federation — it exists to share a bundler runtime across
-builds you control, which is not this situation.
+**Settled: sandboxed by default, in-realm by declared exception.** The earlier
+draft said "start trusted, build for hybrid," and that was written without
+noticing that a sandbox already ships. Starting trusted would be a regression
+from what homeCore does today, and trust is the one decision that cannot be
+walked back — once extensions assume main-realm DOM, sandboxing them later
+breaks them all.
+
+**What already exists.** hc-web-flutter's `code_runtime.dart` runs code elements
+in a `srcdoc` iframe, and core's `CodeAttachment { entry, grant }` is the
+declaration for it. The security properties are not aspirational:
+
+- `sandbox="allow-scripts"` **without** `allow-same-origin`, so the frame gets an
+  opaque origin and cannot reach this app's cookies, storage or DOM. *The two
+  must never be set together — that combination lets a frame remove its own
+  sandbox attribute.*
+- A CSP meta inside the document, `default-src 'none'`, inline script only, with
+  network opened per element and only when reaching the LAN is the point.
+- A per-frame nonce carried on every message in both directions, so a stale
+  frame in an old tab cannot be mistaken for a live one.
+- Messages are JSON **strings**, not structured clones — no conversion surface
+  at a boundary where getting it wrong means a sandbox escape.
+- **The device grant is the whole permission model.** An element names a
+  selection and is handed exactly those devices, and may act on exactly those.
+  Naming nothing renders and can do nothing, which is the right default for code
+  someone pasted from the internet.
+- Skin tokens go in as CSS custom properties, so a sandboxed element restyles
+  with the house instead of being a permanent literal.
+
+**The grant and the bindings are the same thing** (§4.6). A descriptor's
+`bindings` are the subscription set in-realm and the grant across the frame
+boundary; they must not become two lists that can disagree.
+
+**Which mechanism a kind gets:**
+
+| Kind | Mechanism | Why |
+|---|---|---|
+| Code element (pasted, authored in-product) | **sandbox** | untrusted by definition; ships today |
+| Extension widget | **sandbox** | owns a rectangle, talks in messages — nothing more is needed |
+| Floorplan layer | **in-realm ESM** | renders into a *shared* SVG/canvas target; cannot be framed |
+| Container widget (P4 slots) | **in-realm, first-party** | its children are host-rendered widgets, which an iframe cannot hold |
+| Pipeline node UI | **sandbox** | same shape as a widget |
+
+So the in-realm ESM path is not deleted — it is **scoped to the kinds that
+cannot be framed**, and those kinds are higher-trust by nature. The install UI
+says which kind an extension is contributing, because "this adds a floorplan
+layer" is a different consent than "this adds a card."
+
+**Honest about the gap.** The shipped shim exposes four functions —
+`states`, `onUpdate`, `set`, `log`. That proves the sandbox, not the full ABI
+over it: `HcContext` (§4.2) is much wider, and proxying `query`, `overlay`,
+`history` and `action` across `postMessage` is real work. §4.2 claims it is a
+transport swap; Phase 3 is where that claim gets tested, and the four-function
+shim is the floor to beat, not the target.
+
+**Measure the frame cost, do not assume it.** Thirty iframes on a Fire tablet is
+the objection to this design and it deserves a number, not a shrug — the same
+treatment §11.7 gives Rive. Profile it in Phase 0 alongside the other probes. If
+frames are too expensive at dashboard scale, the fallback is a **shared worker
+frame** hosting several widgets behind one origin, not a retreat to the main
+realm.
+
+**Loading, for the in-realm kinds.** Native ESM. No Module Federation — it
+exists to share a bundler runtime across builds you control, which is not this
+situation.
 
 ```ts
 const manifest = await api.get(`/api/extensions/${id}/manifest`);
@@ -909,27 +971,22 @@ const mod = await import(
 The `?v=` cache-buster keyed on manifest version means extension updates take
 effect on reload without service-worker gymnastics.
 
-### 8.2 Trust — decide this deliberately
+### 8.2 What in-realm still costs
 
-A dynamically imported module runs in the main realm with full DOM access. It can
-read the session token and everything the app can read. Home Assistant accepts
-this; their guidance is to host resources locally rather than loading them from
-external URLs, and the risk sits with the admin who installed the extension.
+An ESM module imported into the main realm has full DOM access and can read the
+session token and everything the app can read. Home Assistant accepts this for
+everything; their guidance is to host resources locally and let the risk sit
+with the admin who installed the extension. We accept it for **two kinds only**,
+and that narrowing is the point of §8.1's table.
 
-| Model | Isolation | Cost |
-|---|---|---|
-| **Trusted (in-realm)** | none | simple, fast, full capability |
-| **Sandboxed (iframe per ext)** | real | per-frame overhead; painful with 30 widgets on a tablet |
-| **Hybrid** | per-extension flag | both code paths to maintain |
+For those kinds:
 
-**Decision: start trusted, build for hybrid.** In-realm by default. Because
-`HcContext` is the only capability channel, the iframe path can be added later
-without changing the widget-facing API. Add minisign verification over the
-manifest before any public registry exists.
-
-**Floorplan layers are the exception to note:** they render into a *shared* SVG
-or canvas target, so they cannot be iframe-sandboxed the way a widget can. Treat
-layers as a higher-trust extension kind and say so in the install UI.
+- The install UI names the kind and what it implies, rather than presenting one
+  undifferentiated "install extension" button.
+- Minisign verification over the manifest, before any public registry exists.
+- A layer that only needs to draw should still be written against
+  `HcFloorplanLayer` and nothing else — §19.4 applies with more force here, not
+  less, because nothing is enforcing it.
 
 Install flow is explicit and admin-only: upload a `.tar.gz`, host validates the
 manifest, extracts to the extension store, restarts nothing. Never auto-fetch
@@ -1622,6 +1679,10 @@ not a failure of it.
       invalidate §6 entirely; it does not belong behind nine primitives.
 - [ ] **Probe 2 — Fire tablet UA captured**, browserslist set, and §16's
       "verify before relying on" list actually verified on the device
+- [ ] **Probe 3 — frame cost on the Fire tablet** (§8.1). How many sandboxed
+      widgets a dashboard can hold before it stops feeling live. This is the
+      standing objection to the sandbox-by-default decision and it deserves a
+      number.
 - [ ] Deploy it next to the Flutter client and use it for a week
 
 **Phase 1 — Contract & tokens**
@@ -1661,7 +1722,10 @@ not a failure of it.
 
 **Phase 3 — Extension host + ABI proof**
 - [ ] `ext-host`: manifest load, API version gate, module load, error isolation
-- [ ] Settle in-realm ESM vs `CodeAttachment`'s sandboxed document (§4.6, §8.1)
+- [ ] Sandbox host: frame lifecycle, nonce handshake, CSP, grant enforcement —
+      ported from `code_runtime.dart`, widened from its four functions toward
+      `HcContext` (§8.1)
+- [ ] In-realm ESM loader for the two kinds that cannot be framed (§8.1)
 - [ ] Asset store endpoints + SVG sanitization + attachments
 - [ ] `HcWidgetBase`, `HcLayoutShell` in the SDK
 - [ ] **Acceptance gate:** build `hc-button` (§7.4) *first*, as an extension. If
@@ -1764,7 +1828,9 @@ types (left as a third-party proving ground, §7.5).
    parallel manifest of their own. `hc-button` is the acceptance test for
    primitive completeness.
 4. **`HcContext` is the only capability channel.** No widget or layer touches the
-   socket, the token, or `window` directly.
+   socket, the token, or `window` directly. Sandboxed kinds have this enforced
+   by an opaque origin; in-realm kinds (floorplan layers, slot containers) have
+   only the rule, which is why §8.1 keeps that list short.
 5. **Expressions are pure.** Read state, return a value. Anything with an effect
    is an action.
 6. **Actions dispatch centrally.** The safety policy (§11.3) lives in the host,
@@ -1800,7 +1866,9 @@ types (left as a third-party proving ground, §7.5).
    cases, but state-dependent fields need per-update evaluation. Where is the
    boundary, and does the widget ever call `ctx.expr` directly?
 3. **Extension distribution.** Manual upload only, or an eventual registry?
-   Affects whether signing is Phase 11 or Phase 3.
+   Affects whether signing is Phase 11 or Phase 3 — and it matters most for the
+   in-realm kinds (§8.1), since a sandboxed widget is contained whether or not
+   its manifest is signed.
 4. ~~**Konva vs tldraw** for the dashboard designer canvas.~~ **Settled:
    neither** (§14). The designer draws real custom elements in a transformed
    DOM scene, because no canvas library can render a sandboxed extension
