@@ -165,7 +165,8 @@ hc-spatial (Rust crate)
 hc-web (TypeScript, Lit 3, Vite)
   ├── shell                   routing, auth, connection, theming
   ├── core                    device store, subscription fan-out, service calls
-  ├── primitives/             THE NINE HOST PRIMITIVES (§5)
+  ├── primitives/             THE HOST PRIMITIVES (§5)
+  │   ├── present             is_on, facet, effective name/area (§1.1)
   │   ├── expr                expression evaluation (hc-expr wasm)
   │   ├── query               device queries
   │   ├── templates           parameterized widget templates
@@ -177,7 +178,7 @@ hc-web (TypeScript, Lit 3, Vite)
   │   └── actions             tap/hold/double-tap + confirmation model
   ├── runtime                 dashboard viewer
   ├── designer                authoring surface (DOM, transformed scene)
-  ├── ext-host                manifest loading, module import, HcContext
+  ├── ext-host                manifest load, frame host, HcContext transport
   ├── floorplan               floorplan surface + layer host
   └── widgets/                first-party widget family — built AS extensions
 ```
@@ -191,8 +192,16 @@ match; that gap is the thing we are avoiding.
 The same rule applies one level down: first-party **floorplan layers** use the
 same layer API third-party layers use (§11.4).
 
-**Rule 2 — primitives precede widgets.** See §5. This is a sequencing constraint
-on the build, not just an architectural preference.
+**Rule 2 — primitives precede the published ABI.** See §5 and §18.1. A
+sequencing constraint on the build, not just an architectural preference — and
+deliberately *not* "primitives precede any widget", which is a different and
+much more expensive claim.
+
+**Rule 3 — the ABI is a protocol, not a class.** Most widgets run in a sandbox
+(§8.1), so the contract between host and widget is **messages across a
+boundary**, and a JavaScript object with methods is one binding of it rather
+than the thing itself. Any capability that cannot be expressed as an async
+message is a capability extensions do not get — see §4.2.
 
 ---
 
@@ -203,6 +212,22 @@ writing UI.
 
 ### 4.1 Widget interface
 
+**The contract is a protocol.** Most widgets run in a sandboxed frame (§8.1) and
+are therefore not objects in the host's realm at all, so the ABI is the sequence
+of messages, and the TypeScript below is the **in-realm binding** of it — what
+the SDK hands an author, and what the two unsandboxable kinds implement
+directly.
+
+```
+host → widget    config      the resolved config; widget replies ok | error
+host → widget    state       the granted devices, on connect and on change
+host → widget    mode        "view" | "edit"
+host → widget    tokens      resolved design tokens, again on theme change
+widget → host    size        preferred size (see below)
+widget → host    request     any HcContext call (§4.2), correlated, awaited
+widget → host    log         author diagnostics, surfaced in the inspector
+```
+
 ```ts
 export interface HcWidget extends HTMLElement {
   /** Called once at setup, with expressions already resolved by the host.
@@ -212,10 +237,16 @@ export interface HcWidget extends HTMLElement {
   /** Host injects the scoped capability object. Called after setConfig. */
   connect(ctx: HcContext): void;
 
-  /** Preferred size in grid units, for auto-layout and the designer. */
-  getSize(): { w: number; h: number };
+  /** Preferred size. Grid cells in grid mode, frame units in free mode
+   *  (§14.1) — the host says which it is asking for. */
+  getSize(mode: "grid" | "free"): { w: number; h: number };
 }
 ```
+
+A custom element is a convenient binding, not the boundary. **If a capability
+cannot be phrased as one of those messages, extensions do not have it** — which
+is Rule 3, and the discipline that keeps the two kinds from drifting into two
+ABIs.
 
 ### 4.2 HcContext — the capability boundary
 
@@ -237,7 +268,9 @@ export interface HcContext {
   /** P2 — resolve a device query to a live, auto-updating device set. */
   query(q: DeviceQuery): QueryResult;
 
-  /** P5 — open a dialog, bottom sheet, or popover owned by the host. */
+  /** P5 — open a dialog, bottom sheet, or popover owned by the host.
+   *  Content is a widget *spec*, never a DOM node — a sandboxed widget has no
+   *  nodes the host could mount. */
   overlay: OverlayApi;
 
   /** P8 — history and statistics, downsampled server-side. */
@@ -246,14 +279,16 @@ export interface HcContext {
   /** P9 — run a configured action with the shared safety/confirm policy. */
   action(cfg: ActionConfig, source: ActionSource): Promise<void>;
 
-  /** Resolve an asset reference to a URL, namespaced to this extension. */
-  asset(ref: string): string;
+  /** Resolve an asset reference to a URL, namespaced to this extension.
+   *  A sandboxed frame has an opaque origin and `default-src 'none'`, so the
+   *  host must also admit the asset origin into that frame's CSP (§9) — a URL
+   *  the frame cannot fetch is worse than no URL. */
+  asset(ref: string): Promise<string>;
 
-  /** Shared Rive runtime — never bundle your own. */
-  rive: RiveRuntime;
-
-  /** Read-only spatial model, when one is loaded. */
-  spatial?: SpatialModel;
+  /** Read-only spatial geometry, when a model is loaded. Queried, not handed
+   *  over: a house is too large to copy into every frame, and a widget wants
+   *  one room's polygon rather than the document. */
+  spatial?: SpatialQuery;
 
   /** Resolved DTCG design tokens. */
   tokens: DesignTokens;
@@ -262,7 +297,8 @@ export interface HcContext {
    *  The only implementation — see §1.1. */
   present: PresentationApi;
 
-  /** Editing vs viewing — widgets suppress side effects while editing. */
+  /** Editing vs viewing. Advisory to the widget; enforced by the host —
+   *  `action` refuses to dispatch in edit mode (§14.2). */
   mode: "view" | "edit";
 
   locale: string;
@@ -275,10 +311,20 @@ card on every state change, which causes all cards to re-render on unrelated
 updates. Declaring bindings up front and fanning out per-device avoids this and
 matters most on the low-powered tablets.
 
-**Why the narrow surface.** If widgets only ever talk through `HcContext`, moving
-them into a sandboxed iframe later is a transport swap (proxy the interface over
-`postMessage`) rather than an ecosystem-breaking rewrite. Design as if sandboxed
-even while running in-realm.
+**Every call is async, and that is not a detail.** Each member above is a
+request across a frame boundary (§8.1), so the whole surface returns promises
+and nothing here may be a live object the widget holds. That is why `spatial` is
+a query rather than a model, why `overlay` takes a widget spec rather than a
+node, and why **`rive` is not on this list at all** — a frame cannot share the
+host's runtime instance, and shipping a copy of it into every frame is megabytes
+per widget. Rive is reached the way §10.2 already describes: a first-party
+`hc-rive` widget configured by *data*, which any extension can instantiate and
+no extension needs to bundle.
+
+**The test for anything added here later:** phrase it as a message with a
+correlated reply. If it cannot be phrased that way, it is a capability only the
+first-party client would have, and Rule 1 says that is the ABI being wrong
+rather than a reasonable exception.
 
 ### 4.3 Extension manifest
 
@@ -471,7 +517,8 @@ capability later. The workarounds then calcify: card-mod exists because HA cards
 are shadow-DOM encapsulated with no styling hooks, and now thousands of
 dashboards depend on injecting CSS into other people's internals.
 
-**Sequencing constraint:** the nine primitives below are built in Phase 2,
+**Sequencing constraint:** the primitives below — the nine here plus
+presentation (§1.1) — are built in Phase 2,
 before the widget family (Phase 4) and — the part that is unrecoverable — before
 the SDK is published in Phase 3. A primitive bolted on after third parties are
 building cannot be adopted retroactively by widgets already in the wild; it just
@@ -583,8 +630,28 @@ interface HcWidgetMeta {
 }
 ```
 
-Layouts (stack, grid, swipe, tabs, accordion) are first-party container widgets
-built on this — not special-cased card types.
+Layouts (stack, grid, swipe, tabs, accordion) are container widgets built on
+this — not special-cased card types.
+
+**Containers are the one place Rule 1 does not fully hold, and it is worth
+saying rather than discovering.** A container's children are host-rendered
+widgets, each in its own frame; a container that was itself sandboxed could not
+hold them, because a frame cannot mount another frame's element. So containers
+run in-realm (§8.1) and an extension cannot currently ship one.
+
+Two ways out, neither free, and this needs deciding before §7.3's containers are
+built rather than after:
+
+- **A container declares layout, the host performs it.** The container is data —
+  slot names, direction, gaps, breakpoints — evaluated by the host, which owns
+  the children. Extensions can then ship containers, but only declarative ones.
+- **Containers stay code and stay first-party**, and the manifest simply has no
+  container kind, said plainly in the SDK docs rather than left as a gap someone
+  discovers.
+
+The first is more in keeping with §3's Rule 1 and is probably right, since every
+container in §7.3 is expressible as data. It is listed here as an open decision
+because it constrains the slot model, which is this primitive.
 
 *Obviates:* stack-in-card, vertical-stack-in-card, swipe-card, and the whole
 "in-card" family that exists purely to suppress double borders.
@@ -833,8 +900,10 @@ navigate. Shipping only Tier 1 produces an ecosystem of workaround extensions.
 
 ### 7.2 The shared layout shell
 
-Every Tier 1 widget is a thin specialization of one shell. Build the shell in the
-SDK; the domain widgets are then small.
+Every Tier 1 widget is a thin specialization of one shell. The shell ships in
+the SDK and is bundled *into* each widget, since a sandboxed widget cannot
+import from the host — so keep it small, and keep anything large (icon sets,
+the token table) on the host side of the boundary where it is sent as data.
 
 ```
 ┌─────────────────────────────────────────┐
@@ -1057,6 +1126,11 @@ The capability Flutter's build-time `AssetManifest` made impossible.
 ```
 
 - Served at `/api/assets/**` with content-hash cache headers.
+- **A sandboxed widget's frame must be able to fetch them.** The frame has an
+  opaque origin and a `default-src 'none'` policy, so the host admits the asset
+  origin into that frame's CSP for `img-src` and `font-src` and nothing else.
+  An asset URL a frame cannot load is the failure mode to design against: it
+  renders as a broken image with no error anywhere.
 - `ctx.asset("icons/dial.svg")` resolves within the calling extension's namespace.
 - `ctx.asset("/user/icons/garage.svg")` reaches the shared user store.
 - Users upload through the designer; no rebuild, no restart.
@@ -1133,8 +1207,13 @@ instead of a flat icon (§11.4).
 
 - Use **`@rive-app/canvas`**, not `@rive-app/webgl2`. Fire tablet GPU/driver
   support is inconsistent; the canvas renderer is the safer default.
-- Bundle the runtime **once in the shell**, not per extension. Expose it through
-  `ctx.rive` so extensions never bundle their own copy.
+- **The runtime is bundled once, in the shell, and never handed to an
+  extension.** There is no `ctx.rive`: a sandboxed frame cannot share the host's
+  runtime instance, and shipping a copy into every frame costs megabytes per
+  widget. Rive is reached the way §10.2 describes — the first-party `hc-rive`
+  widget, configured by data. An extension that wants an animated widget ships a
+  `.riv` file and a config, which is the point of §10.2 and a *lower* barrier
+  than a runtime binding would be.
 - **Lifecycle:** `rive.cleanup()` on `disconnectedCallback`. Pause instances
   scrolled out of view via `IntersectionObserver`; on the floorplan, pause
   instances outside the current viewport transform.
@@ -1737,7 +1816,7 @@ not a failure of it.
 - [ ] Three widgets, however they come out: `hc-device`, `hc-light`, `hc-chart`
 - [ ] **Probe 1 — `hc-expr` wasm on the Fire tablet** (§6.6, §20.1). Bundle
       size and cold start. This needs only a wasm build and a tablet, and it can
-      invalidate §6 entirely; it does not belong behind nine primitives.
+      invalidate §6 entirely; it does not belong behind the primitive set.
 - [ ] **Probe 2 — Fire tablet UA captured**, browserslist set, and §16's
       "verify before relying on" list actually verified on the device
 - [ ] **Probe 3 — frame cost on the Fire tablet** (§8.1). How many sandboxed
@@ -1759,7 +1838,7 @@ not a failure of it.
       `hc_types::dashboard_vocabulary`'s naming ratchet
 - [ ] Fire tablet UA captured; browserslist set; hello-world verified on device
 
-**Phase 2 — Host primitives** *(§5 — all nine, before the SDK is published)*
+**Phase 2 — Host primitives** *(§5, plus presentation — before the SDK ships)*
 - [ ] Presentation primitive: `is_on`, facet classification, effective name/area (§1.1)
 - [ ] **P1** `hc-expr` crate + wasm build — or the restricted-DSL fallback, if
       Probe 1 said so
@@ -1828,7 +1907,8 @@ not a failure of it.
 - [ ] **Parity review against houseplan-card's README feature list**
 
 **Phase 8 — Rive**
-- [ ] `hc-rive` generic widget (§10.2); runtime via `ctx.rive`, bundled once
+- [ ] `hc-rive` generic widget (§10.2) — runtime bundled once in the shell and
+      never exposed to extensions; a `.riv` plus config is the whole surface
 - [ ] Artboard/state-machine/input introspection in the property panel
 - [ ] Rive marker renderer on the floorplan
 - [ ] Viewport pause + `cleanup()` lifecycle
@@ -1881,9 +1961,10 @@ types (left as a third-party proving ground, §7.5).
 1. **hc-web is an API consumer.** No logic lives here that isn't reachable over
    hc-api. A CLI must be able to do anything the UI can.
 2. **Primitives before the ABI is published** (§18.1) — not before any widget.
-   The nine primitives (§5) ship in Phase 2 and the SDK goes out in Phase 3, in
-   that order, because a primitive added after third parties are building cannot
-   be adopted retroactively. A capability that half the ecosystem needs is a
+   The primitives (§5, plus presentation) ship in Phase 2 and the SDK goes out
+   in Phase 3, in
+   that order, because a primitive added after third parties are
+   building cannot be adopted retroactively. A capability that half the ecosystem needs is a
    host primitive, not a popular extension. If a workaround extension becomes
    widely installed, that is a bug report against this document.
 3. **No privileged built-ins, and one contribution path.** First-party widgets
@@ -1900,7 +1981,11 @@ types (left as a third-party proving ground, §7.5).
 6. **Actions dispatch centrally.** The safety policy (§11.3) lives in the host,
    not in widgets, so no extension can bypass it.
 7. **`part` names and CSS custom property names are ABI.** Renaming one is a
-   breaking change. This is what keeps card-mod from ever being needed.
+   breaking change. This is what keeps card-mod from ever being needed. Note
+   they reach *into* a sandboxed frame only as tokens the host sends, not as
+   the parent's stylesheet — so a sandboxed widget's parts are styleable by its
+   own author, and theming crosses as data (§15).
+
 8. **Adding a widget, layer, template, or asset must never require a rebuild.**
    This is the entire reason for the migration.
 9. **Every option is GUI-editable.** No widget ships that requires hand-editing
@@ -1918,6 +2003,10 @@ types (left as a third-party proving ground, §7.5).
 17. **Rules command; pipelines produce state.** The boundary in §22 is enforced
     by MQTT ACL, not by convention. No feature that blurs it ships in either
     system.
+18. **Every capability is expressible as a message** (§3, Rule 3). Most widgets
+    run in a frame, so a capability that only works as a shared in-realm object
+    is one only the first-party client can have — which is Rule 1 being broken,
+    not an exception to it.
 
 ---
 
