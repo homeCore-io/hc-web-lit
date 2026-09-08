@@ -23,6 +23,7 @@ import { Engine, type GridItem } from '../core/layout.js';
 import type { SelectionContext } from '../core/selection.js';
 import type { DeviceStore } from '../core/store.js';
 import type { CommandRequest } from '../widgets/hc-controls.js';
+import type { HistoryFetch } from '../widgets/hc-history-chart.js';
 import { tagFor } from '../widgets/registry.js';
 
 @customElement('hc-page')
@@ -97,6 +98,9 @@ export class HcPage extends LitElement {
    * widget vocabulary entirely.
    */
   @property({ attribute: false }) context: SelectionContext = {};
+
+  /** The host's history reader — §5.9's `ctx.history`, passed rather than held. */
+  @property({ attribute: false }) onFetch: HistoryFetch | undefined;
 
   @state() private tick = 0;
 
@@ -222,6 +226,7 @@ export class HcPage extends LitElement {
       devices?: readonly unknown[];
       context?: SelectionContext;
       onCommand?: (r: CommandRequest) => void;
+      onFetch?: HistoryFetch;
     };
     el.config = w.config ?? {};
 
@@ -237,6 +242,7 @@ export class HcPage extends LitElement {
     if (this.store !== undefined) el.devices = this.store.list();
     el.context = this.context;
     if (this.onCommand !== undefined) el.onCommand = this.onCommand;
+    if (this.onFetch !== undefined) el.onFetch = this.onFetch;
     el.style.height = '100%';
     return el;
   }

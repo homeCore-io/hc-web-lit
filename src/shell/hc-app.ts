@@ -21,6 +21,7 @@ import type { CommandRequest } from '../widgets/hc-controls.js';
 import './hc-page.js';
 import '../widgets/hc-device-grid.js';
 import '../widgets/hc-device-list.js';
+import '../widgets/hc-history-chart.js';
 import '../widgets/hc-line.js';
 import '../widgets/hc-media.js';
 import '../widgets/hc-mode-chips.js';
@@ -200,6 +201,21 @@ export class HcApp extends LitElement {
     }
   }
 
+  /**
+   * History, read through the host like everything else (§19.4).
+   *
+   * A widget holding an API client would hold a token; this is the same shape
+   * as the command sink and becomes `ctx.history` when the capability object
+   * exists (§5.9).
+   */
+  private readonly history = async (
+    deviceId: string,
+    opts: { from: Date; to: Date; limit: number },
+  ) => {
+    if (this.api === undefined) return [];
+    return this.api.deviceHistory(deviceId, opts);
+  };
+
   override render() {
     return html`
       <header>
@@ -264,6 +280,7 @@ export class HcApp extends LitElement {
         .doc=${this.current}
         .store=${this.store}
         .onCommand=${this.command}
+        .onFetch=${this.history}
         breakpoint=${this.breakpoint}
       ></hc-page>
     `;

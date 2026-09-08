@@ -122,6 +122,13 @@ export interface DeviceSchema {
   actions?: DeviceAction[];
 }
 
+/** One recorded value — `HistoryEntry` in the OpenAPI schema. */
+export interface HistoryEntry {
+  attribute: string;
+  recorded_at: string;
+  value: unknown;
+}
+
 export interface ApiOptions {
   /** e.g. `http://10.0.10.150:8080/api/v1` — no trailing slash. */
   baseUrl: string;
@@ -217,6 +224,31 @@ export class HcApi {
     params: Record<string, unknown> = {},
   ): Promise<void> {
     await this.commandDevice(deviceId, { action, ...params });
+  }
+
+  /**
+   * `getDeviceHistory`.
+   *
+   * **Every attribute, interleaved, newest first, and `limit` counts rows not
+   * points.** Asking for 1000 rows of an ecowitt sensor over a day returns 303
+   * — 117 temperature, 156 humidity, and 30 rows of battery metadata — so a
+   * chart of one attribute pays for all of them and silently truncates at the
+   * cap. There is no per-attribute filter and no server-side downsampling;
+   * §5.9 is about closing exactly that, and `core/history.ts` does the
+   * grouping and thinning here in the meantime.
+   */
+  async deviceHistory(
+    deviceId: string,
+    opts: { from?: Date; to?: Date; limit?: number } = {},
+  ): Promise<HistoryEntry[]> {
+    const q = new URLSearchParams();
+    if (opts.from !== undefined) q.set('from', opts.from.toISOString());
+    if (opts.to !== undefined) q.set('to', opts.to.toISOString());
+    q.set('limit', String(opts.limit ?? 1000));
+    return this.request<HistoryEntry[]>(
+      'GET',
+      `/devices/${encodeURIComponent(deviceId)}/history?${q.toString()}`,
+    );
   }
 
   /** `listDashboards`. */
