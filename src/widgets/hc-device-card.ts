@@ -16,6 +16,7 @@ import { LitElement, css, html, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { controlsFor } from '../core/controls.js';
 import type { DeviceState } from '../core/device.js';
+import { formatReading, hasPowerState, readingOf, roleOf } from '../core/facet.js';
 import { effectiveName, isOn, levelOf, sceneKind } from '../core/present.js';
 import type { CommandRequest } from './hc-controls.js';
 import './hc-controls.js';
@@ -129,6 +130,14 @@ export class HcDeviceCard extends LitElement {
    * still reports the brightness it will return to, and printing "43%" beside a
    * dark lamp is a lie the data invites (§1.1).
    */
+  /**
+   * What to say under the name — and the question depends on what the device is
+   * (§5.11).
+   *
+   * A device you can command reports a power state. A device you only read
+   * reports its reading: `21.5 °C`, not "Off", because a thermometer cannot be
+   * turned off and saying so invents a fact.
+   */
   private subtitle(d: DeviceState, on: boolean | undefined, level: number | undefined) {
     if (!d.available) return 'Offline';
 
@@ -137,11 +146,12 @@ export class HcDeviceCard extends LitElement {
     // activating one of those is a thing you do rather than a state you read.
     if (d.device_type === 'scene' && sceneKind(d) === 'momentary') return nothing;
 
-    // Not "Off" — a thermometer is not off. Roughly forty devices in a real
-    // house publish nothing `isOn` can read, and saying "Off" about them is an
-    // invented fact rather than a cautious one.
-    if (on === undefined) return nothing;
+    if (!hasPowerState(d)) {
+      const reading = readingOf(d);
+      return reading === undefined ? nothing : formatReading(reading);
+    }
 
+    if (on === undefined) return nothing;
     if (on && level !== undefined) return `On · ${Math.round(level)}%`;
     return on ? 'On' : 'Off';
   }

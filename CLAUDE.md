@@ -92,6 +92,25 @@ for an applied scene, a `state` string for transports (`"running"`,
 `"playing"`), or, last, a non-zero level. `entity.state == "on"` has no
 translation.
 
+**Ask what kind of device it is before asking whether it is on.** A temperature
+sensor is not off — it reports a value and cannot be turned off, so "is it on?"
+is the wrong question rather than an unanswered one, and a card that renders
+"Off" beside a thermometer has invented a fact.
+
+**That is derived, not listed.** A device with a writable attribute or a
+declared action is one you *command*; one with a schema and neither is one you
+*read* (§5.11). Across 184 real devices that is right every time, including the
+case a `device_type` table gets wrong: a `pico_remote` declares no writable
+attribute and no action — it transmits, and cannot be pressed remotely — while a
+`keypad` declares `press_button`. Same hardware shape, opposite answers, and the
+plugins already said so.
+
+A client-side table mapping type names to behaviours would be closed against the
+next plugin, different in every client, and would produce a plausible wrong
+answer instead of a visible gap. Where the schema cannot answer, the answer is
+**unknown** and the card shows nothing — which is how homeCore#28's 77
+schema-less devices stay visible instead of being papered over.
+
 **And on-ness has three answers, not two.** A lamp is on or off; a temperature
 sensor is neither, and neither is a Pico remote, a keypad, a bridge, or a scene
 that fires and forgets. About forty devices in the reference house publish
@@ -917,6 +936,13 @@ renders, and they are not the same artifact.
 - **Absence is normal.** `lutron_28` returns `{"error":"schema not found"}` and
   is a perfectly good fan. Attributes displayed, no controls offered, no error
   shown.
+- **Two things the schema still cannot say**, both filed (homeCore#29). Nothing
+  nominates the *primary* reading — `category` exists to demote battery and
+  firmware and is set on **zero devices by every plugin**, so a lock declares
+  its battery exactly as primary as whether it is locked. And demotion only says
+  what is not the point; a weather station's three equally-primary readings need
+  something that says which one a card leads with. Until then this client
+  carries a list of boring attribute names, marked as the stopgap it is.
 
 *Obviates:* per-widget knowledge of what each device type can do — which is the
 thing that makes a widget family expensive to extend, and the reason §7.3 is as
