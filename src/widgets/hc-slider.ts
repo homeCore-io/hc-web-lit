@@ -136,7 +136,7 @@ export class HcSlider extends LitElement {
     const unit = declared?.unit ?? '';
 
     return html`
-      <div class="row">
+      <div class="row" part="label">
         <span>${label(this.config, attribute)}</span>
         <b>${Math.round(value)}${unit === '' ? '' : ` ${unit}`}</b>
       </div>
@@ -152,8 +152,8 @@ export class HcSlider extends LitElement {
         @keydown=${(e: KeyboardEvent) => this.key(e, value, min, max)}
       >
         <span class="bar"></span>
-        <span class="fill" ?data-cool=${this.cool} style="width:${pct}%"></span>
-        <span class="knob" style="left:${pct}%"></span>
+        <span class="fill" part="fill" ?data-cool=${this.cool} style="width:${pct}%"></span>
+        <span class="knob" part="knob" style="left:${pct}%"></span>
       </div>
     `;
   }

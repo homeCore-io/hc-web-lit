@@ -46,6 +46,7 @@ export class HcText extends LitElement {
 
     return html`
       <p
+        part="text"
         style="font-size:${scale}rem;
                font-weight:${this.str('weight', 'normal')};
                letter-spacing:${tracking}em;

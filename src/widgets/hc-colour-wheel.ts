@@ -105,7 +105,7 @@ export class HcColourWheel extends LitElement {
       aria-label="Colour"
       @pointerdown=${(e: PointerEvent) => this.scrub(e)}
     >
-      <span class="thumb" style="left:${left}%;top:${top}%"></span>
+      <span class="thumb" part="knob" style="left:${left}%;top:${top}%"></span>
     </div>`;
   }
 

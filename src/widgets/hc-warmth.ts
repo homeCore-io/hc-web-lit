@@ -95,7 +95,7 @@ export class HcWarmth extends LitElement {
       @pointerdown=${(e: PointerEvent) => this.scrub(e, min, max)}
       @keydown=${(e: KeyboardEvent) => this.key(e, k ?? (min + max) / 2, min, max)}
     >
-      <span class="knob" style="top:${Math.min(100, Math.max(0, pos))}%"></span>
+      <span class="knob" part="knob" style="top:${Math.min(100, Math.max(0, pos))}%"></span>
     </div>`;
   }
 

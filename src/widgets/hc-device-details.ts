@@ -195,9 +195,9 @@ export class HcDeviceDetails extends LitElement {
         : rows.readings.find((r) => r.numeric)?.key);
 
     return html`
-      <div class="head">
-        <span class="name">${effectiveName(d)}</span>
-        <span class="where">
+      <div class="head" part="head">
+        <span class="name" part="name">${effectiveName(d)}</span>
+        <span class="where" part="state">
           ${humanise(effectiveArea(d) ?? 'no area')} · ${humanise(d.device_type ?? 'no type')} ·
           ${humanise(roleOf(d))}
         </span>
@@ -206,7 +206,7 @@ export class HcDeviceDetails extends LitElement {
       ${
         lead === undefined
           ? nothing
-          : html`<div class="lead">
+          : html`<div class="lead" part="reading">
               <span>${formatReading(lead)}</span>
               <span class="of">${lead.label}</span>
             </div>`
@@ -225,8 +225,8 @@ export class HcDeviceDetails extends LitElement {
       ${
         controls.length === 0
           ? nothing
-          : html`<section>
-              <h3>Controls</h3>
+          : html`<section part="section">
+              <h3 part="heading">Controls</h3>
               <hc-controls
                 .device=${d}
                 .controls=${controls}
@@ -237,8 +237,8 @@ export class HcDeviceDetails extends LitElement {
       ${
         charted === undefined || this.onFetch === undefined
           ? nothing
-          : html`<section ?hidden=${this.noHistory}>
-              <h3>History</h3>
+          : html`<section part="section" ?hidden=${this.noHistory}>
+              <h3 part="heading">History</h3>
               <div class="chart">
                 <hc-history-chart
                   .config=${{ device_id: d.device_id, attribute: charted, timeframe_hours: 24 }}
@@ -251,8 +251,8 @@ export class HcDeviceDetails extends LitElement {
             </section>`
       }
 
-      <section>
-        <h3>Reports</h3>
+      <section part="section">
+        <h3 part="heading">Reports</h3>
         <div class="rows">${rows.readings.map((r) => this.row(r, charted))}</div>
         ${
           rows.housekeeping.length === 0
@@ -270,6 +270,7 @@ export class HcDeviceDetails extends LitElement {
     // A numeric attribute is chartable, so the row is the way to chart it.
     const pickable = r.numeric && this.onFetch !== undefined;
     return html`<div
+      part="row"
       class=${pickable ? 'row pickable' : 'row'}
       aria-selected=${r.key === charted ? 'true' : 'false'}
       role=${pickable ? 'button' : 'presentation'}
