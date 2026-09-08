@@ -16,7 +16,7 @@ import { LitElement, css, html, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { controlsFor } from '../core/controls.js';
 import type { DeviceState } from '../core/device.js';
-import { formatReading, hasPowerState, readingOf, roleOf } from '../core/facet.js';
+import { formatReading, hasPowerState, readingOf } from '../core/facet.js';
 import { effectiveName, isOn, levelOf, sceneKind } from '../core/present.js';
 import type { CommandRequest } from './hc-controls.js';
 import './hc-controls.js';
