@@ -202,6 +202,23 @@ export class HcApi {
     await this.request<unknown>('PATCH', `/devices/${encodeURIComponent(deviceId)}/state`, patch);
   }
 
+  /**
+   * Invoke a declared action (§5.11).
+   *
+   * The same endpoint and the same topic as an attribute write — core's own
+   * words: *"an attribute write is `{"source": "Netflix"}`; an action is
+   * `{"action": "launch_app", "app": "Netflix"}`. Both reach the plugin through
+   * the same `devices/{id}/cmd` topic, so declaring them costs no new
+   * transport."* The difference is the shape of the body, not the route.
+   */
+  async callAction(
+    deviceId: string,
+    action: string,
+    params: Record<string, unknown> = {},
+  ): Promise<void> {
+    await this.commandDevice(deviceId, { action, ...params });
+  }
+
   /** `listDashboards`. */
   async listDashboards(): Promise<unknown[]> {
     return this.request<unknown[]>('GET', '/dashboards');

@@ -1,0 +1,158 @@
+import { describe, expect, it, vi } from 'vitest';
+import { HcApi } from '../src/core/api.js';
+import { controlsFor } from '../src/core/controls.js';
+import type { DeviceState } from '../src/core/device.js';
+import '../src/widgets/hc-controls.js';
+import type { HcControls } from '../src/widgets/hc-controls.js';
+
+const light = (attrs: Record<string, unknown>): DeviceState => ({
+  device_id: 'hue_1',
+  name: 'Lamp',
+  plugin_id: 'hue',
+  available: true,
+  attributes: attrs,
+  last_seen: '2026-09-07T00:00:00Z',
+  schema: {
+    attributes: {
+      on: { kind: 'bool', writable: true, display_name: 'Power' },
+      brightness_pct: { kind: 'integer', writable: true, min: 0, max: 100, unit: '%' },
+    },
+  },
+});
+
+async function mount(device: DeviceState, onCommand?: HcControls['onCommand']) {
+  const el = document.createElement('hc-controls');
+  el.device = device;
+  el.controls = controlsFor(device);
+  if (onCommand !== undefined) el.onCommand = onCommand;
+  document.body.append(el);
+  await el.updateComplete;
+  return el;
+}
+
+describe('the write path', () => {
+  it('asks the host to toggle, and never reaches the API itself', async () => {
+    const sent = vi.fn();
+    const el = await mount(light({ on: false, brightness_pct: 0 }), sent);
+
+    const toggle = el.shadowRoot?.querySelector('button') as HTMLButtonElement;
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    toggle.click();
+
+    expect(sent).toHaveBeenCalledWith({ deviceId: 'hue_1', patch: { on: true } });
+  });
+
+  it('holds the moved value until the house confirms it', async () => {
+    // A command is accepted, not applied — the real value comes back on the
+    // event stream. Without this the control snaps back under the finger for
+    // the length of a round trip and reads as broken.
+    const el = await mount(light({ on: false }), vi.fn());
+    (el.shadowRoot?.querySelector('button') as HTMLButtonElement).click();
+    await el.updateComplete;
+
+    expect(el.shadowRoot?.querySelector('button')?.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('drops the pending value the moment the device actually changes', async () => {
+    const el = await mount(light({ on: false }), vi.fn());
+    (el.shadowRoot?.querySelector('button') as HTMLButtonElement).click();
+    await el.updateComplete;
+
+    // The house says no — a bulb that did not respond, or a rule that turned it
+    // straight back off. Whatever arrives wins.
+    el.device = light({ on: false });
+    el.controls = controlsFor(el.device);
+    await el.updateComplete;
+
+    expect(el.shadowRoot?.querySelector('button')?.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('sends a slider change as an attribute write', async () => {
+    const sent = vi.fn();
+    const el = await mount(light({ on: true, brightness_pct: 20 }), sent);
+
+    const slider = el.shadowRoot?.querySelector('input[type="range"]') as HTMLInputElement;
+    slider.value = '65';
+    slider.dispatchEvent(new Event('change'));
+
+    expect(sent).toHaveBeenCalledWith({ deviceId: 'hue_1', patch: { brightness_pct: 65 } });
+  });
+
+  it('is read-only with no command sink, and says so by disabling', async () => {
+    // The absence of a host to send to is not an error and not a silent
+    // no-op: the controls are visible and plainly inert.
+    const el = await mount(light({ on: true }));
+    const toggle = el.shadowRoot?.querySelector('button') as HTMLButtonElement;
+    expect(toggle.disabled).toBe(true);
+  });
+
+  it('sends an action with its parameter, resolved from the device', async () => {
+    const sent = vi.fn();
+    const keypad: DeviceState = {
+      device_id: 'lutron_52',
+      name: 'Keypad',
+      plugin_id: 'lutron',
+      available: true,
+      last_seen: '2026-09-07T00:00:00Z',
+      attributes: {
+        available_buttons: [
+          { name: 'OH Door 1', number: 1 },
+          { name: 'Lights', number: 3 },
+        ],
+      },
+      schema: {
+        actions: [
+          {
+            id: 'press_button',
+            label: 'Press a button',
+            sentence: 'press button {button} on {device}',
+            params: [
+              {
+                name: 'button',
+                kind: 'int',
+                options_from: {
+                  attribute: {
+                    attribute: 'available_buttons',
+                    label_key: 'name',
+                    value_key: 'number',
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const el = await mount(keypad, sent);
+    const buttons = [...(el.shadowRoot?.querySelectorAll('button') ?? [])] as HTMLButtonElement[];
+
+    // One button per engraved label, straight off the wall.
+    expect(buttons.map((b) => b.textContent?.trim())).toEqual(['OH Door 1', 'Lights']);
+
+    buttons[1]?.click();
+    expect(sent).toHaveBeenCalledWith({
+      deviceId: 'lutron_52',
+      action: { id: 'press_button', params: { button: '3' } },
+    });
+  });
+});
+
+describe('the action wire format', () => {
+  it('goes to the same endpoint as an attribute write, with an action key', async () => {
+    // Core: "an attribute write is {source: ...}; an action is {action: ...}.
+    // Both reach the plugin through the same devices/{id}/cmd topic."
+    let body: unknown;
+    const api = new HcApi({
+      baseUrl: '/api/v1',
+      token: 't',
+      fetch: vi.fn((_u: RequestInfo | URL, init?: RequestInit) => {
+        body = JSON.parse(String(init?.body));
+        return Promise.resolve(new Response(null, { status: 202 }));
+      }) as unknown as typeof globalThis.fetch,
+    });
+
+    await api.callAction('lutron_52', 'press_button', { button: 3 });
+    expect(body).toEqual({ action: 'press_button', button: 3 });
+  });
+});

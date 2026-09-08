@@ -21,6 +21,7 @@ import type {
 import { gridItems, layoutFor } from '../core/dashboard.js';
 import { Engine, type GridItem } from '../core/layout.js';
 import type { DeviceStore } from '../core/store.js';
+import type { CommandRequest } from '../widgets/hc-controls.js';
 import { tagFor } from '../widgets/registry.js';
 
 @customElement('hc-page')
@@ -76,6 +77,14 @@ export class HcPage extends LitElement {
   @property({ attribute: false }) store: DeviceStore | undefined;
   /** Scale a composed page to this width. 0 means draw at natural size. */
   @property({ type: Number }) fitWidth = 0;
+  /**
+   * Where a widget's commands go.
+   *
+   * Passed down rather than reached for: a widget holds no token, no base URL
+   * and no socket (§19.4), and the host is the one place a safety policy could
+   * refuse an actuation (§5.10). This is the seed of `ctx.call`.
+   */
+  @property({ attribute: false }) onCommand: ((r: CommandRequest) => void) | undefined;
 
   @state() private tick = 0;
 
@@ -198,10 +207,12 @@ export class HcPage extends LitElement {
     const el = document.createElement(tag) as HTMLElement & {
       config?: Record<string, unknown>;
       device?: unknown;
+      onCommand?: (r: CommandRequest) => void;
     };
     el.config = w.config ?? {};
     const deviceId = w.config?.['device_id'];
     if (typeof deviceId === 'string') el.device = this.store?.get(deviceId);
+    if (this.onCommand !== undefined) el.onCommand = this.onCommand;
     el.style.height = '100%';
     return el;
   }

@@ -117,8 +117,12 @@ describe('DeviceStore', () => {
     store.reset([device('a')]);
 
     const second = vi.fn();
-    let off: (() => void) | undefined;
-    off = store.subscribe(['a'], () => off?.());
+    // Through a holder, because `subscribe` calls back *immediately* with the
+    // current snapshot — so a listener that unsubscribes itself runs before its
+    // own binding exists. That immediacy is the documented behaviour and the
+    // reason a quiet device still renders on connect.
+    const self: { off?: () => void } = {};
+    self.off = store.subscribe(['a'], () => self.off?.());
     store.subscribe(['a'], second);
     second.mockClear();
 

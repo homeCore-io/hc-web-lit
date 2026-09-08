@@ -14,8 +14,11 @@
  */
 import { LitElement, css, html, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
+import { controlsFor } from '../core/controls.js';
 import type { DeviceState } from '../core/device.js';
 import { effectiveName, isOn, levelOf } from '../core/present.js';
+import type { CommandRequest } from './hc-controls.js';
+import './hc-controls.js';
 import { registerWidget } from './registry.js';
 
 @customElement('hc-device-card')
@@ -26,8 +29,8 @@ export class HcDeviceCard extends LitElement {
       container-type: inline-size;
     }
     .card {
-      display: flex;
-      align-items: center;
+      display: grid;
+      align-content: start;
       gap: 0.75rem;
       height: 100%;
       box-sizing: border-box;
@@ -36,6 +39,12 @@ export class HcDeviceCard extends LitElement {
       background: var(--hc-surface-raised, #141922);
       color: var(--hc-ink, #e9edf2);
       font-family: var(--hc-font-body, system-ui, sans-serif);
+    }
+    .head {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      min-width: 0;
     }
     .dot {
       flex: none;
@@ -69,6 +78,8 @@ export class HcDeviceCard extends LitElement {
   `;
 
   @property({ attribute: false }) device: DeviceState | undefined;
+  /** The host's command sink. Absent means the card is read-only. */
+  @property({ attribute: false }) onCommand: ((r: CommandRequest) => void) | undefined;
 
   override render() {
     const d = this.device;
@@ -77,13 +88,31 @@ export class HcDeviceCard extends LitElement {
     const on = isOn(d);
     const level = levelOf(d);
 
+    // Generated from what the plugin declared, not from what this widget
+    // assumes a device type can do (§5.11). Empty for the 77 devices in a real
+    // house whose plugins publish no schema, which is ordinary rather than an
+    // error.
+    const controls = controlsFor(d);
+
     return html`
       <div class="card ${d.available ? '' : 'offline'}" part="card">
-        <span class="dot" part="indicator" ?data-on=${on}></span>
-        <div class="body">
-          <div class="name" part="name">${effectiveName(d)}</div>
-          <div class="sub" part="state">${this.subtitle(d, on, level)}</div>
+        <div class="head">
+          <span class="dot" part="indicator" ?data-on=${on}></span>
+          <div class="body">
+            <div class="name" part="name">${effectiveName(d)}</div>
+            <div class="sub" part="state">${this.subtitle(d, on, level)}</div>
+          </div>
         </div>
+        ${
+          controls.length > 0
+            ? html`<hc-controls
+                part="controls"
+                .device=${d}
+                .controls=${controls}
+                .onCommand=${this.onCommand}
+              ></hc-controls>`
+            : nothing
+        }
       </div>
     `;
   }

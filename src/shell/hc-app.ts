@@ -15,7 +15,9 @@ import { builtInSeeds, defaultSkin } from '../design/seeds.js';
 import { deriveTokens } from '../design/tokens.js';
 import type { DashboardBreakpoint, DashboardDefinition } from '../core/dashboard.js';
 import { EventStream } from '../core/events.js';
+import { check, checkAction } from '../core/safety.js';
 import { DeviceStore } from '../core/store.js';
+import type { CommandRequest } from '../widgets/hc-controls.js';
 import './hc-page.js';
 import '../widgets/hc-text.js';
 import '../widgets/hc-device-card.js';
@@ -99,6 +101,38 @@ export class HcApp extends LitElement {
   private readonly store = new DeviceStore();
   private api: HcApi | undefined;
   private stream: EventStream | undefined;
+
+  /**
+   * Every command a widget asks for passes through here.
+   *
+   * The host dispatches, so the host is where the safety policy is a rule
+   * rather than a convention (§5.10, §11.3) — a widget cannot opt out of a
+   * confirmation by mishandling its own events, because it never had the
+   * chance to send anything itself.
+   */
+  private readonly command = (r: CommandRequest): void => {
+    const api = this.api;
+    const device = this.store.get(r.deviceId);
+    if (api === undefined || device === undefined) return;
+
+    const verdict =
+      r.action !== undefined ? checkAction(device, r.action.id) : check(device, r.patch ?? {});
+
+    if ('allow' in verdict && !verdict.allow) return;
+    if ('confirm' in verdict && !globalThis.confirm(verdict.confirm)) return;
+
+    // Accepted, not applied: core answers 202 and the real state arrives on the
+    // stream. A failure here is worth saying out loud rather than swallowing —
+    // a control that silently does nothing is the worst kind.
+    const sent =
+      r.action !== undefined
+        ? api.callAction(r.deviceId, r.action.id, r.action.params)
+        : api.commandDevice(r.deviceId, r.patch ?? {});
+
+    void sent.catch((e: unknown) => {
+      this.message = e instanceof HcApiError ? e.message : String(e);
+    });
+  };
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -217,11 +251,15 @@ export class HcApp extends LitElement {
     if (this.phase === 'connecting') return html`<div class="note">Connecting…</div>`;
     if (this.phase === 'failed') return html`<div class="note error">${this.message}</div>`;
 
-    return html`<hc-page
-      .doc=${this.current}
-      .store=${this.store}
-      breakpoint=${this.breakpoint}
-    ></hc-page>`;
+    return html`
+      ${this.message !== '' ? html`<div class="note error">${this.message}</div>` : nothing}
+      <hc-page
+        .doc=${this.current}
+        .store=${this.store}
+        .onCommand=${this.command}
+        breakpoint=${this.breakpoint}
+      ></hc-page>
+    `;
   }
 }
 

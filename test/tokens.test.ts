@@ -3,7 +3,6 @@ import { builtInSeeds } from '../src/design/seeds.js';
 import { cssVariables } from '../src/design/css.js';
 import {
   deriveDensity,
-  deriveElevation,
   deriveMetrics,
   deriveMotion,
   deriveTokens,
