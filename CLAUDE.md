@@ -109,7 +109,9 @@ A client-side table mapping type names to behaviours would be closed against the
 next plugin, different in every client, and would produce a plausible wrong
 answer instead of a visible gap. Where the schema cannot answer, the answer is
 **unknown** and the card shows nothing — which is how homeCore#28's 77
-schema-less devices stay visible instead of being papered over.
+schema-less devices stayed visible instead of being papered over until the
+plugins declared them. All 184 do now, and the rule is what kept the count
+honest while they did not.
 
 **And on-ness has three answers, not two.** A lamp is on or off; a temperature
 sensor is neither, and neither is a Pico remote, a keypad, a bridge, or a scene
@@ -933,16 +935,22 @@ renders, and they are not the same artifact.
 - **`sentence`** — *"press button {button} on {device}"* — is a natural-language
   template for the same action, which is how hc-mcp drives a device nobody
   taught it about. Another reason to keep this surface declarative.
-- **Absence is normal.** `lutron_28` returns `{"error":"schema not found"}` and
-  is a perfectly good fan. Attributes displayed, no controls offered, no error
-  shown.
-- **Two things the schema still cannot say**, both filed (homeCore#29). Nothing
-  nominates the *primary* reading — `category` exists to demote battery and
-  firmware and is set on **zero devices by every plugin**, so a lock declares
-  its battery exactly as primary as whether it is locked. And demotion only says
-  what is not the point; a weather station's three equally-primary readings need
-  something that says which one a card leads with. Until then this client
-  carries a list of boring attribute names, marked as the stopgap it is.
+- **Absence is normal, and stays designed for.** Every device in the reference
+  house publishes a schema today, but a plugin that has not restarted since a
+  release publishes none, and the answer is the same as it always was:
+  attributes displayed, no controls offered, no error shown. An *empty*
+  attribute set is a different thing and a deliberate one — a pulsed CCO says
+  `{attributes: {}, actions: [activate]}` because the Integration Guide forbids
+  querying a momentary output.
+- **The two things the schema could not say, it says now** (homeCore#29,
+  closed). `DeviceSchema.primary` is an ordered list of the readings a device is
+  *for*, so a lock leads with `locked` rather than with its battery; 170 of 184
+  devices declare it, the exceptions being activate-only scenes with no readings
+  to rank. `category` is set on 296 attributes, against zero when this was
+  written. The measurable effect: this client's fallback list of boring
+  attribute names — the stopgap this paragraph used to describe — now changes
+  **zero** headlines, and survives only as a floor under the attributes a card
+  *lists* (§5.11 in `SCHEMA_CONTRACT_2026-09.md`).
 
 *Obviates:* per-widget knowledge of what each device type can do — which is the
 thing that makes a widget family expensive to extend, and the reason §7.3 is as
@@ -1186,16 +1194,18 @@ client has to handle both:
 
 - **Stateful.** Lutron marks some scenes on, so a client can tell when they are
   off and show which is currently applied. Hue publishes `active` for the same
-  purpose. Ask `isOn`.
-- **Momentary.** No feedback at all — 45 of the 58 scenes in the reference
-  house. Offer to activate it and show **no state**, because there is none.
-  Drawing these as "Off" is the failure mode: it says a thing about the house
-  that nobody knows.
+  purpose. 45 of the 58 scenes in the reference house declare one of the two,
+  and every one of them publishes what it declared. Ask `isOn`.
+- **Momentary.** No feedback at all — the other 13. Offer to activate it and
+  show **no state**, because there is none. Drawing these as "Off" is the
+  failure mode: it says a thing about the house that nobody knows.
 
-The distinction is `present.sceneKind()`, and it is derived from what the device
-publishes rather than declared — which is a stopgap. The plugins should say so
-in their schemas (`activate` as a `DeviceAction`, `active` with `states` where
-it exists); until they do, this reads the shape.
+The distinction is `present.sceneKind()`, and it is **declared** now rather than
+inferred: all 58 scenes declare `activate` as a `DeviceAction`, and the presence
+or absence of `on`/`active` in the schema is the answer (homeCore#28). Six carry
+`led_component` as the explanation, so a card can say *why* a scene has no
+status instead of leaving a reader to guess. Reading the published shape stays
+only as a fallback for an older core.
 
 **Buttons are a worked example of why P10 matters.** `available_buttons` arrives
 in two shapes from two plugins — Caséta sends `[2, 3, 4, 5, 6]`, Lutron sends

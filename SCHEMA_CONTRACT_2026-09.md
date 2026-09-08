@@ -1,6 +1,8 @@
 # Device schema — what core added in September 2026, and what this client owes it
 
-**Status:** core side shipped and released; this client has done none of it.
+**Status:** taken. Core side shipped and released; this client reads all four
+surfaces, and the two gaps this closed — homeCore#28 and homeCore#29 — are
+closed with the measurements in §"What it actually changed" at the end.
 **Written:** 2026-09-08, from the session that made the core changes.
 
 Everything here is _optional on the wire_, so nothing in this repo is broken
@@ -201,3 +203,42 @@ against `docs/openapi.yaml`, and nothing catches drift — every field above
 reached this repo by a person writing it down, including this file. A
 `device-schema-fixtures.json` on the same pattern would make the next change
 announce itself.
+
+---
+
+## What it actually changed, measured
+
+Run against the reference house after the release, and the reason #28 and #29
+are closed rather than assumed.
+
+|                                                | before     | after                                             |
+| ---------------------------------------------- | ---------- | ------------------------------------------------- |
+| devices publishing a schema                    | 107 of 184 | **184 of 184**                                    |
+| devices declaring `primary`                    | 0          | **170** (the 14 without are activate-only scenes) |
+| attributes carrying a `category`               | 0          | **296**                                           |
+| booleans naming their own two sides (`states`) | 0          | **122**                                           |
+| scenes declaring `activate`                    | —          | **58 of 58**                                      |
+| scenes declaring `on`/`active`                 | —          | **45**, all of which publish it                   |
+| scenes declaring no state (momentary)          | —          | **13**                                            |
+
+**The test that mattered for #29** was not the count but the effect. This
+client carried a hardcoded list of boring attribute names to demote —
+`UNDECLARED_HOUSEKEEPING` — which is a client holding an opinion about another
+repo's semantics. Simulating `readingOf` over all 184 devices with and without
+that list now changes **zero** headlines: `primary` names the right attribute
+every time. The list survives only as a floor under the attributes a card
+_lists_, where the Hue-compaction case §3 predicted is exactly what still shows
+up: `kind` ×50, `bridge_id` ×48, `resource_id` ×47, `name` ×40, `area` and the
+`group_*` trio ×39, all on lights that swallowed a facet.
+
+**`options` is the one item with nothing to see.** All 67 options in the house
+serialise as bare strings, because no plugin declares a label yet — which is the
+byte-identical round-trip guarantee holding exactly as §1 said it would. The
+client normalises at the API boundary regardless, so the first plugin to declare
+one needs no client change.
+
+**One thing this surfaced, filed as homeCore#34.** 69 booleans are `supports_*`
+/ `is_*` capability advertisements carrying no category, so they read as
+ordinary state in a detail list. `primary` keeps them off the headline, so
+nothing is visibly broken; it is the same class of problem as this document's
+§3 and wants the same fix — a prefix rule in `for_name`.

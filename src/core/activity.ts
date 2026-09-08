@@ -12,6 +12,7 @@
  * `temperature_valid`, `temperature_unit`). A feed that prints all of it is a
  * feed nobody reads, so this decides what counts as news, and says how.
  */
+import type { AttributeSchema } from './api.js';
 import type { DeviceState } from './device.js';
 import { isHousekeeping } from './facet.js';
 import { effectiveArea, effectiveName, normalizeAreaName } from './present.js';
@@ -93,9 +94,9 @@ function stem(key: string): string {
   return key.replace(/_(f|c|k|lux|raw|pct|valid|unit|state|kind)$/, '');
 }
 
-function isNews(key: string): boolean {
+function isNews(key: string, declared?: AttributeSchema): boolean {
   if (NOT_NEWS.has(key)) return false;
-  if (isHousekeeping(key)) return false;
+  if (isHousekeeping(key, declared)) return false;
   // A dotted name is a nested subsystem reporting on itself — `wifi.rssi`,
   // `led.count`, `peers.count`. A person cares that the strip changed colour,
   // not that its Wi-Fi channel is still 6.
@@ -106,11 +107,22 @@ function isNews(key: string): boolean {
   return !/_(valid|unit|raw|kind|state|secs|ms)$/.test(key);
 }
 
-/** The attributes worth naming in one state change, deduplicated by stem. */
-export function newsIn(changed: readonly string[]): string[] {
+/**
+ * The attributes worth naming in one state change, deduplicated by stem.
+ *
+ * `declared` is the device's own schema, and it is what does the work now that
+ * plugins set `AttributeCategory` (homeCore#29): 296 attributes in the
+ * reference house carry one, so a battery or an RSSI is kept out of the feed
+ * because the plugin said what it was, not because this client recognised its
+ * name. The name lists below are the floor for what nothing declares.
+ */
+export function newsIn(
+  changed: readonly string[],
+  declared?: Record<string, AttributeSchema>,
+): string[] {
   const stems = new Map<string, string>();
   for (const key of changed) {
-    if (!isNews(key)) continue;
+    if (!isNews(key, declared?.[key])) continue;
     const s = stem(key);
     // Prefer the bare stem when it is present; it is the canonical spelling.
     if (!stems.has(s) || key === s) stems.set(s, key);
@@ -195,7 +207,7 @@ export function activityFrom(
     let keys: string[] = [];
     if (entry.event_type === 'device_state_changed') {
       const changed = (entry.event?.['changed'] ?? []) as string[];
-      keys = newsIn(Array.isArray(changed) ? changed : []);
+      keys = newsIn(Array.isArray(changed) ? changed : [], device?.schema?.attributes ?? undefined);
       if (keys.length === 0) continue;
     }
 

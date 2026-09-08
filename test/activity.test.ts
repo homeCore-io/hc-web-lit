@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { activityFrom, newsIn, type LogEntry } from '../src/core/activity.js';
+import type { AttributeSchema } from '../src/core/api.js';
 import type { DeviceState } from '../src/core/device.js';
 
 const device = (id: string, over: Partial<DeviceState> = {}): DeviceState => ({
@@ -201,5 +202,45 @@ describe('a device reporting a lot at once', () => {
     expect(newsIn(['uptime_secs', 'free_heap', 'arch', 'ip', 'mac'])).toEqual([]);
     // A clock that ticks is not an event either.
     expect(newsIn(['datetime', 'device_time'])).toEqual([]);
+  });
+});
+
+describe('a declared category reaches the feed', () => {
+  it('drops an attribute the plugin called diagnostic, whatever it is named', () => {
+    // The point of homeCore#29: `signal_quality` is in no list this client
+    // keeps, and it stays out of the feed because the plugin said what it was.
+    const declared = { signal_quality: { kind: 'integer', category: 'diagnostic' } };
+    expect(newsIn(['signal_quality', 'on'], declared as Record<string, AttributeSchema>)).toEqual([
+      'on',
+    ]);
+  });
+
+  it('still reports a reading the plugin declared as one', () => {
+    const declared = { temperature: { kind: 'float' } };
+    expect(newsIn(['temperature'], declared as Record<string, AttributeSchema>)).toEqual([
+      'temperature',
+    ]);
+  });
+
+  it('falls back to the name list when nothing is declared', () => {
+    expect(newsIn(['battery', 'on'])).toEqual(['on']);
+  });
+
+  it('carries the declaration from the device into the feed', () => {
+    const entries = [
+      {
+        id: 1,
+        timestamp: new Date().toISOString(),
+        event_type: 'device_state_changed',
+        device_id: 'hue_1',
+        event: { changed: ['signal_quality'], current: { signal_quality: 3 } },
+      },
+    ] as unknown as LogEntry[];
+    const d = device('hue_1', {
+      schema: { attributes: { signal_quality: { kind: 'integer', category: 'diagnostic' } } },
+    });
+    // Its only change was diagnostic, so the entry is dropped rather than
+    // printed as "changed" with nothing to say.
+    expect(activityFrom({}, entries, [d])).toEqual([]);
   });
 });

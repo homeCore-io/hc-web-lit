@@ -102,24 +102,27 @@ const BOOLEAN_WORDS: Record<string, [string, string]> = {
 /**
  * Attribute keys to demote **where nothing declares them yet**.
  *
- * `AttributeCategory` is set by plugins now — core's `for_name` lexicon covers
- * battery in all its spellings, rssi, lqi, signal_strength, firmware,
- * sw_version, uptime, ip, mac, model, manufacturer, serial, name, area,
- * location, kind, bridge_id, resource_id, node_id and any `*_unit` sibling, and
- * hc-zwave, hc-ecowitt, hc-yolink and hc-isy call it. 117 attributes in the
- * reference house carry a category where none did.
+ * `AttributeCategory` is set by plugins now — 296 attributes in the reference
+ * house carry one, against zero when homeCore#29 was filed — and the effect on
+ * this list is worth stating precisely, because it is the difference between a
+ * stopgap and a policy.
  *
- * So this is a fallback rather than a policy, and it stays for two cases that
- * will not clear up on their own (`SCHEMA_CONTRACT_2026-09.md` §3):
+ * **It no longer decides a single headline.** Simulating `readingOf` across all
+ * 184 devices with and without this list changes nothing: `primary` names the
+ * right attribute every time, so the lock leads with `locked` rather than with
+ * its battery because the plugin said so, not because this client recognised
+ * the word "battery". That is the whole point of homeCore#29 and it is closed.
  *
- * - a plugin that has not restarted since the upgrade is still silent, because
- *   schemas are retained MQTT topics published at registration;
- * - a Hue facet compacted onto a light leaves that light's extra attributes
- *   undeclared, since only aux devices published in their own right got
- *   schemas.
+ * What is left is the second job — filtering the attributes a card *lists* —
+ * and there the undeclared names are still real, all from one cause the
+ * September contract predicted: a Hue facet compacted onto a light leaves that
+ * light's glue undeclared, because only aux devices published in their own
+ * right got schemas. `bridge_id` ×48, `kind` ×50, `resource_id` ×47, `name`
+ * ×40, `area` and the `group_*` trio ×39.
  *
- * Trimmed to what those two cases actually produce. The `_unit` and
- * `customserver.` rules stay because they are shape rules rather than names.
+ * So: a floor under a detail list, not an opinion about what a device is for.
+ * The `_unit` and `customserver.` rules stay because they are shape rules
+ * rather than names.
  */
 const UNDECLARED_HOUSEKEEPING = new Set([
   'battery',
