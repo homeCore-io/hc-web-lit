@@ -128,7 +128,7 @@ export class HcMedia extends LitElement {
             part="action"
             title=${b.id.replace(/_/g, ' ')}
             @click=${() =>
-            this.onCommand?.({ deviceId: d.device_id, action: { id: b.id, params: {} } })}
+              this.onCommand?.({ deviceId: d.device_id, action: { id: b.id, params: {} } })}
           >
             ${b.label}
           </button>`,
