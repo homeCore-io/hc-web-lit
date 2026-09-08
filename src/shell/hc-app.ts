@@ -28,6 +28,7 @@ import '../widgets/hc-mode-chips.js';
 import '../widgets/hc-scene-row.js';
 import '../widgets/hc-shape.js';
 import '../widgets/hc-text.js';
+import '../widgets/hc-worth-knowing.js';
 import '../widgets/hc-device-card.js';
 
 type Phase = 'idle' | 'connecting' | 'ready' | 'failed';
