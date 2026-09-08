@@ -3,6 +3,7 @@ import { HcApi } from '../src/core/api.js';
 import { controlsFor } from '../src/core/controls.js';
 import type { DeviceState } from '../src/core/device.js';
 import '../src/widgets/hc-controls.js';
+import '../src/widgets/hc-device-card.js';
 import type { HcControls } from '../src/widgets/hc-controls.js';
 
 const light = (attrs: Record<string, unknown>): DeviceState => ({
@@ -163,5 +164,63 @@ describe('the action wire format', () => {
 
     await api.callAction('lutron_52', 'press_button', { button: 3 });
     expect(body).toEqual({ action: 'press_button', button: 3 });
+  });
+});
+
+describe('a list row that can act', () => {
+  const mountRow = async (device: DeviceState, onCommand?: (r: unknown) => void) => {
+    const el = document.createElement('hc-device-card');
+    el.device = device;
+    el.compact = true;
+    if (onCommand !== undefined) el.onCommand = onCommand as HcControls['onCommand'];
+    document.body.append(el);
+    await el.updateComplete;
+    return el;
+  };
+
+  const sensor = (): DeviceState => ({
+    device_id: 'ecowitt_1',
+    name: 'Temp Sensor',
+    plugin_id: 'ecowitt',
+    available: true,
+    attributes: { temperature: 21.5 },
+    last_seen: '2026-09-08T00:00:00Z',
+    schema: { attributes: { temperature: { kind: 'float', unit: 'C' } }, primary: ['temperature'] },
+  });
+
+  it('offers a switch where the device declared one', async () => {
+    // The working client puts a toggle in the row, and a list of switches you
+    // cannot switch is a list of labels.
+    const sent = vi.fn();
+    const el = await mountRow(light({ on: false }), sent);
+    const sw = el.shadowRoot?.querySelector('.switch') as HTMLButtonElement;
+    expect(sw).toBeTruthy();
+
+    sw.click();
+    expect(sent).toHaveBeenCalledWith({ deviceId: 'hue_1', patch: { on: true } });
+  });
+
+  it('offers none to a device that has no power state', async () => {
+    // A thermometer cannot be turned off, so there is nothing to draw (§1.1).
+    const el = await mountRow(sensor(), vi.fn());
+    expect(el.shadowRoot?.querySelector('.switch')).toBeNull();
+    expect(el.shadowRoot?.textContent).toContain('21.5');
+  });
+
+  it('holds the moved switch until the house confirms', async () => {
+    const el = await mountRow(light({ on: false }), vi.fn());
+    (el.shadowRoot?.querySelector('.switch') as HTMLButtonElement).click();
+    await el.updateComplete;
+    expect(el.shadowRoot?.querySelector('.switch')?.getAttribute('aria-pressed')).toBe('true');
+
+    // The house says otherwise; whatever arrives wins.
+    el.device = light({ on: false });
+    await el.updateComplete;
+    expect(el.shadowRoot?.querySelector('.switch')?.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('is inert with no host to send to, and looks it', async () => {
+    const el = await mountRow(light({ on: false }));
+    expect((el.shadowRoot?.querySelector('.switch') as HTMLButtonElement).disabled).toBe(true);
   });
 });

@@ -13,7 +13,7 @@
  * wrong the same way.
  */
 import { LitElement, css, html, nothing } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
+import { customElement, property, state } from 'lit/decorators.js';
 import { controlsFor } from '../core/controls.js';
 import type { DeviceState } from '../core/device.js';
 import { formatReading, hasPowerState, readingOf } from '../core/facet.js';
@@ -145,6 +145,50 @@ export class HcDeviceCard extends LitElement {
     :host([compact]) .sub {
       display: none;
     }
+    /* The row's own control, for the reason the working client has one: a
+       list of switches you cannot switch is a list of labels. Only the primary
+       one — a light's power, not its colour — because a row is a row and the
+       rest of the schema belongs in the sheet behind a hold (§7.2). */
+    .switch {
+      flex: none;
+      position: relative;
+      width: 2.75rem;
+      height: 1.6rem;
+      margin-left: 0.75rem;
+      padding: 0;
+      border: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
+      border-radius: var(--hc-radius-pill, 999px);
+      background: var(--hc-surface-sunken, #0d1116);
+      cursor: pointer;
+      transition: background var(--hc-motion-fast, 140ms) var(--hc-motion-curve, ease-out);
+    }
+    .switch[aria-pressed='true'] {
+      background: var(--hc-accent-active, #ffb661);
+      border-color: transparent;
+    }
+    .switch:disabled {
+      cursor: default;
+      opacity: 0.5;
+    }
+    .switch:focus-visible {
+      outline: 2px solid var(--hc-stroke-focus, #7cc4ff);
+      outline-offset: 2px;
+    }
+    .thumb {
+      position: absolute;
+      top: 50%;
+      left: 0.18rem;
+      width: 1.15rem;
+      height: 1.15rem;
+      border-radius: 50%;
+      background: var(--hc-ink-muted, #8b95a4);
+      transform: translate(0, -50%);
+      transition: transform var(--hc-motion-fast, 140ms) var(--hc-motion-curve, ease-out);
+    }
+    .switch[aria-pressed='true'] .thumb {
+      background: var(--hc-accent-on-primary, #06131f);
+      transform: translate(1.05rem, -50%);
+    }
     .trail {
       flex: none;
       font-size: var(--hc-text-body-small-size, 12.5px);
@@ -183,6 +227,20 @@ export class HcDeviceCard extends LitElement {
   /** The room this card is shown in, if the page is scoped to one. */
   @property({ attribute: false }) room: string | undefined;
 
+  /**
+   * The switch the user moved, until the house confirms it.
+   *
+   * A command is accepted, not applied — the real value arrives on the stream.
+   * Without this the switch snaps back under the finger for a round trip,
+   * which reads as the control being broken.
+   */
+  @state() private pending: boolean | undefined;
+
+  override willUpdate(changed: Map<string, unknown>): void {
+    // Whatever the house says wins the moment it says it.
+    if (changed.has('device')) this.pending = undefined;
+  }
+
   override render() {
     const d = this.device;
     if (d === undefined) return html`<div class="card"><span class="sub">No device</span></div>`;
@@ -210,7 +268,8 @@ export class HcDeviceCard extends LitElement {
             <div class="name" part="name">${withoutRoom(effectiveName(d), this.room)}</div>
             <div class="sub" part="state">${this.subtitle(d, on, level)}</div>
           </div>
-          <span class="trail" part="trailing">${this.subtitle(d, on, level)}</span>
+          <span class="trail" part="trailing">${this.trailing(d, on, level)}</span>
+          ${this.toggle(d, on)}
         </div>
         ${
           !this.compact && controls.length > 0
@@ -224,6 +283,51 @@ export class HcDeviceCard extends LitElement {
         }
       </div>
     `;
+  }
+
+  /**
+   * The row's own switch, where the device has one to offer.
+   *
+   * Derived, like everything else: a writable `on` in the schema is a device
+   * whose power is a state you set, and nothing here knows what a light is. A
+   * sensor gets none, because it has no power state to command (§1.1), and a
+   * device whose plugin published no schema gets none either — which is
+   * ordinary rather than an error.
+   */
+  private toggle(d: DeviceState, on: boolean | undefined) {
+    if (!this.compact) return nothing;
+    const power = controlsFor(d).find((c) => c.form === 'toggle' && c.key === 'on');
+    if (power === undefined) return nothing;
+
+    const next = !(this.pending ?? on ?? false);
+    return html`<button
+      class="switch"
+      part="toggle"
+      role="switch"
+      aria-pressed=${String(this.pending ?? on ?? false)}
+      aria-label=${`${effectiveName(d)} power`}
+      ?disabled=${this.onCommand === undefined}
+      @click=${(e: Event) => {
+        // The row is held to inspect and tapped to pick; the switch is its own
+        // target and must not do either as well.
+        e.stopPropagation();
+        this.pending = next;
+        this.onCommand?.({ deviceId: d.device_id, patch: { on: next } });
+      }}
+    >
+      <span class="thumb"></span>
+    </button>`;
+  }
+
+  /** What sits at the end of a row: the level, or the state in words. */
+  private trailing(d: DeviceState, on: boolean | undefined, level: number | undefined) {
+    // With a switch beside it, "Off" is the switch saying it twice. A dimmer's
+    // level is worth the space; anything else says what it is doing.
+    const hasSwitch =
+      this.compact && controlsFor(d).some((c) => c.form === 'toggle' && c.key === 'on');
+    if (!hasSwitch) return this.subtitle(d, on, level);
+    if (!d.available) return 'Offline';
+    return on === true && level !== undefined ? `${Math.round(level)}%` : nothing;
   }
 
   /**
