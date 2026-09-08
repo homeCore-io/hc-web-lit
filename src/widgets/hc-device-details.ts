@@ -151,6 +151,9 @@ export class HcDeviceDetails extends LitElement {
       color: var(--hc-ink-muted, #8b95a4);
       font-size: var(--hc-text-caption-size, 11px);
     }
+    [hidden] {
+      display: none !important;
+    }
   `;
 
   @property({ attribute: false }) device: DeviceState | undefined;
@@ -161,10 +164,16 @@ export class HcDeviceDetails extends LitElement {
   /** Which attribute the chart is showing. The lead reading, until asked. */
   @state() private charted: string | undefined;
 
+  /** Whether the chart found anything. A section captioning nothing is noise. */
+  @state() private noHistory = false;
+
   override willUpdate(changed: Map<string, unknown>): void {
     // A different device is a different set of attributes; keeping the old
     // selection would chart a name this device does not have.
-    if (changed.has('device')) this.charted = undefined;
+    if (changed.has('device')) {
+      this.charted = undefined;
+      this.noHistory = false;
+    }
   }
 
   override render() {
@@ -228,12 +237,15 @@ export class HcDeviceDetails extends LitElement {
       ${
         charted === undefined || this.onFetch === undefined
           ? nothing
-          : html`<section>
+          : html`<section ?hidden=${this.noHistory}>
               <h3>History</h3>
               <div class="chart">
                 <hc-history-chart
                   .config=${{ device_id: d.device_id, attribute: charted, timeframe_hours: 24 }}
                   .onFetch=${this.onFetch}
+                  @hc-history-drawn=${(e: CustomEvent<{ empty: boolean }>) => {
+                    this.noHistory = e.detail.empty;
+                  }}
                 ></hc-history-chart>
               </div>
             </section>`

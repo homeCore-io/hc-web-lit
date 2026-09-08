@@ -70,6 +70,22 @@ const MARKS: Record<string, string> = {
     '<rect x="2.5" y="8" width="17" height="8" rx="2.5"/><path d="M21.5 11v2"/>' +
     '<path d="M5.5 10.5v3"/>',
   device: '<rect x="4" y="4" width="16" height="16" rx="4.5"/><circle cx="12" cy="12" r="2.5"/>',
+
+  // Controls rather than kinds of device. Same grid, same stroke, so a
+  // transport row sits in the same family as the tiles beside it — and so the
+  // volume glyphs stop being emoji, which render at whatever size and colour
+  // the platform's font decides and match nothing else on the page.
+  play: '<path d="M8 5.5 18.5 12 8 18.5Z"/>',
+  pause: '<path d="M9.5 5v14M14.5 5v14"/>',
+  play_pause: '<path d="M4 5.5 12 12l-8 6.5Z"/><path d="M16.5 5.5v13M21 5.5v13"/>',
+  stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>',
+  prev: '<path d="M17.5 5.5 8 12l9.5 6.5Z"/><path d="M5.5 5.5v13"/>',
+  next: '<path d="M6.5 5.5 16 12l-9.5 6.5Z"/><path d="M18.5 5.5v13"/>',
+  volume_up:
+    '<path d="M4 9.5h3.5L12 5.5v13L7.5 14.5H4Z"/><path d="M16 9.5a4 4 0 0 1 0 5"/>' +
+    '<path d="M18.5 7a7.5 7.5 0 0 1 0 10"/>',
+  volume_down: '<path d="M4 9.5h3.5L12 5.5v13L7.5 14.5H4Z"/><path d="M16 9.5a4 4 0 0 1 0 5"/>',
+  mute: '<path d="M4 9.5h3.5L12 5.5v13L7.5 14.5H4Z"/><path d="m16 9.5 5 5M21 9.5l-5 5"/>',
 };
 
 /** Declared word → mark. Presentation only; nothing behavioural reads this. */

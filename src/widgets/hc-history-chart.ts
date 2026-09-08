@@ -202,16 +202,38 @@ export class HcHistoryChart extends LitElement {
       if (found === undefined) {
         this.note = `No ${words(attribute)} recorded in the last ${hours}h.`;
         this.series = undefined;
+        this.announce(true);
         return;
       }
       this.note = '';
       this.series = { ...found, points: downsample(found.points, 240) };
+      this.announce(false);
     } catch {
       this.note = 'History unavailable.';
       this.series = undefined;
       // Let a later render try again rather than sticking on the failure.
       this.fetched = '';
+      this.announce(true);
     }
+  }
+
+  /**
+   * Whether there was anything to draw.
+   *
+   * A placement gives this a box and the box stays whichever way the fetch
+   * goes, which is right on a dashboard — a chart that resized the page every
+   * time a sensor went quiet would be worse. A container that *composed* this
+   * one, though, wants to drop the whole section rather than caption 140px of
+   * nothing, so this says which happened and lets the caller decide.
+   *
+   * More often than it should, for now: `GET /devices/{id}/history` returns
+   * every attribute interleaved with no filter, so a thousand rows over 24h can
+   * run out before reaching the one asked for (homeCore#31).
+   */
+  private announce(empty: boolean): void {
+    this.dispatchEvent(
+      new CustomEvent('hc-history-drawn', { detail: { empty }, bubbles: true, composed: true }),
+    );
   }
 
   override render() {

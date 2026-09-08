@@ -18,6 +18,8 @@ import { optionLabel } from '../core/api.js';
 import type { Control } from '../core/controls.js';
 import { optionsForParam } from '../core/controls.js';
 import type { DeviceState } from '../core/device.js';
+import './hc-slider.js';
+import './hc-colour-wheel.js';
 
 /** What the host is asked to do. Data, so it can be logged, queued or refused. */
 export interface CommandRequest {
@@ -65,10 +67,17 @@ export class HcControls extends LitElement {
       cursor: pointer;
       transition: background var(--hc-motion-fast, 140ms) var(--hc-motion-curve, ease-out);
     }
+    /* A wash and a lit border, for the reason a scene chip gets one: an
+       attribute that is on is a state the house is in, and a slab of accent
+       reads as the primary button on the page — a louder claim than the one
+       being made. */
     button[aria-pressed='true'] {
-      background: var(--hc-accent-active, #ffb661);
-      color: var(--hc-accent-on-primary, #06131f);
-      border-color: transparent;
+      background: color-mix(in srgb, var(--hc-accent-active, #ffb661) 18%, transparent);
+      border-color: color-mix(in srgb, var(--hc-accent-active, #ffb661) 55%, transparent);
+      color: var(--hc-ink, #e9edf2);
+    }
+    button:hover:not(:disabled) {
+      border-color: color-mix(in srgb, var(--hc-accent-active, #ffb661) 40%, transparent);
     }
     button:focus-visible {
       outline: 2px solid var(--hc-stroke-focus, #7cc4ff);
@@ -95,10 +104,14 @@ export class HcControls extends LitElement {
       min-width: 3.5rem;
       text-align: right;
     }
-    .slider {
-      display: flex;
-      align-items: center;
+    /* A drawn control brings its own label and value, so it takes the row. */
+    .control.wide {
+      display: grid;
+      grid-template-columns: 1fr;
       gap: 0.5rem;
+    }
+    hc-colour-wheel {
+      max-width: 12rem;
     }
     .actions {
       display: flex;
@@ -174,28 +187,32 @@ export class HcControls extends LitElement {
       }
 
       case 'slider':
-      case 'colorTemp': {
-        const raw = this.current(c.key, c.value);
-        const value = typeof raw === 'number' ? raw : c.min;
-        const step = c.form === 'slider' ? c.step : 50;
-        return html`<div class="control">
-          <label>${c.label}</label>
-          <div class="slider">
-            <input
-              part="slider"
-              type="range"
-              min=${c.min}
-              max=${c.max}
-              step=${step}
-              .value=${String(value)}
-              ?disabled=${readOnly}
-              @change=${(e: Event) =>
-                this.write(c.key, Number((e.target as HTMLInputElement).value))}
-            />
-            <span class="value">${Math.round(value)}${c.unit ?? ''}</span>
-          </div>
+      case 'colorTemp':
+        // The drawn track, not a range input. `hc-slider` already carries the
+        // label, the live value, the held-until-confirmed behaviour and the
+        // cool fill a colour temperature wants — and it is what the room page
+        // shows two inches away, so a generated control that looked different
+        // would be the same control drawn two ways.
+        return html`<div class="control wide">
+          <hc-slider
+            part="slider"
+            .config=${{ attribute: c.key, label: c.label, min: c.min, max: c.max }}
+            .device=${this.device}
+            .onCommand=${readOnly ? undefined : this.onCommand}
+          ></hc-slider>
         </div>`;
-      }
+
+      case 'color':
+        // Declared, and now drawn: the wheel the SETS panel uses.
+        return html`<div class="control wide">
+          <label>${c.label}</label>
+          <hc-colour-wheel
+            part="colour"
+            .config=${{ attribute: c.key }}
+            .device=${this.device}
+            .onCommand=${readOnly ? undefined : this.onCommand}
+          ></hc-colour-wheel>
+        </div>`;
 
       case 'select':
         return html`<div class="control">
@@ -260,7 +277,6 @@ export class HcControls extends LitElement {
         </div>`;
       }
 
-      case 'color':
       case 'text':
         // Declared, but no control here yet. Saying so is better than a broken
         // one, and better than silence — the device does offer it.

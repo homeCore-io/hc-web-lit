@@ -68,14 +68,23 @@ describe('the write path', () => {
   });
 
   it('sends a slider change as an attribute write', async () => {
+    // The generated row draws `hc-slider` rather than a range input, so the
+    // control the schema produced and the one the room page shows are the same
+    // control. The write still leaves through the host's sink.
     const sent = vi.fn();
     const el = await mount(light({ on: true, brightness_pct: 20 }), sent);
 
-    const slider = el.shadowRoot?.querySelector('input[type="range"]') as HTMLInputElement;
-    slider.value = '65';
-    slider.dispatchEvent(new Event('change'));
+    const slider = el.shadowRoot?.querySelector('hc-slider') as HTMLElement & {
+      updateComplete: Promise<unknown>;
+    };
+    expect(slider).toBeTruthy();
+    await slider.updateComplete;
 
-    expect(sent).toHaveBeenCalledWith({ deviceId: 'hue_1', patch: { brightness_pct: 65 } });
+    const track = slider.shadowRoot?.querySelector('[role="slider"]') as HTMLElement;
+    track.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+
+    // One arrow is a twentieth of the range: 20 + 5.
+    expect(sent).toHaveBeenCalledWith({ deviceId: 'hue_1', patch: { brightness_pct: 25 } });
   });
 
   it('is read-only with no command sink, and says so by disabling', async () => {
