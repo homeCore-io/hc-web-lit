@@ -14,12 +14,16 @@ import { LitElement, css, html, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import type { DeviceState } from '../core/device.js';
 import { effectiveArea } from '../core/present.js';
+import { icon, iconFor } from '../design/icons.js';
 import { roleColor } from '../design/roles.js';
 import { registerWidget } from './registry.js';
 import { humanise } from '../core/text.js';
 
 interface Group {
+  /** What a person reads. */
   name: string;
+  /** The declared word behind it, kept so the row can carry the kind's mark. */
+  key: string;
   count: number;
 }
 
@@ -36,16 +40,39 @@ export class HcDeviceBreakdown extends LitElement {
       padding: 0;
       list-style: none;
       display: grid;
-      gap: calc(var(--hc-space-unit, 8px) * 0.6);
+      gap: calc(var(--hc-space-unit, 8px) * 0.2);
     }
     li {
       display: grid;
-      grid-template-columns: minmax(0, 8rem) 1fr auto;
+      grid-template-columns: auto minmax(0, 7rem) 1fr auto;
       align-items: center;
-      gap: 0.6rem;
+      gap: 0.5rem;
+      /* Tight, because the placement is a fixed box and the tail row is what
+         makes the bars add up to the header's number. A design that pushed
+         "15 more kinds" out of sight would be a prettier wrong answer. */
+      min-height: 1.1rem;
       font-family: var(--hc-font-body, system-ui, sans-serif);
       font-size: var(--hc-text-caption-size, 11px);
       color: var(--hc-ink-muted, #8b95a4);
+    }
+    /* The kind's own mark, at the size a caption is. A column of these says
+       what the house is made of before the words are read, which is the whole
+       claim the widget makes. */
+    .mark {
+      display: grid;
+      place-items: center;
+      width: 0.85rem;
+      height: 0.85rem;
+      color: var(--hc-ink-muted, #8b95a4);
+    }
+    .mark svg {
+      width: 100%;
+      height: 100%;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.7;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
     .name {
       overflow: hidden;
@@ -54,7 +81,7 @@ export class HcDeviceBreakdown extends LitElement {
       color: var(--hc-ink, #e9edf2);
     }
     .bar {
-      height: 4px;
+      height: 6px;
       border-radius: var(--hc-radius-pill, 999px);
       background: var(--hc-surface-sunken, #0d1116);
       overflow: hidden;
@@ -63,11 +90,16 @@ export class HcDeviceBreakdown extends LitElement {
       display: block;
       height: 100%;
       border-radius: var(--hc-radius-pill, 999px);
+      /* Fading toward the end, so a long bar reads as a quantity rather than
+         as a block of colour with a number beside it. */
+      opacity: 0.9;
     }
     .n {
       font-family: var(--hc-font-mono, ui-monospace, monospace);
       font-variant-numeric: tabular-nums;
       color: var(--hc-ink, #e9edf2);
+      min-width: 2ch;
+      text-align: right;
     }
     .rest {
       opacity: 0.6;
@@ -86,16 +118,29 @@ export class HcDeviceBreakdown extends LitElement {
    * client's idea of a category — and a device that declares none is counted
    * as such rather than guessed at.
    */
+  /**
+   * The mark for a group.
+   *
+   * Only where the grouping is by kind: a room and a plugin are not things
+   * this client has pictures of, and a generic mark repeated down the column
+   * would be decoration standing in for information.
+   */
+  private mark(g: Group) {
+    const by = this.config['group_by'];
+    if (by === 'room' || by === 'plugin') return nothing;
+    return icon(iconFor({ device_type: g.key }));
+  }
+
   private groups(): Group[] {
     const by = this.config['group_by'];
     const key = (d: DeviceState): string => {
       switch (by) {
         case 'room':
-          return humanise(effectiveArea(d) ?? 'no room');
+          return effectiveArea(d) ?? 'no room';
         case 'plugin':
           return d.plugin_id.replace(/^plugin\./, '');
         default:
-          return humanise(d.device_type ?? 'unclassified');
+          return d.device_type ?? 'unclassified';
       }
     };
 
@@ -103,7 +148,7 @@ export class HcDeviceBreakdown extends LitElement {
     for (const d of this.devices) counts.set(key(d), (counts.get(key(d)) ?? 0) + 1);
 
     return [...counts.entries()]
-      .map(([name, count]) => ({ name, count }))
+      .map(([k, count]) => ({ name: humanise(k), key: k, count }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   }
 
@@ -124,9 +169,13 @@ export class HcDeviceBreakdown extends LitElement {
       ${shown.map(
         (g) =>
           html`<li part="group">
+            <span class="mark" part="mark">${this.mark(g)}</span>
             <span class="name">${g.name}</span>
             <span class="bar"
-              ><span class="fill" style="width:${(g.count / most) * 100}%;background:${ink}"></span
+              ><span
+                class="fill"
+                style="width:${(g.count / most) * 100}%;background:linear-gradient(90deg, ${ink}, color-mix(in srgb, ${ink} 55%, transparent))"
+              ></span
             ></span>
             <span class="n">${g.count}</span>
           </li>`,
@@ -134,9 +183,13 @@ export class HcDeviceBreakdown extends LitElement {
       ${
         rest > 0
           ? html`<li class="rest" part="rest">
+              <span class="mark" part="mark">${icon('device')}</span>
               <span class="name">${all.length - shown.length} more kinds</span>
               <span class="bar"
-                ><span class="fill" style="width:${(rest / most) * 100}%;background:${ink}"></span
+                ><span
+                  class="fill"
+                  style="width:${(rest / most) * 100}%;background:linear-gradient(90deg, ${ink}, color-mix(in srgb, ${ink} 55%, transparent))"
+                ></span
               ></span>
               <span class="n">${rest}</span>
             </li>`
