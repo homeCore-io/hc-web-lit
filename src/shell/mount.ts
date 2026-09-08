@@ -15,6 +15,7 @@ import { resolveConfig } from '../core/bindings.js';
 import type { SelectionContext } from '../core/selection.js';
 import type { DeviceStore } from '../core/store.js';
 import { tapIn, type TapAction } from '../core/actions.js';
+import { resolveInstance, type TemplateStore } from '../core/templates.js';
 
 /** A widget instance as the document stores it. */
 export interface WidgetSpec {
@@ -36,6 +37,8 @@ export interface MountEnv {
   onDetails?: (deviceId: string) => void;
   /** What a placement's `on_tap` does. The host dispatches it (§5.10). */
   onAction?: (a: TapAction) => void;
+  /** Where widget templates come from (§5.4). Absent means none are defined. */
+  templates?: TemplateStore;
 }
 
 /** The properties a mounted widget may be given. */
@@ -54,6 +57,24 @@ export type MountTarget = HTMLElement & {
 
 /** Elements already carrying a tap, so a re-render does not stack listeners. */
 const tapped = new WeakSet<HTMLElement>();
+
+/**
+ * The widget a placement actually means.
+ *
+ * A template instance holds a reference and is resolved here, at render, which
+ * is what makes it a reference: editing the template lands on every instance
+ * on the next frame with nothing to migrate (§5.4).
+ */
+export function specFor(w: WidgetSpec, env: MountEnv): WidgetSpec {
+  const got = resolveInstance(w, env.templates);
+  if (got === undefined) return w;
+  if ('missing' in got) {
+    // Said out loud rather than drawn as nothing: a page quietly missing a
+    // widget is how a broken reference hides for months.
+    return { type: 'unknown', config: { text: `No template "${got.missing}"` } };
+  }
+  return got.spec;
+}
 
 export function mountWidget(el: MountTarget, w: WidgetSpec, env: MountEnv): void {
   // Live values in, at the seam — `bindings` and `count` (§14.1). A widget gets

@@ -28,7 +28,8 @@ import type { EventFetch } from '../widgets/hc-event-feed.js';
 import type { HistoryFetch } from '../widgets/hc-history-chart.js';
 import { tagFor } from '../widgets/registry.js';
 import type { TapAction } from '../core/actions.js';
-import { mountWidget, type MountTarget } from './mount.js';
+import type { TemplateStore } from '../core/templates.js';
+import { mountWidget, specFor, type MountEnv, type MountTarget } from './mount.js';
 
 @customElement('hc-page')
 export class HcPage extends LitElement {
@@ -104,6 +105,9 @@ export class HcPage extends LitElement {
 
   /** What a placement's `on_tap` does. Dispatched by the host (§5.10). */
   @property({ attribute: false }) onAction: ((a: TapAction) => void) | undefined;
+
+  /** Where widget templates come from (§5.4). */
+  @property({ attribute: false }) templates: TemplateStore | undefined;
 
   /**
    * What `@room` and `@picked` mean on this page.
@@ -259,14 +263,51 @@ export class HcPage extends LitElement {
    * placeholder names the type, which is also what makes it useful while the
    * widget family is still being written.
    */
+  /** What every widget on this page is given (§4.2's shape, in practice). */
+  private env(): MountEnv {
+    return {
+      store: this.store,
+      context: this.context,
+      // The page owns `@picked`, because every other element resolving that
+      // token is resolving it here (§14.1).
+      onPick: (deviceId: string) => {
+        this.context = { ...this.context, picked: deviceId };
+      },
+      // Tapping a room opens it: the same document, a different `@room`.
+      onOpenRoom: (room, page) => {
+        this.dispatchEvent(
+          new CustomEvent('hc-open-room', {
+            detail: { room, page },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+      },
+      ...(this.templates !== undefined ? { templates: this.templates } : {}),
+      ...(this.onCommand !== undefined ? { onCommand: this.onCommand } : {}),
+      ...(this.onFetch !== undefined ? { onFetch: this.onFetch } : {}),
+      ...(this.onEvents !== undefined ? { onEvents: this.onEvents } : {}),
+      ...(this.onDetails !== undefined ? { onDetails: this.onDetails } : {}),
+      ...(this.onAction !== undefined ? { onAction: this.onAction } : {}),
+    };
+  }
+
   private draw(w: DashboardWidget) {
     // An element the document says to hide is not drawn at all, rather than
     // drawn and hidden: the SETS controls exist to aim at a light you have
     // touched, and before you touch one there is nothing to aim at (§14.1).
     if (!isVisible(w.config ?? {}, this.store?.list() ?? [], this.context)) return nothing;
 
-    const tag = tagFor(w.type);
-    if (tag === undefined) return html`<div class="unknown" part="unknown">${w.type}</div>`;
+    // A template instance stands for another widget entirely, so what to draw
+    // is decided before which tag draws it (§5.4).
+    const spec = specFor({ type: w.type, config: w.config ?? {} }, this.env());
+    const tag = tagFor(spec.type);
+    if (tag === undefined) {
+      const said = spec.config?.['text'];
+      return html`<div class="unknown" part="unknown">
+        ${typeof said === 'string' ? said : spec.type}
+      </div>`;
+    }
 
     // **Reused, not recreated.** `draw` runs on every render, and the page
     // re-renders on every device change — 184 devices streaming means many a
@@ -279,36 +320,9 @@ export class HcPage extends LitElement {
     const el = (cached ?? document.createElement(tag)) as MountTarget;
     this.elements.set(key, el);
 
-    // One wiring, shared with the overlay (§5.6): a widget that works on a page
-    // works in a sheet, because it is given the same things in both.
-    mountWidget(
-      el,
-      { type: w.type, config: w.config ?? {} },
-      {
-        store: this.store,
-        context: this.context,
-        // The page owns `@picked`, because every other element resolving that
-        // token is resolving it here (§14.1).
-        onPick: (deviceId: string) => {
-          this.context = { ...this.context, picked: deviceId };
-        },
-        // Tapping a room opens it: the same document, a different `@room`.
-        onOpenRoom: (room, page) => {
-          this.dispatchEvent(
-            new CustomEvent('hc-open-room', {
-              detail: { room, page },
-              bubbles: true,
-              composed: true,
-            }),
-          );
-        },
-        ...(this.onCommand !== undefined ? { onCommand: this.onCommand } : {}),
-        ...(this.onFetch !== undefined ? { onFetch: this.onFetch } : {}),
-        ...(this.onEvents !== undefined ? { onEvents: this.onEvents } : {}),
-        ...(this.onDetails !== undefined ? { onDetails: this.onDetails } : {}),
-        ...(this.onAction !== undefined ? { onAction: this.onAction } : {}),
-      },
-    );
+    // One wiring, shared with the overlay (§5.6): a widget that works on a
+    // page works in a sheet, because it is given the same things in both.
+    mountWidget(el, spec, this.env());
     el.style.height = '100%';
     return el;
   }
