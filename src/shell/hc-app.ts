@@ -24,6 +24,8 @@ import '../widgets/hc-event-feed.js';
 import '../widgets/hc-device-list.js';
 import '../widgets/hc-history-chart.js';
 import '../widgets/hc-colour-wheel.js';
+import '../widgets/hc-device-breakdown.js';
+import '../widgets/hc-house-status.js';
 import '../widgets/hc-line.js';
 import '../widgets/hc-room-field.js';
 import '../widgets/hc-slider.js';
