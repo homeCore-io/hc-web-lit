@@ -20,6 +20,7 @@ import type {
 } from '../core/dashboard.js';
 import { gridItems, layoutFor } from '../core/dashboard.js';
 import { Engine, type GridItem } from '../core/layout.js';
+import type { SelectionContext } from '../core/selection.js';
 import type { DeviceStore } from '../core/store.js';
 import type { CommandRequest } from '../widgets/hc-controls.js';
 import { tagFor } from '../widgets/registry.js';
@@ -85,6 +86,17 @@ export class HcPage extends LitElement {
    * refuse an actuation (§5.10). This is the seed of `ctx.call`.
    */
   @property({ attribute: false }) onCommand: ((r: CommandRequest) => void) | undefined;
+
+  /**
+   * What `@room` and `@picked` mean on this page.
+   *
+   * **This is the placement seam.** A room page is one document reused for
+   * every room — the widgets say `area_name: "@room"` and the page says which
+   * room, so there is one saved page rather than one per room. Resolving it
+   * here rather than inside each widget is what keeps the token out of the
+   * widget vocabulary entirely.
+   */
+  @property({ attribute: false }) context: SelectionContext = {};
 
   @state() private tick = 0;
 
@@ -207,11 +219,23 @@ export class HcPage extends LitElement {
     const el = document.createElement(tag) as HTMLElement & {
       config?: Record<string, unknown>;
       device?: unknown;
+      devices?: readonly unknown[];
+      context?: SelectionContext;
       onCommand?: (r: CommandRequest) => void;
     };
     el.config = w.config ?? {};
+
+    // A widget that names one device gets it resolved; one that selects a set
+    // gets the whole store and does its own selecting, because the selection is
+    // live — a device appearing in a room has to appear in the list.
     const deviceId = w.config?.['device_id'];
-    if (typeof deviceId === 'string') el.device = this.store?.get(deviceId);
+    if (typeof deviceId === 'string') {
+      el.device = this.store?.get(
+        deviceId === '@picked' ? (this.context.picked ?? deviceId) : deviceId,
+      );
+    }
+    if (this.store !== undefined) el.devices = this.store.list();
+    el.context = this.context;
     if (this.onCommand !== undefined) el.onCommand = this.onCommand;
     el.style.height = '100%';
     return el;
