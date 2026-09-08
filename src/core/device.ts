@@ -1,3 +1,5 @@
+import type { DeviceSchema } from './api.js';
+
 /**
  * A device, as hc-api sends it.
  *
@@ -37,6 +39,16 @@ export interface DeviceState {
   button_names?: Record<string, string>;
   /** Where the most recent meaningful state change came from, when known. */
   last_change?: DeviceChange;
+
+  /**
+   * Resolved schema, when the list was asked for with `include_schema`.
+   *
+   * **Present but `null` for a device that has none** — 77 of 184 in the
+   * reference house — the same shape `area` uses (see above). Having no schema
+   * is ordinary, not an error: it means attributes are displayed and no
+   * controls are offered.
+   */
+  schema?: DeviceSchema | null;
 }
 
 /** Provenance of a state change. */

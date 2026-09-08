@@ -36,24 +36,52 @@ export interface LoginResult {
   user: { id: string; username: string; role: string; created_at: string };
 }
 
-/** One declared attribute on a device — `hc_types::schema::AttributeSchema`. */
+/** The closed kind vocabulary — `hc_types::schema::AttributeKind`. */
+export type AttributeKind =
+  | 'bool'
+  | 'integer'
+  | 'float'
+  | 'string'
+  | 'enum'
+  | 'color_xy'
+  | 'color_rgb'
+  | 'color_temp'
+  | 'json';
+
+/**
+ * What an attribute is *for*, when it is not the point of the device.
+ *
+ * A lock reports whether it is locked; it also reports battery, signal and
+ * firmware. Rendering all four the same way buries the one an operator came
+ * for. Absent means primary.
+ */
+export type AttributeCategory = 'diagnostic' | 'config';
+
+/**
+ * What a boolean attribute's two states are *called*, in the device's words.
+ *
+ * A contact sensor has one `open` attribute, so a client that lists attributes
+ * offers one row — and closing the door becomes "open, but Not", a logic gate
+ * standing in for a word the device already has.
+ */
+export interface BoolStates {
+  when_true?: { label?: string; verb?: string };
+  when_false?: { label?: string; verb?: string };
+}
+
+/** One declared attribute — `hc_types::schema::AttributeSchema`. */
 export interface AttributeSchema {
-  kind:
-    | 'bool'
-    | 'integer'
-    | 'float'
-    | 'string'
-    | 'enum'
-    | 'color_xy'
-    | 'color_rgb'
-    | 'color_temp'
-    | 'json';
-  display_name?: string;
+  kind: AttributeKind;
   writable?: boolean;
+  display_name?: string;
+  unit?: string;
   min?: number;
   max?: number;
-  unit?: string;
-  options?: { label: string; value: string }[];
+  step?: number;
+  /** Fixed option list for the `enum` kind. */
+  options?: string[];
+  category?: AttributeCategory;
+  states?: BoolStates;
 }
 
 /** One declared command — `hc_types::schema::DeviceAction`. */
@@ -90,7 +118,7 @@ export interface ActionParam {
  * plenty of perfectly good hardware, and that is not an error.
  */
 export interface DeviceSchema {
-  attributes: Record<string, AttributeSchema>;
+  attributes?: Record<string, AttributeSchema> | null;
   actions?: DeviceAction[];
 }
 
