@@ -18,7 +18,11 @@ import { EventStream } from '../core/events.js';
 import { check, checkAction } from '../core/safety.js';
 import { DeviceStore } from '../core/store.js';
 import type { CommandRequest } from '../widgets/hc-controls.js';
+import { effectiveName } from '../core/present.js';
+import type { MountEnv } from './mount.js';
 import './hc-page.js';
+import './hc-overlay.js';
+import type { HcOverlay } from './hc-overlay.js';
 import '../widgets/hc-device-grid.js';
 import '../widgets/hc-event-feed.js';
 import '../widgets/hc-device-list.js';
@@ -37,6 +41,7 @@ import '../widgets/hc-shape.js';
 import '../widgets/hc-text.js';
 import '../widgets/hc-worth-knowing.js';
 import '../widgets/hc-device-card.js';
+import '../widgets/hc-device-details.js';
 
 type Phase = 'idle' | 'connecting' | 'ready' | 'failed';
 
@@ -120,6 +125,17 @@ export class HcApp extends LitElement {
   @state() private roomContext: { room?: string; picked?: string } = {};
 
   private readonly store = new DeviceStore();
+
+  /**
+   * The one overlay stack (§5.6).
+   *
+   * A query rather than a stored reference: it is in this element's own shadow
+   * root, and the first command can arrive before the first render has put it
+   * there.
+   */
+  private get overlay(): HcOverlay | null {
+    return this.renderRoot.querySelector('hc-overlay');
+  }
   private api: HcApi | undefined;
   private stream: EventStream | undefined;
 
@@ -131,7 +147,33 @@ export class HcApp extends LitElement {
    * confirmation by mishandling its own events, because it never had the
    * chance to send anything itself.
    */
-  private readonly command = (r: CommandRequest): void => {
+  /**
+   * Hold to inspect (§5.10).
+   *
+   * The sheet's content is a widget spec rather than a node, so what `hold`
+   * opens is a config value — which is what makes "hold opens a room sheet
+   * instead" a setting later rather than a change here (§5.6).
+   */
+  private readonly details = (deviceId: string): void => {
+    // No title: the sheet's content leads with the device's name, and the
+    // chrome saying it again is the same thing said twice.
+    this.overlay?.sheet({ widget: { type: 'device_details', config: { device_id: deviceId } } });
+  };
+
+  /** What a widget mounted in an overlay is given — the page's env, minus the
+   * page. `@picked` belongs to a page's own selection, so a sheet has none. */
+  private overlayEnv(): MountEnv {
+    return {
+      store: this.store,
+      context: this.roomContext,
+      onCommand: this.command,
+      onFetch: this.history,
+      onEvents: this.events,
+      onDetails: this.details,
+    };
+  }
+
+  private readonly command = async (r: CommandRequest): Promise<void> => {
     const api = this.api;
     const device = this.store.get(r.deviceId);
     if (api === undefined || device === undefined) return;
@@ -139,8 +181,24 @@ export class HcApp extends LitElement {
     const verdict =
       r.action !== undefined ? checkAction(device, r.action.id) : check(device, r.patch ?? {});
 
-    if ('allow' in verdict && !verdict.allow) return;
-    if ('confirm' in verdict && !globalThis.confirm(verdict.confirm)) return;
+    // A refusal says why. This used to return silently, three lines above a
+    // comment about how a control that does nothing is the worst kind — the
+    // safety policy is a good reason not to act and a bad reason not to speak.
+    if ('allow' in verdict && !verdict.allow) {
+      this.overlay?.toast(verdict.reason, { kind: 'warn' });
+      return;
+    }
+    // And a confirmation is the host's, not the platform's: `globalThis.confirm`
+    // blocks the event loop, cannot be styled into the skin the wall is running,
+    // and on a kiosk names the origin in a chrome nobody asked for (§5.6).
+    if ('confirm' in verdict) {
+      const ok = await (this.overlay?.confirm({
+        text: verdict.confirm,
+        confirmLabel: 'Do it',
+        danger: true,
+      }) ?? Promise.resolve(false));
+      if (!ok) return;
+    }
 
     // Accepted, not applied: core answers 202 and the real state arrives on the
     // stream. A failure here is worth saying out loud rather than swallowing —
@@ -151,7 +209,8 @@ export class HcApp extends LitElement {
         : api.commandDevice(r.deviceId, r.patch ?? {});
 
     void sent.catch((e: unknown) => {
-      this.message = e instanceof HcApiError ? e.message : String(e);
+      const why = e instanceof HcApiError ? e.message : String(e);
+      this.overlay?.toast(`${effectiveName(device)}: ${why}`, { kind: 'warn' });
     });
   };
 
@@ -325,9 +384,11 @@ export class HcApp extends LitElement {
         .onCommand=${this.command}
         .onFetch=${this.history}
         .onEvents=${this.events}
+        .onDetails=${this.details}
         .context=${this.roomContext}
         breakpoint=${this.breakpoint}
       ></hc-page>
+      <hc-overlay .env=${this.overlayEnv()}></hc-overlay>
     `;
   }
 }

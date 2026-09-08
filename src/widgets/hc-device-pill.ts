@@ -15,6 +15,7 @@ import { customElement, property } from 'lit/decorators.js';
 import type { DeviceState } from '../core/device.js';
 import { hasPowerState } from '../core/facet.js';
 import { effectiveName, isOn, levelOf } from '../core/present.js';
+import { inspect } from './hold.js';
 
 @customElement('hc-device-pill')
 export class HcDevicePill extends LitElement {
@@ -72,6 +73,8 @@ export class HcDevicePill extends LitElement {
   @property({ attribute: false }) device: DeviceState | undefined;
   @property({ type: Boolean }) picked = false;
   @property({ attribute: false }) onPick: ((deviceId: string) => void) | undefined;
+  /** Hold to inspect, without acting on it (§5.10). */
+  @property({ attribute: false }) onDetails: ((deviceId: string) => void) | undefined;
 
   override render() {
     const d = this.device;
@@ -81,6 +84,7 @@ export class HcDevicePill extends LitElement {
     const level = on === true ? levelOf(d) : undefined;
 
     return html`<button
+      ${inspect(() => this.onDetails?.(d.device_id))}
       part="pill"
       ?data-picked=${this.picked}
       @click=${() => this.onPick?.(d.device_id)}

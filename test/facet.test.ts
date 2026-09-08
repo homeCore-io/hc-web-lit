@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { DeviceSchema } from '../src/core/api.js';
 import type { DeviceState } from '../src/core/device.js';
-import { formatReading, hasPowerState, readingOf, roleOf } from '../src/core/facet.js';
+import {
+  formatReading,
+  hasPowerState,
+  isHousekeeping,
+  readingOf,
+  roleOf,
+} from '../src/core/facet.js';
 
 const device = (over: Partial<DeviceState> = {}): DeviceState => ({
   device_id: 'd',
@@ -223,5 +229,21 @@ describe('words for booleans', () => {
     expect(formatReading({ key: 'flux_capacitor', value: false, label: 'flux capacitor' })).toBe(
       'Not flux capacitor',
     );
+  });
+});
+
+describe('capability flags are not readings', () => {
+  it('demotes what the integration can do, not what the house is doing', () => {
+    // homeCore#34: 69 booleans in the reference house are capability
+    // advertisements with no category, and they render as "Not supports
+    // gradient" — the synthesised negation `states` exists to stop.
+    expect(isHousekeeping('supports_gradient')).toBe(true);
+    expect(isHousekeeping('is_tv_input')).toBe(true);
+    expect(isHousekeeping('supports_dimming')).toBe(true);
+  });
+
+  it('does not catch a reading that happens to start the same way', () => {
+    expect(isHousekeeping('isolation')).toBe(false);
+    expect(isHousekeeping('supported')).toBe(false);
   });
 });

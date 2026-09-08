@@ -20,6 +20,7 @@ import { formatReading, hasPowerState, readingOf } from '../core/facet.js';
 import { effectiveName, isOn, levelOf, sceneKind } from '../core/present.js';
 import type { CommandRequest } from './hc-controls.js';
 import './hc-controls.js';
+import { inspect } from './hold.js';
 import { registerWidget } from './registry.js';
 
 @customElement('hc-device-card')
@@ -85,6 +86,8 @@ export class HcDeviceCard extends LitElement {
   @property({ attribute: false }) device: DeviceState | undefined;
   /** The host's command sink. Absent means the card is read-only. */
   @property({ attribute: false }) onCommand: ((r: CommandRequest) => void) | undefined;
+  /** Hold to inspect, without acting on it (§5.10). */
+  @property({ attribute: false }) onDetails: ((deviceId: string) => void) | undefined;
 
   /**
    * One row, no inline controls.
@@ -111,7 +114,11 @@ export class HcDeviceCard extends LitElement {
     const controls = controlsFor(d);
 
     return html`
-      <div class="card ${d.available ? '' : 'offline'}" part="card">
+      <div
+        class="card ${d.available ? '' : 'offline'}"
+        part="card"
+        ${inspect(() => this.onDetails?.(d.device_id))}
+      >
         <div class="head">
           <span
             class="dot"

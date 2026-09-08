@@ -142,7 +142,18 @@ export function isHousekeeping(key: string, declared?: { category?: string }): b
   // A declaration always wins. This is the branch that should be doing the work.
   if (declared?.category === 'diagnostic' || declared?.category === 'config') return true;
   return (
-    UNDECLARED_HOUSEKEEPING.has(key) || key.endsWith('_unit') || key.startsWith('customserver.')
+    UNDECLARED_HOUSEKEEPING.has(key) ||
+    key.endsWith('_unit') ||
+    key.startsWith('customserver.') ||
+    // What the *integration* can do, not what the house is doing (homeCore#34).
+    // 69 booleans in the reference house are `supports_gradient`, `is_tv`,
+    // `ecp_control_enabled` and their kin, none carrying a category, so a detail
+    // list renders them as state — and since nothing declares `states` for them
+    // either, they come out as "Not supports gradient", which is the synthesised
+    // negation the whole `states` field exists to stop. A shape rule like
+    // `_unit` above, not a list of names, and it should stop mattering once
+    // `for_name` grows the same prefixes.
+    /^(supports|is)_/.test(key)
   );
 }
 

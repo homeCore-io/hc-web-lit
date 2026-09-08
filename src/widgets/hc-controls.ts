@@ -167,7 +167,7 @@ export class HcControls extends LitElement {
               ?disabled=${readOnly}
               @click=${() => this.write(c.key, !on)}
             >
-              ${on ? (c.onLabel ?? 'On') : (c.offLabel ?? 'Off')}
+              ${capitalise(on ? (c.onLabel ?? 'On') : (c.offLabel ?? 'Off'))}
             </button>
           </div>
         </div>`;
@@ -271,6 +271,15 @@ export class HcControls extends LitElement {
     }
   }
 }
+
+/**
+ * A device's own word, as a label reads.
+ *
+ * `states.when_false.label` is `"off"` on a Hue light — a value, spelled the way
+ * a value is spelled. A button is a label, so it gets a label's capital, and the
+ * device still supplies the word.
+ */
+const capitalise = (s: string): string => s.replace(/^./, (c) => c.toUpperCase());
 
 declare global {
   interface HTMLElementTagNameMap {

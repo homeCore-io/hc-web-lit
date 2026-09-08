@@ -18,7 +18,6 @@ import type {
   DashboardDefinition,
   DashboardWidget,
 } from '../core/dashboard.js';
-import { resolveConfig } from '../core/bindings.js';
 import { gridItems, layoutFor } from '../core/dashboard.js';
 import { Engine, type GridItem } from '../core/layout.js';
 import type { SelectionContext } from '../core/selection.js';
@@ -28,6 +27,7 @@ import type { CommandRequest } from '../widgets/hc-controls.js';
 import type { EventFetch } from '../widgets/hc-event-feed.js';
 import type { HistoryFetch } from '../widgets/hc-history-chart.js';
 import { tagFor } from '../widgets/registry.js';
+import { mountWidget, type MountTarget } from './mount.js';
 
 @customElement('hc-page')
 export class HcPage extends LitElement {
@@ -90,6 +90,8 @@ export class HcPage extends LitElement {
    * refuse an actuation (§5.10). This is the seed of `ctx.call`.
    */
   @property({ attribute: false }) onCommand: ((r: CommandRequest) => void) | undefined;
+  /** Hold to inspect, everywhere — the non-actuating path (§5.10). */
+  @property({ attribute: false }) onDetails: ((deviceId: string) => void) | undefined;
 
   /**
    * What `@room` and `@picked` mean on this page.
@@ -252,49 +254,38 @@ export class HcPage extends LitElement {
     // exactly what it is for.
     const key = `${w.id}:${tag}`;
     const cached = this.elements.get(key);
-    const el = (cached ?? document.createElement(tag)) as HTMLElement & {
-      config?: Record<string, unknown>;
-      device?: unknown;
-      devices?: readonly unknown[];
-      context?: SelectionContext;
-      onCommand?: (r: CommandRequest) => void;
-      onFetch?: HistoryFetch;
-      onEvents?: EventFetch;
-      onPick?: (deviceId: string) => void;
-      onOpenRoom?: (room: string, page: string | undefined) => void;
-    };
+    const el = (cached ?? document.createElement(tag)) as MountTarget;
     this.elements.set(key, el);
-    // Live values in, at the seam — `bindings` and `count` (§14.1). A widget
-    // gets a config with the house already in it and never learns the
-    // mechanism, exactly as it never learns what `@room` means.
-    el.config = resolveConfig(w.config ?? {}, this.store?.list() ?? [], this.context);
 
-    // A widget that names one device gets it resolved; one that selects a set
-    // gets the whole store and does its own selecting, because the selection is
-    // live — a device appearing in a room has to appear in the list.
-    const deviceId = w.config?.['device_id'];
-    if (typeof deviceId === 'string') {
-      el.device = this.store?.get(
-        deviceId === '@picked' ? (this.context.picked ?? deviceId) : deviceId,
-      );
-    }
-    if (this.store !== undefined) el.devices = this.store.list();
-    // A pills row aims the SETS controls beside it (`picks: true`), so it needs
-    // a way to say what was touched. The page owns `@picked` because every
-    // other element resolving that token is resolving it here (§14.1).
-    el.onPick = (deviceId: string) => {
-      this.context = { ...this.context, picked: deviceId };
-    };
-    // Tapping a room opens it: the same document, a different `@room`.
-    el.onOpenRoom = (room, page) => {
-      this.dispatchEvent(
-        new CustomEvent('hc-open-room', { detail: { room, page }, bubbles: true, composed: true }),
-      );
-    };
-    el.context = this.context;
-    if (this.onCommand !== undefined) el.onCommand = this.onCommand;
-    if (this.onFetch !== undefined) el.onFetch = this.onFetch;
-    if (this.onEvents !== undefined) el.onEvents = this.onEvents;
+    // One wiring, shared with the overlay (§5.6): a widget that works on a page
+    // works in a sheet, because it is given the same things in both.
+    mountWidget(
+      el,
+      { type: w.type, config: w.config ?? {} },
+      {
+        store: this.store,
+        context: this.context,
+        // The page owns `@picked`, because every other element resolving that
+        // token is resolving it here (§14.1).
+        onPick: (deviceId: string) => {
+          this.context = { ...this.context, picked: deviceId };
+        },
+        // Tapping a room opens it: the same document, a different `@room`.
+        onOpenRoom: (room, page) => {
+          this.dispatchEvent(
+            new CustomEvent('hc-open-room', {
+              detail: { room, page },
+              bubbles: true,
+              composed: true,
+            }),
+          );
+        },
+        ...(this.onCommand !== undefined ? { onCommand: this.onCommand } : {}),
+        ...(this.onFetch !== undefined ? { onFetch: this.onFetch } : {}),
+        ...(this.onEvents !== undefined ? { onEvents: this.onEvents } : {}),
+        ...(this.onDetails !== undefined ? { onDetails: this.onDetails } : {}),
+      },
+    );
     el.style.height = '100%';
     return el;
   }

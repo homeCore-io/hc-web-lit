@@ -1,0 +1,309 @@
+/**
+ * Everything one device has to say — the sheet behind `hold` (§5.10, §5.6).
+ *
+ * §5.10 says `hold` defaults to `details` everywhere so there is always a
+ * non-actuating way to inspect a device. This is what it opens, and it is
+ * deliberately the one surface that shows a device *whole*: the reading it
+ * leads with, the controls its plugin declared, its history, and then every
+ * remaining attribute — because the dashboard's job is to show the four things
+ * that matter and this one's is to answer "what else does it know".
+ *
+ * **It is a widget like any other**, mounted through the same `mountWidget`
+ * a page uses, so it takes `onCommand` and `onFetch` from the host rather than
+ * holding an API client (§19.4). That also means it can be *placed* on a
+ * dashboard by anyone who wants a permanent inspector.
+ *
+ * **The attribute list is where the September schema shows its worth.** The
+ * declaration decides what is a reading and what is housekeeping, so a battery
+ * sits under the fold because its plugin said `category: diagnostic` — not
+ * because this client recognised the word (homeCore#29).
+ */
+import { LitElement, css, html, nothing } from 'lit';
+import { customElement, property, state } from 'lit/decorators.js';
+import { controlsFor } from '../core/controls.js';
+import type { DeviceState } from '../core/device.js';
+import { formatReading, isHousekeeping, readingOf, roleOf } from '../core/facet.js';
+import { effectiveArea, effectiveName, isOn, noStatusReason } from '../core/present.js';
+import type { CommandRequest } from './hc-controls.js';
+import type { HistoryFetch } from './hc-history-chart.js';
+import { registerWidget } from './registry.js';
+import './hc-controls.js';
+import './hc-history-chart.js';
+
+/** One attribute as the sheet lists it. */
+interface Row {
+  key: string;
+  label: string;
+  value: string;
+  /** Charts are only offered for what a chart can draw. */
+  numeric: boolean;
+}
+
+@customElement('hc-device-details')
+export class HcDeviceDetails extends LitElement {
+  static override styles = css`
+    :host {
+      display: block;
+      color: var(--hc-ink, #e9edf2);
+      font-family: var(--hc-font-body, system-ui, sans-serif);
+    }
+    .head {
+      display: grid;
+      gap: 0.15rem;
+      margin-bottom: 0.75rem;
+    }
+    .name {
+      font-size: var(--hc-text-title-size, 18px);
+      font-weight: 600;
+    }
+    .where {
+      color: var(--hc-ink-muted, #8b95a4);
+      font-size: var(--hc-text-caption-size, 11px);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .lead {
+      display: flex;
+      align-items: baseline;
+      gap: 0.5rem;
+      font-size: var(--hc-text-display-size, 30px);
+      font-variant-numeric: tabular-nums;
+      line-height: 1.1;
+    }
+    .lead .of {
+      font-size: var(--hc-text-caption-size, 11px);
+      color: var(--hc-ink-muted, #8b95a4);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .note,
+    .offline {
+      font-size: var(--hc-text-caption-size, 11px);
+      color: var(--hc-ink-muted, #8b95a4);
+    }
+    .offline {
+      color: var(--hc-status-warn, #ffc861);
+    }
+    section {
+      display: grid;
+      gap: 0.4rem;
+      padding-top: 0.75rem;
+      border-top: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
+    }
+    h3 {
+      margin: 0;
+      font-size: var(--hc-text-caption-size, 11px);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--hc-ink-muted, #8b95a4);
+    }
+    .rows {
+      display: grid;
+      gap: 0.1rem;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 0.75rem;
+      min-height: 30px;
+      padding: 0 0.25rem;
+      border-radius: var(--hc-radius-sm, 8px);
+      font-size: var(--hc-text-body-size, 13px);
+    }
+    .row.pickable {
+      cursor: pointer;
+    }
+    .row.pickable:hover,
+    .row[aria-selected='true'] {
+      background: var(--hc-surface-sunken, #0d1116);
+    }
+    .row .k {
+      color: var(--hc-ink-muted, #8b95a4);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .row .v {
+      font-variant-numeric: tabular-nums;
+    }
+    details summary {
+      cursor: pointer;
+      color: var(--hc-ink-muted, #8b95a4);
+      font-size: var(--hc-text-caption-size, 11px);
+      list-style: none;
+    }
+    details summary::-webkit-details-marker {
+      display: none;
+    }
+    details summary::before {
+      content: '▸ ';
+    }
+    details[open] summary::before {
+      content: '▾ ';
+    }
+    .chart {
+      height: 140px;
+    }
+    .empty {
+      color: var(--hc-ink-muted, #8b95a4);
+      font-size: var(--hc-text-caption-size, 11px);
+    }
+  `;
+
+  @property({ attribute: false }) device: DeviceState | undefined;
+  @property({ attribute: false }) config: Record<string, unknown> = {};
+  @property({ attribute: false }) onCommand: ((r: CommandRequest) => void) | undefined;
+  @property({ attribute: false }) onFetch: HistoryFetch | undefined;
+
+  /** Which attribute the chart is showing. The lead reading, until asked. */
+  @state() private charted: string | undefined;
+
+  override willUpdate(changed: Map<string, unknown>): void {
+    // A different device is a different set of attributes; keeping the old
+    // selection would chart a name this device does not have.
+    if (changed.has('device')) this.charted = undefined;
+  }
+
+  override render() {
+    const d = this.device;
+    if (d === undefined) return html`<div class="empty">That device is not in the house.</div>`;
+
+    const lead = readingOf(d);
+    const rows = this.rows(d);
+    const controls = controlsFor(d, d.schema);
+    const reason = noStatusReason(d);
+    const power = isOn(d);
+    // What to chart, unasked: the lead reading when a chart can draw it, and
+    // otherwise the first one that can be. A lamp leads with `on`, which is not
+    // a series — but its brightness over the day is worth seeing.
+    const charted =
+      this.charted ??
+      (lead !== undefined && isNumber(lead.value)
+        ? lead.key
+        : rows.readings.find((r) => r.numeric)?.key);
+
+    return html`
+      <div class="head">
+        <span class="name">${effectiveName(d)}</span>
+        <span class="where">
+          ${effectiveArea(d) ?? 'no area'} · ${d.device_type ?? 'no type'} · ${roleOf(d)}
+        </span>
+      </div>
+
+      ${
+        lead === undefined
+          ? nothing
+          : html`<div class="lead">
+              <span>${formatReading(lead)}</span>
+              <span class="of">${lead.label}</span>
+            </div>`
+      }
+      ${
+        // A momentary scene has no state, and saying why beats saying nothing
+        // — `led_component` is the plugin explaining itself (homeCore#28).
+        reason === undefined ? nothing : html`<div class="note">${reason}</div>`
+      }
+      ${
+        power === undefined || lead?.key === 'on'
+          ? nothing
+          : html`<div class="note">${power ? 'On' : 'Off'}</div>`
+      }
+      ${d.available === false ? html`<div class="offline">Not responding.</div>` : nothing}
+      ${
+        controls.length === 0
+          ? nothing
+          : html`<section>
+              <h3>Controls</h3>
+              <hc-controls
+                .device=${d}
+                .controls=${controls}
+                .onCommand=${this.onCommand}
+              ></hc-controls>
+            </section>`
+      }
+      ${
+        charted === undefined || this.onFetch === undefined
+          ? nothing
+          : html`<section>
+              <h3>History</h3>
+              <div class="chart">
+                <hc-history-chart
+                  .config=${{ device_id: d.device_id, attribute: charted, timeframe_hours: 24 }}
+                  .onFetch=${this.onFetch}
+                ></hc-history-chart>
+              </div>
+            </section>`
+      }
+
+      <section>
+        <h3>Reports</h3>
+        <div class="rows">${rows.readings.map((r) => this.row(r, charted))}</div>
+        ${
+          rows.housekeeping.length === 0
+            ? nothing
+            : html`<details>
+                <summary>${rows.housekeeping.length} more the plugin called housekeeping</summary>
+                <div class="rows">${rows.housekeeping.map((r) => this.row(r, charted))}</div>
+              </details>`
+        }
+      </section>
+    `;
+  }
+
+  private row(r: Row, charted: string | undefined) {
+    // A numeric attribute is chartable, so the row is the way to chart it.
+    const pickable = r.numeric && this.onFetch !== undefined;
+    return html`<div
+      class=${pickable ? 'row pickable' : 'row'}
+      aria-selected=${r.key === charted ? 'true' : 'false'}
+      role=${pickable ? 'button' : 'presentation'}
+      tabindex=${pickable ? '0' : '-1'}
+      @click=${() => {
+        if (pickable) this.charted = r.key;
+      }}
+    >
+      <span class="k">${r.label}</span><span class="v">${r.value}</span>
+    </div>`;
+  }
+
+  private rows(d: DeviceState): { readings: Row[]; housekeeping: Row[] } {
+    const declared = d.schema?.attributes;
+    const readings: Row[] = [];
+    const housekeeping: Row[] = [];
+
+    for (const [key, value] of Object.entries(d.attributes)) {
+      // A nested object is a subsystem reporting on itself; the sheet is a list
+      // of readings, not a JSON viewer.
+      if (value === null || typeof value === 'object') continue;
+      const dec = declared?.[key];
+      const row: Row = {
+        key,
+        label: dec?.display_name ?? key.replace(/_/g, ' '),
+        value: formatReading({
+          key,
+          value,
+          label: dec?.display_name ?? key.replace(/_/g, ' '),
+          ...(dec?.unit !== undefined ? { unit: dec.unit } : {}),
+          ...(dec?.states !== undefined ? { states: dec.states } : {}),
+        }),
+        numeric: isNumber(value),
+      };
+      (isHousekeeping(key, dec) ? housekeeping : readings).push(row);
+    }
+
+    const byLabel = (a: Row, b: Row): number => a.label.localeCompare(b.label);
+    return { readings: readings.sort(byLabel), housekeeping: housekeeping.sort(byLabel) };
+  }
+}
+
+const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+registerWidget('device_details', 'hc-device-details');
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'hc-device-details': HcDeviceDetails;
+  }
+}

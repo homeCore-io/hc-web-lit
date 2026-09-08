@@ -19,6 +19,7 @@ import type { CommandRequest } from './hc-controls.js';
 import './hc-device-card.js';
 import './hc-device-pill.js';
 import './hc-media-card.js';
+import { attachInspect } from './hold.js';
 import { registerWidget, tagForDevice } from './registry.js';
 
 @customElement('hc-device-grid')
@@ -61,6 +62,18 @@ export class HcDeviceGrid extends LitElement {
   @property({ attribute: false }) onCommand: ((r: CommandRequest) => void) | undefined;
   /** `picks: true` — the row aims the controls beside it at what you touch. */
   @property({ attribute: false }) onPick: ((deviceId: string) => void) | undefined;
+  /** Hold to inspect, without acting on it (§5.10). */
+  @property({ attribute: false }) onDetails: ((deviceId: string) => void) | undefined;
+
+  /**
+   * The type-specific elements, kept.
+   *
+   * These are built imperatively rather than from a template, and rebuilding
+   * one on every render restarts whatever it was doing — with 184 devices on
+   * the stream that is continuous. Keyed by device, which is what identifies
+   * one here.
+   */
+  private readonly cells = new Map<string, HTMLElement>();
   /** `grid` packs columns; `list` is one per row. */
   @property({ type: String }) mode: 'grid' | 'list' = 'grid';
 
@@ -93,6 +106,7 @@ export class HcDeviceGrid extends LitElement {
                 .device=${d}
                 .picked=${this.context.picked === d.device_id}
                 .onPick=${this.onPick}
+                .onDetails=${this.onDetails}
               ></hc-device-pill>`,
           )}
         </div>
@@ -121,13 +135,22 @@ export class HcDeviceGrid extends LitElement {
       return html`<hc-device-card
         .device=${d}
         .onCommand=${this.onCommand}
+        .onDetails=${this.onDetails}
         ?compact=${this.mode === 'list'}
       ></hc-device-card>`;
     }
-    const el = document.createElement(tag) as HTMLElement & {
+    const cached = this.cells.get(d.device_id);
+    const el = (cached ?? document.createElement(tag)) as HTMLElement & {
       device?: DeviceState;
       onCommand?: (r: CommandRequest) => void;
     };
+    if (cached === undefined) {
+      this.cells.set(d.device_id, el);
+      // The gesture is the host's, not the widget's (§5.10): a type-specific
+      // card written by anyone — us today, an extension later — gets hold to
+      // inspect without having implemented it, and cannot decline to have it.
+      attachInspect(el, () => this.onDetails?.(d.device_id));
+    }
     el.device = d;
     if (this.onCommand !== undefined) el.onCommand = this.onCommand;
     return el;
