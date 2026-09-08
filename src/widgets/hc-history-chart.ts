@@ -1,29 +1,46 @@
 /**
- * A time series for one attribute.
+ * A time series for one attribute — `history_chart`.
  *
  * Config is core's: `device_id`, `attribute`, `timeframe_hours`, `bare`.
  *
- * **SVG, not a charting library.** §13 names uPlot for Tier 1 and that is
- * probably right when charts get real — dense series, small, fast on a tablet.
- * A polyline through a hundred points needs none of it, and taking the
- * dependency now would be taking it before knowing what it has to do.
+ * **Axes, because a line with no scale is a shape rather than a reading.** The
+ * reference house's indoor sensor swings 71.4 to 77.4 within minutes, and drawn
+ * against its own min and max that fills the plot and reads as chaos. On a
+ * rounded 68–78 axis the same data is visibly a six-degree oscillation. The
+ * scale is the difference between showing the data and explaining it.
  *
- * The fetch is a widget's own because there is no history primitive yet: §5.9
- * puts `ctx.history` on the capability object so a widget never holds an API
- * client. This one does, temporarily and visibly, via the same `onFetch`
- * callback shape the host already uses for commands — which is the seam that
- * becomes `ctx.history`.
+ * **The viewBox is measured pixels, not an arbitrary unit box.** A fixed
+ * `viewBox` with `preserveAspectRatio="none"` is the obvious way to make an SVG
+ * fill its container, and it stretches the type with it: in the hero, 680×116px
+ * of chart drawn in a 100×44 box smears every label 6× wide and turns the dots
+ * into ellipses. So the element measures itself and one user unit is one pixel,
+ * which also means font sizes and stroke widths are the numbers they say.
+ *
+ * **SVG, not a charting library.** §13 names uPlot and that is probably right
+ * when charts get dense; a hundred points with gridlines and a hover readout
+ * needs none of it, and the dependency would arrive before its requirements do.
  */
 import { LitElement, css, html, nothing, svg } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { HistoryEntry } from '../core/api.js';
-import { downsample, pathFor, seriesFor, type Series } from '../core/history.js';
+import {
+  clockLabel,
+  downsample,
+  nearest,
+  niceScale,
+  seriesFor,
+  type Point,
+  type Series,
+} from '../core/history.js';
 import { registerWidget } from './registry.js';
 
 export type HistoryFetch = (
   deviceId: string,
   opts: { from: Date; to: Date; limit: number },
 ) => Promise<HistoryEntry[]>;
+
+/** Room for the axis labels, in px: the value column and the clock row. */
+const PAD = { l: 36, r: 8, t: 10, b: 16 };
 
 @customElement('hc-history-chart')
 export class HcHistoryChart extends LitElement {
@@ -62,26 +79,51 @@ export class HcHistoryChart extends LitElement {
       font-weight: 600;
     }
     svg {
-      /* flex:1 with min-height:0, not height:100%. An SVG with a viewBox has
-         an intrinsic aspect ratio, and height:100% had nothing definite to
-         resolve against — so the svg took 680 / 2.5 = 272px inside a 116px
-         placement and drew its line across three other widgets. Measured in a
-         browser, not guessed. */
       flex: 1;
       min-height: 0;
       width: 100%;
       display: block;
-      /* Clip to the box. A bare chart has no border to hide behind, so an
-         overflowing line lands on whatever is next to it. */
       overflow: hidden;
+      touch-action: none;
     }
-    path {
+    .grid {
+      stroke: var(--hc-stroke-hairline, #262d38);
+      stroke-width: 1;
+    }
+    .axis {
+      fill: var(--hc-ink-muted, #8b95a4);
+      font-size: 10px;
+      font-variant-numeric: tabular-nums;
+      font-family: var(--hc-font-body, system-ui, sans-serif);
+    }
+    .line {
       fill: none;
       stroke: var(--hc-metric-reading, #7cc4ff);
       stroke-width: 1.5;
       stroke-linejoin: round;
       stroke-linecap: round;
-      vector-effect: non-scaling-stroke;
+    }
+    .dot {
+      fill: var(--hc-metric-reading, #7cc4ff);
+    }
+    .hit {
+      stroke: var(--hc-ink-muted, #8b95a4);
+      stroke-width: 1;
+    }
+    .mark {
+      fill: var(--hc-ink, #e9edf2);
+    }
+    /* A halo in the page's own ground, so the readout stays legible wherever
+       the line happens to be; paint-order puts the stroke behind the fill. */
+    .readout {
+      fill: var(--hc-ink, #e9edf2);
+      stroke: var(--hc-surface-ground, #0a0e13);
+      stroke-width: 3px;
+      paint-order: stroke fill;
+      font-size: 11px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      font-family: var(--hc-font-body, system-ui, sans-serif);
     }
     .note {
       color: var(--hc-ink-muted, #8b95a4);
@@ -91,19 +133,48 @@ export class HcHistoryChart extends LitElement {
   `;
 
   @property({ attribute: false }) config: Record<string, unknown> = {};
-  /** The host's history reader — the seam that becomes `ctx.history` (§5.9). */
   @property({ attribute: false }) onFetch: HistoryFetch | undefined;
 
   @state() private series: Series | undefined;
   @state() private note = '';
+  @state() private hover: Point | undefined;
+  /** The plot's own pixel size, so one user unit is one pixel. */
+  @state() private size = { w: 0, h: 0 };
+
+  /** What was last fetched, so a re-render does not re-fetch. */
+  private fetched = '';
+  private readonly ro = new ResizeObserver(() => this.measure());
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.ro.observe(this);
     void this.load();
   }
 
-  override willUpdate(changed: Map<string, unknown>): void {
-    if (changed.has('config') || changed.has('onFetch')) void this.load();
+  override disconnectedCallback(): void {
+    this.ro.disconnect();
+    super.disconnectedCallback();
+  }
+
+  override willUpdate(): void {
+    // Keyed on what actually determines the request. The page hands a fresh
+    // config object on every render, so comparing objects would re-fetch six
+    // hours of readings every time a light changed anywhere in the house.
+    void this.load();
+  }
+
+  override updated(): void {
+    // The svg only exists once there is a series to draw.
+    this.measure();
+  }
+
+  private measure(): void {
+    const el = this.renderRoot.querySelector('svg');
+    if (el === null) return;
+    const r = el.getBoundingClientRect();
+    const w = Math.round(r.width);
+    const h = Math.round(r.height);
+    if (w !== this.size.w || h !== this.size.h) this.size = { w, h };
   }
 
   private async load(): Promise<void> {
@@ -117,13 +188,14 @@ export class HcHistoryChart extends LitElement {
 
     const hours =
       typeof this.config['timeframe_hours'] === 'number' ? this.config['timeframe_hours'] : 6;
+    const want = `${deviceId}/${attribute}/${hours}`;
+    if (want === this.fetched) return;
+    this.fetched = want;
+
     const to = new Date();
     const from = new Date(to.getTime() - hours * 3600_000);
 
     try {
-      // The cap is per row, not per point, and the rows are every attribute
-      // interleaved — so ask for the maximum and expect a fraction of it to be
-      // the one wanted (§5.9).
       const rows = await this.onFetch(deviceId, { from, to, limit: 1000 });
       const found = seriesFor(rows, attribute);
       if (found === undefined) {
@@ -134,10 +206,10 @@ export class HcHistoryChart extends LitElement {
       this.note = '';
       this.series = { ...found, points: downsample(found.points, 240) };
     } catch {
-      // A chart that cannot reach history says so rather than drawing a flat
-      // line, which would be a claim about the house.
       this.note = 'History unavailable.';
       this.series = undefined;
+      // Let a later render try again rather than sticking on the failure.
+      this.fetched = '';
     }
   }
 
@@ -146,19 +218,9 @@ export class HcHistoryChart extends LitElement {
     const attribute = typeof this.config['attribute'] === 'string' ? this.config['attribute'] : '';
     const s = this.series;
 
-    // `bare` means the composition already provides the chrome. On the real
-    // house page the band around this chart carries "INSIDE", the unit and the
-    // current reading as their own elements, so drawing a header here puts the
-    // attribute name and the value on the page twice.
     return html`<div class="chart" ?data-boxed=${!bare} part="chart">
       ${bare ? nothing : this.head(attribute, s)}
-      ${
-        s === undefined
-          ? html`<div class="note" part="note">${this.note}</div>`
-          : html`<svg viewBox="0 0 100 40" preserveAspectRatio="none" part="plot">
-              ${svg`<path d=${pathFor(s, 100, 40)} />`}
-            </svg>`
-      }
+      ${s === undefined ? html`<div class="note" part="note">${this.note}</div>` : this.plot(s)}
     </div>`;
   }
 
@@ -168,15 +230,98 @@ export class HcHistoryChart extends LitElement {
       ${
         s !== undefined
           ? html`<span class="now" part="value"
-              >${round(s.points[s.points.length - 1]?.value)}</span
+              >${trim(s.points[s.points.length - 1]?.value)}</span
             >`
           : nothing
       }
     </div>`;
   }
+
+  private plot(s: Series) {
+    const { w, h } = this.size;
+    // First paint: the element has not been measured yet, so there is no
+    // geometry to draw in. The ResizeObserver brings it back a frame later.
+    const empty = w < PAD.l + PAD.r + 20 || h < PAD.t + PAD.b + 20;
+
+    const left = PAD.l;
+    const top = PAD.t;
+    const width = Math.max(1, w - PAD.l - PAD.r);
+    const height = Math.max(1, h - PAD.t - PAD.b);
+
+    const scale = niceScale(s.min, s.max);
+    const t0 = s.points[0]!.at;
+    const t1 = s.points[s.points.length - 1]!.at;
+    const span = t1 - t0 || 1;
+
+    const x = (at: number) => left + ((at - t0) / span) * width;
+    const y = (v: number) => top + height - ((v - scale.lo) / (scale.hi - scale.lo)) * height;
+
+    const d = s.points
+      .map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.at).toFixed(1)},${y(p.value).toFixed(1)}`)
+      .join(' ');
+    // Dots only where they would not merge into the line anyway: a point every
+    // four pixels is a thick line, not a set of readings.
+    const dots = width / s.points.length >= 8 ? s.points : [];
+    const hover = this.hover;
+
+    return html`<svg
+      viewBox="0 0 ${w} ${h}"
+      part="plot"
+      @pointermove=${(e: PointerEvent) => this.track(e, s, t0, span)}
+      @pointerleave=${() => {
+        this.hover = undefined;
+      }}
+    >
+      ${
+        empty
+          ? nothing
+          : svg`
+        ${scale.lines.map(
+          (v) => svg`
+            <line class="grid" x1=${left} y1=${y(v)} x2=${left + width} y2=${y(v)} />
+            <text class="axis" x=${left - 6} y=${y(v) + 3.5} text-anchor="end">${trim(v)}</text>`,
+        )}
+        <text class="axis" x=${left} y=${h - 4} text-anchor="start">${clockLabel(t0, span)}</text>
+        <text class="axis" x=${left + width} y=${h - 4} text-anchor="end">
+          ${clockLabel(t1, span)}
+        </text>
+        <path class="line" d=${d} />
+        ${dots.map((p) => svg`<circle class="dot" cx=${x(p.at)} cy=${y(p.value)} r="2" />`)}
+        ${
+          hover === undefined
+            ? nothing
+            : svg`
+            <line class="hit" x1=${x(hover.at)} y1=${top} x2=${x(hover.at)} y2=${top + height} />
+            <circle class="mark" cx=${x(hover.at)} cy=${y(hover.value)} r="3" />
+            <text
+              class="readout"
+              x=${x(hover.at) + (x(hover.at) > left + width / 2 ? -8 : 8)}
+              y=${top + 9}
+              text-anchor=${x(hover.at) > left + width / 2 ? 'end' : 'start'}
+            >${trim(hover.value)} · ${clockLabel(hover.at, span)}</text>`
+        }
+      `
+      }
+    </svg>`;
+  }
+
+  /**
+   * The point under the pointer.
+   *
+   * By time rather than by pixel distance: the nearest sample to where the
+   * finger is horizontally is the one somebody means, even when the line has
+   * climbed away from it vertically.
+   */
+  private track(e: PointerEvent, s: Series, t0: number, span: number): void {
+    const box = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
+    const width = Math.max(1, box.width - PAD.l - PAD.r);
+    const at = t0 + ((e.clientX - box.left - PAD.l) / width) * span;
+    this.hover = nearest(s.points, at);
+  }
 }
 
-const round = (v: number | undefined): string =>
+/** A reading without trailing zeros: 72, not 72.0. */
+const trim = (v: number | undefined): string =>
   v === undefined ? '' : String(Math.round(v * 10) / 10);
 
 registerWidget('history_chart', 'hc-history-chart');

@@ -140,3 +140,73 @@ export function pathFor(series: Series, width: number, height: number, pad = 2):
     })
     .join(' ');
 }
+
+/**
+ * A rounded scale for an axis: a low, a high, and the lines between.
+ *
+ * **Not min..max.** A sensor swinging 71.4 to 77.4 fills the whole plot when
+ * the axis is exactly its range, and every wobble reads as a cliff. Rounding
+ * out to a sensible step tells the truth about the size of the swing — the same
+ * data on a 70–80 axis is visibly a six-degree oscillation rather than chaos.
+ *
+ * The step is chosen from the 1/2/5 ladder, which is what produces labels a
+ * person reads without decoding.
+ */
+export function niceScale(
+  min: number,
+  max: number,
+  targetLines = 4,
+): {
+  lo: number;
+  hi: number;
+  step: number;
+  lines: number[];
+} {
+  // A flat series still needs a scale, and one with no height cannot be drawn.
+  if (!(max > min)) {
+    const pad = Math.abs(max) > 1 ? Math.abs(max) * 0.05 : 1;
+    min = max - pad;
+    max = max + pad;
+  }
+
+  const raw = (max - min) / Math.max(1, targetLines);
+  const magnitude = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 5, 10].map((m) => m * magnitude).find((s) => s >= raw) ?? 10 * magnitude;
+
+  const lo = Math.floor(min / step) * step;
+  const hi = Math.ceil(max / step) * step;
+
+  const lines: number[] = [];
+  // Accumulate by index rather than by adding `step` repeatedly: floating point
+  // drift otherwise puts a gridline at 72.99999999.
+  for (let i = 0; lo + i * step <= hi + step / 1000; i++) lines.push(lo + i * step);
+
+  return { lo, hi, step, lines };
+}
+
+/** A time, as short as it can be and still unambiguous over the window. */
+export function clockLabel(at: number, spanMs: number): string {
+  const d = new Date(at);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  // Over a day or more the hour alone is not enough to place a point.
+  if (spanMs > 36 * 3600_000) {
+    return `${d.getDate()}/${d.getMonth() + 1}`;
+  }
+  return `${hh}:${mm}`;
+}
+
+/** The point nearest an x position, for a hover readout. */
+export function nearest(points: readonly Point[], t: number): Point | undefined {
+  if (points.length === 0) return undefined;
+  let best = points[0]!;
+  let bestGap = Math.abs(best.at - t);
+  for (const p of points) {
+    const gap = Math.abs(p.at - t);
+    if (gap < bestGap) {
+      best = p;
+      bestGap = gap;
+    }
+  }
+  return best;
+}

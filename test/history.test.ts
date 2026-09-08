@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { HistoryEntry } from '../src/core/api.js';
-import { attributesIn, downsample, pathFor, seriesFor, type Point } from '../src/core/history.js';
+import {
+  attributesIn,
+  clockLabel,
+  downsample,
+  nearest,
+  niceScale,
+  pathFor,
+  seriesFor,
+  type Point,
+} from '../src/core/history.js';
 
 /** Rows as the API sends them: every attribute interleaved, newest first. */
 const rows: HistoryEntry[] = [
@@ -99,5 +108,70 @@ describe('pathFor', () => {
 
   it('is empty for an empty series rather than throwing', () => {
     expect(pathFor({ attribute: 't', points: [], min: 0, max: 0 }, 100, 40)).toBe('');
+  });
+});
+
+describe('niceScale', () => {
+  it('rounds out so a small swing does not fill the plot', () => {
+    // The reference house's indoor sensor swings 71.4 to 77.4 within minutes.
+    // Drawn against its own min and max that fills the box and reads as chaos;
+    // on a rounded axis it is visibly a six-degree oscillation.
+    const s = niceScale(71.4, 77.4);
+    expect(s.lo).toBeLessThanOrEqual(71.4);
+    expect(s.hi).toBeGreaterThanOrEqual(77.4);
+    expect(s.lines.length).toBeGreaterThanOrEqual(3);
+    // Labels a person reads without decoding.
+    for (const v of s.lines) expect(Number.isInteger(v * 10)).toBe(true);
+  });
+
+  it('gives a flat series a scale rather than dividing by zero', () => {
+    const s = niceScale(20, 20);
+    expect(s.hi).toBeGreaterThan(s.lo);
+    expect(s.lines.length).toBeGreaterThan(0);
+  });
+
+  it('picks a step off the 1/2/5 ladder at any magnitude', () => {
+    for (const [lo, hi] of [
+      [0, 1],
+      [0, 100],
+      [0, 3000],
+      [-5, 5],
+    ] as const) {
+      const s = niceScale(lo, hi);
+      const mantissa = s.step / 10 ** Math.floor(Math.log10(s.step));
+      expect([1, 2, 5, 10]).toContain(Math.round(mantissa));
+    }
+  });
+
+  it('does not drift the gridlines with floating point', () => {
+    // Adding `step` repeatedly puts a line at 72.99999999 and a label to match.
+    for (const v of niceScale(71.4, 77.4).lines) {
+      expect(Math.abs(v - Math.round(v * 100) / 100)).toBeLessThan(1e-9);
+    }
+  });
+});
+
+describe('clockLabel', () => {
+  it('is a time over hours and a date over days', () => {
+    const at = Date.parse('2026-09-08T17:05:00Z');
+    expect(clockLabel(at, 6 * 3600_000)).toMatch(/^\d{2}:\d{2}$/);
+    expect(clockLabel(at, 7 * 24 * 3600_000)).toMatch(/^\d+\/\d+$/);
+  });
+});
+
+describe('nearest', () => {
+  it('finds the sample a pointer means', () => {
+    const points: Point[] = [
+      { at: 0, value: 1 },
+      { at: 100, value: 2 },
+      { at: 200, value: 3 },
+    ];
+    expect(nearest(points, 90)?.value).toBe(2);
+    expect(nearest(points, 199)?.value).toBe(3);
+    expect(nearest(points, -50)?.value).toBe(1);
+  });
+
+  it('has nothing to point at in an empty series', () => {
+    expect(nearest([], 5)).toBeUndefined();
   });
 });

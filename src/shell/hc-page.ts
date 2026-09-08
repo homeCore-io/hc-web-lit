@@ -110,6 +110,13 @@ export class HcPage extends LitElement {
 
   @state() private tick = 0;
 
+  /**
+   * Widget elements, by id, so a re-render updates them instead of
+   * replacing them. Cleared when the document changes, because ids are only
+   * unique within one.
+   */
+  private readonly elements = new Map<string, HTMLElement>();
+
   private unsubscribe: (() => void) | undefined;
 
   override connectedCallback(): void {
@@ -126,6 +133,12 @@ export class HcPage extends LitElement {
     super.disconnectedCallback();
     this.unsubscribe?.();
     this.unsubscribe = undefined;
+  }
+
+  override willUpdate(changed: Map<string, unknown>): void {
+    // Widget ids are unique within a document, not across documents, so a
+    // cached element from the last page would be handed the wrong config.
+    if (changed.has('doc')) this.elements.clear();
   }
 
   override render() {
@@ -231,7 +244,15 @@ export class HcPage extends LitElement {
     const tag = tagFor(w.type);
     if (tag === undefined) return html`<div class="unknown" part="unknown">${w.type}</div>`;
 
-    const el = document.createElement(tag) as HTMLElement & {
+    // **Reused, not recreated.** `draw` runs on every render, and the page
+    // re-renders on every device change — 184 devices streaming means many a
+    // second. Creating a fresh element each time destroys and rebuilds every
+    // widget, which reads as a flicker and, for the history chart, re-fetches
+    // six hours of readings each time. Keyed by the widget's own id, which is
+    // exactly what it is for.
+    const key = `${w.id}:${tag}`;
+    const cached = this.elements.get(key);
+    const el = (cached ?? document.createElement(tag)) as HTMLElement & {
       config?: Record<string, unknown>;
       device?: unknown;
       devices?: readonly unknown[];
@@ -242,6 +263,7 @@ export class HcPage extends LitElement {
       onPick?: (deviceId: string) => void;
       onOpenRoom?: (room: string, page: string | undefined) => void;
     };
+    this.elements.set(key, el);
     // Live values in, at the seam — `bindings` and `count` (§14.1). A widget
     // gets a config with the house already in it and never learns the
     // mechanism, exactly as it never learns what `@room` means.
