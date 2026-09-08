@@ -20,6 +20,7 @@ import { DeviceStore } from '../core/store.js';
 import type { CommandRequest } from '../widgets/hc-controls.js';
 import './hc-page.js';
 import '../widgets/hc-device-grid.js';
+import '../widgets/hc-event-feed.js';
 import '../widgets/hc-device-list.js';
 import '../widgets/hc-history-chart.js';
 import '../widgets/hc-line.js';
@@ -217,6 +218,12 @@ export class HcApp extends LitElement {
     return this.api.deviceHistory(deviceId, opts);
   };
 
+  /** The event log, read through the host like history (§19.4). */
+  private readonly events = async (opts: { limit: number }) => {
+    if (this.api === undefined) return [];
+    return this.api.listEvents(opts);
+  };
+
   override render() {
     return html`
       <header>
@@ -282,6 +289,7 @@ export class HcApp extends LitElement {
         .store=${this.store}
         .onCommand=${this.command}
         .onFetch=${this.history}
+        .onEvents=${this.events}
         breakpoint=${this.breakpoint}
       ></hc-page>
     `;

@@ -18,7 +18,7 @@ import type { DeviceState } from '../core/device.js';
 import { effectiveName } from '../core/present.js';
 import { selectDevices, type SelectionContext } from '../core/selection.js';
 import type { CommandRequest } from './hc-controls.js';
-import { registerWidget } from './registry.js';
+import { registerForDevice, registerWidget } from './registry.js';
 
 /** Transport, in the order a person expects it, with a label for each. */
 const TRANSPORT: { id: string; label: string }[] = [
@@ -156,6 +156,10 @@ export class HcMedia extends LitElement {
 }
 
 registerWidget('media_player', 'hc-media');
+
+// A set of devices that happen to be media players gets this rather than a
+// generic card with 27 generated controls on it (§7.2).
+registerForDevice('media_player', 'hc-media-card');
 
 declare global {
   interface HTMLElementTagNameMap {

@@ -24,6 +24,7 @@ import { Engine, type GridItem } from '../core/layout.js';
 import type { SelectionContext } from '../core/selection.js';
 import type { DeviceStore } from '../core/store.js';
 import type { CommandRequest } from '../widgets/hc-controls.js';
+import type { EventFetch } from '../widgets/hc-event-feed.js';
 import type { HistoryFetch } from '../widgets/hc-history-chart.js';
 import { tagFor } from '../widgets/registry.js';
 
@@ -102,6 +103,9 @@ export class HcPage extends LitElement {
 
   /** The host's history reader — §5.9's `ctx.history`, passed rather than held. */
   @property({ attribute: false }) onFetch: HistoryFetch | undefined;
+
+  /** The host's log reader — same seam as history. */
+  @property({ attribute: false }) onEvents: EventFetch | undefined;
 
   @state() private tick = 0;
 
@@ -228,6 +232,7 @@ export class HcPage extends LitElement {
       context?: SelectionContext;
       onCommand?: (r: CommandRequest) => void;
       onFetch?: HistoryFetch;
+      onEvents?: EventFetch;
     };
     // Live values in, at the seam — `bindings` and `count` (§14.1). A widget
     // gets a config with the house already in it and never learns the
@@ -247,6 +252,7 @@ export class HcPage extends LitElement {
     el.context = this.context;
     if (this.onCommand !== undefined) el.onCommand = this.onCommand;
     if (this.onFetch !== undefined) el.onFetch = this.onFetch;
+    if (this.onEvents !== undefined) el.onEvents = this.onEvents;
     el.style.height = '100%';
     return el;
   }

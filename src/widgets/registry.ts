@@ -25,3 +25,27 @@ export function tagFor(type: string): WidgetTag | undefined {
 export function knownTypes(): string[] {
   return [...registry.keys()].sort();
 }
+
+/**
+ * Which element draws a *device*, when a type-specific one exists.
+ *
+ * §7.2's division, made operational: the schema offers everything a device can
+ * do and a type-specific widget curates. A Roku declares 34 actions and four
+ * writable attributes, so a generic card built from the schema draws 27
+ * controls — every one of them real, and the card unusable. `hc-media` picks
+ * transport and volume; a set of media players should get that rather than the
+ * generic card, without the set widget knowing what a media player is.
+ *
+ * Keyed on the presentation facet (`ui_hint` first, then `device_type`), so a
+ * switch hinted as a light is drawn as a light.
+ */
+const forDevice = new Map<string, WidgetTag>();
+
+export function registerForDevice(facet: string, tag: WidgetTag): void {
+  forDevice.set(facet, tag);
+}
+
+/** The tag for this device, or `undefined` to use the generic card. */
+export function tagForDevice(d: { ui_hint?: string; device_type?: string }): WidgetTag | undefined {
+  return forDevice.get(d.ui_hint ?? d.device_type ?? '');
+}

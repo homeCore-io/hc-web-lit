@@ -18,7 +18,8 @@ import { selectDevices } from '../core/selection.js';
 import type { CommandRequest } from './hc-controls.js';
 import './hc-device-card.js';
 import './hc-device-pill.js';
-import { registerWidget } from './registry.js';
+import './hc-media-card.js';
+import { registerWidget, tagForDevice } from './registry.js';
 
 @customElement('hc-device-grid')
 export class HcDeviceGrid extends LitElement {
@@ -100,16 +101,36 @@ export class HcDeviceGrid extends LitElement {
 
     return html`
       <div class=${this.mode === 'list' ? 'list' : 'grid'} part="set">
-        ${chosen.map(
-          (d) =>
-            html`<hc-device-card
-              .device=${d}
-              .onCommand=${this.onCommand}
-              ?compact=${this.mode === 'list'}
-            ></hc-device-card>`,
-        )}
+        ${chosen.map((d) => this.cardFor(d))}
       </div>
     `;
+  }
+
+  /**
+   * The element that draws one device in a set.
+   *
+   * A type-specific widget when the registry has one, because the generic card
+   * builds its controls from the schema and a Roku's schema is 34 actions long
+   * — every control real, and the card unusable (§7.2). Otherwise the generic
+   * card, which is the base case rather than a fallback: three devices in the
+   * reference house declare no type at all.
+   */
+  private cardFor(d: DeviceState) {
+    const tag = tagForDevice(d);
+    if (tag === undefined) {
+      return html`<hc-device-card
+        .device=${d}
+        .onCommand=${this.onCommand}
+        ?compact=${this.mode === 'list'}
+      ></hc-device-card>`;
+    }
+    const el = document.createElement(tag) as HTMLElement & {
+      device?: DeviceState;
+      onCommand?: (r: CommandRequest) => void;
+    };
+    el.device = d;
+    if (this.onCommand !== undefined) el.onCommand = this.onCommand;
+    return el;
   }
 }
 

@@ -177,6 +177,14 @@ export interface HistoryEntry {
   value: unknown;
 }
 
+/** One entry in the event log — `LogEntry` in the OpenAPI schema. */
+export interface LogEntry {
+  seq: number;
+  event_type: string;
+  device_id?: string;
+  event?: Record<string, unknown>;
+}
+
 export interface ApiOptions {
   /** e.g. `http://10.0.10.150:8080/api/v1` — no trailing slash. */
   baseUrl: string;
@@ -297,6 +305,25 @@ export class HcApi {
       'GET',
       `/devices/${encodeURIComponent(deviceId)}/history?${q.toString()}`,
     );
+  }
+
+  /**
+   * `listEvents` — the recent log, newest first.
+   *
+   * The last 1,000 events, and much of that is not news: 158 of 300
+   * consecutive entries on the reference house are one Roku republishing a
+   * `device_info` field that contains a clock. `core/activity.ts` takes the
+   * noise out; the server-side `type` filter narrows it further when a widget
+   * knows which kinds it wants.
+   */
+  async listEvents(
+    opts: { limit?: number; type?: string[]; deviceId?: string } = {},
+  ): Promise<LogEntry[]> {
+    const q = new URLSearchParams();
+    q.set('limit', String(opts.limit ?? 200));
+    if (opts.type !== undefined && opts.type.length > 0) q.set('type', opts.type.join(','));
+    if (opts.deviceId !== undefined) q.set('device_id', opts.deviceId);
+    return this.request<LogEntry[]>('GET', `/events?${q.toString()}`);
   }
 
   /** `listDashboards`. */
