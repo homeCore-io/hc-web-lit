@@ -75,6 +75,28 @@ function format(value: unknown, decimals: number | undefined): string {
 }
 
 /**
+ * Config keys that hold words for a person rather than a selection.
+ *
+ * An inclusion list, because the same token means different things either side
+ * of it: `scene_row` carries `room: "@room"` and means the slug, `text` carries
+ * `"@room"` and means the name. Guessing from the value would get one of them
+ * wrong.
+ */
+const DISPLAY_KEYS = ['text', 'heading', 'label', 'caption'] as const;
+
+/**
+ * A room as a person says it.
+ *
+ * Core's own area names are what the rest of this client shows — `family room`,
+ * lower case, spaces — and the slug is that name normalised. Turning the
+ * underscores back is enough; inventing a capitalisation here would be this
+ * client having an opinion about the house's own words.
+ */
+function roomLabel(room: string | undefined): string {
+  return room === undefined ? '' : room.replace(/_/g, ' ');
+}
+
+/**
  * A widget's config with its live values filled in.
  *
  * Returns the same object when nothing applies, so an unchanged widget is not
@@ -87,9 +109,16 @@ export function resolveConfig(
 ): Record<string, unknown> {
   const bindings = Array.isArray(config['bindings']) ? (config['bindings'] as Binding[]) : [];
   const count = typeof config['count'] === 'string' ? config['count'] : undefined;
-  if (bindings.length === 0 && count === undefined) return config;
+  const named = DISPLAY_KEYS.filter((k) => typeof config[k] === 'string' && config[k] === '@room');
+  if (bindings.length === 0 && count === undefined && named.length === 0) return config;
 
   const out = { ...config };
+
+  // `@room` reads two ways and both are right. In `area_name` it selects, and
+  // stays the slug the selection matches on. In a *display* field it is the
+  // room's name — a breadcrumb saying `@room` is the token showing through,
+  // which is what the room page did until this existed.
+  for (const key of named) out[key] = roomLabel(ctx.room);
 
   if (count !== undefined) {
     const n = houseTally(count, devices);

@@ -27,6 +27,7 @@ import type { CommandRequest } from '../widgets/hc-controls.js';
 import type { EventFetch } from '../widgets/hc-event-feed.js';
 import type { HistoryFetch } from '../widgets/hc-history-chart.js';
 import { tagFor } from '../widgets/registry.js';
+import type { TapAction } from '../core/actions.js';
 import { mountWidget, type MountTarget } from './mount.js';
 
 @customElement('hc-page')
@@ -92,6 +93,9 @@ export class HcPage extends LitElement {
   @property({ attribute: false }) onCommand: ((r: CommandRequest) => void) | undefined;
   /** Hold to inspect, everywhere — the non-actuating path (§5.10). */
   @property({ attribute: false }) onDetails: ((deviceId: string) => void) | undefined;
+
+  /** What a placement's `on_tap` does. Dispatched by the host (§5.10). */
+  @property({ attribute: false }) onAction: ((a: TapAction) => void) | undefined;
 
   /**
    * What `@room` and `@picked` mean on this page.
@@ -284,6 +288,7 @@ export class HcPage extends LitElement {
         ...(this.onFetch !== undefined ? { onFetch: this.onFetch } : {}),
         ...(this.onEvents !== undefined ? { onEvents: this.onEvents } : {}),
         ...(this.onDetails !== undefined ? { onDetails: this.onDetails } : {}),
+        ...(this.onAction !== undefined ? { onAction: this.onAction } : {}),
       },
     );
     el.style.height = '100%';

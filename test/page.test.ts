@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { tapIn } from '../src/core/actions.js';
+import { resolveConfig } from '../src/core/bindings.js';
 import type { DashboardDefinition } from '../src/core/dashboard.js';
 import { DeviceStore } from '../src/core/store.js';
 import '../src/shell/hc-page.js';
@@ -125,5 +127,47 @@ describe('hc-page', () => {
     document.body.append(el);
     await el.updateComplete;
     expect(el.shadowRoot?.textContent).toContain('No dashboard');
+  });
+});
+
+describe('a placement that carries an action', () => {
+  it('reads the one verb the reference house stores', () => {
+    expect(tapIn({ on_tap: { do: 'page', target: 'dashboard_house_designed' } })).toEqual({
+      do: 'page',
+      target: 'dashboard_house_designed',
+    });
+  });
+
+  it('has no opinion about a widget that declares none', () => {
+    // Not "a tap that does nothing" — a tap that is the widget's own business.
+    expect(tapIn({ text: 'HOUSE' })).toBeUndefined();
+    expect(tapIn(undefined)).toBeUndefined();
+  });
+
+  it('ignores a malformed one rather than inventing a verb', () => {
+    expect(tapIn({ on_tap: {} })).toBeUndefined();
+    expect(tapIn({ on_tap: 'page' })).toBeUndefined();
+    expect(tapIn({ on_tap: { do: '' } })).toBeUndefined();
+  });
+});
+
+describe('@room reads two ways', () => {
+  it('is the room name where a person reads it', () => {
+    // The breadcrumb said "@room" until this existed.
+    expect(resolveConfig({ text: '@room' }, [], { room: 'family_room' })['text']).toBe(
+      'family room',
+    );
+    expect(resolveConfig({ heading: '@room' }, [], { room: 'office' })['heading']).toBe('office');
+  });
+
+  it('is left alone where it selects', () => {
+    // `area_name` matches on the slug; substituting the name would break it.
+    const out = resolveConfig({ area_name: '@room', room: '@room' }, [], { room: 'family_room' });
+    expect(out['area_name']).toBe('@room');
+    expect(out['room']).toBe('@room');
+  });
+
+  it('is empty rather than the token when no room is chosen', () => {
+    expect(resolveConfig({ text: '@room' }, [], {})['text']).toBe('');
   });
 });

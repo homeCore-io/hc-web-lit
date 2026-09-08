@@ -14,6 +14,7 @@ import type { EventFetch } from '../widgets/hc-event-feed.js';
 import { resolveConfig } from '../core/bindings.js';
 import type { SelectionContext } from '../core/selection.js';
 import type { DeviceStore } from '../core/store.js';
+import { tapIn, type TapAction } from '../core/actions.js';
 
 /** A widget instance as the document stores it. */
 export interface WidgetSpec {
@@ -33,6 +34,8 @@ export interface MountEnv {
   onOpenRoom?: (room: string, page: string | undefined) => void;
   /** The non-actuating way to inspect a device (§5.10) — hold, everywhere. */
   onDetails?: (deviceId: string) => void;
+  /** What a placement's `on_tap` does. The host dispatches it (§5.10). */
+  onAction?: (a: TapAction) => void;
 }
 
 /** The properties a mounted widget may be given. */
@@ -48,6 +51,9 @@ export type MountTarget = HTMLElement & {
   onOpenRoom?: (room: string, page: string | undefined) => void;
   onDetails?: (deviceId: string) => void;
 };
+
+/** Elements already carrying a tap, so a re-render does not stack listeners. */
+const tapped = new WeakSet<HTMLElement>();
 
 export function mountWidget(el: MountTarget, w: WidgetSpec, env: MountEnv): void {
   // Live values in, at the seam — `bindings` and `count` (§14.1). A widget gets
@@ -73,4 +79,40 @@ export function mountWidget(el: MountTarget, w: WidgetSpec, env: MountEnv): void
   if (env.onCommand !== undefined) el.onCommand = env.onCommand;
   if (env.onFetch !== undefined) el.onFetch = env.onFetch;
   if (env.onEvents !== undefined) el.onEvents = env.onEvents;
+
+  attachTap(el, w, env);
+}
+
+/**
+ * A placement's own tap, dispatched by the host.
+ *
+ * Here rather than in each widget, for the reason §5.10 gives: the widget does
+ * not decide what its tap means, so it cannot decline the safety policy, and a
+ * decorative text a third party wrote gets `on_tap` without knowing the word.
+ *
+ * The listener is attached once. `mountWidget` runs on every render — 184
+ * devices on a stream is continuous — and a listener per render is a page that
+ * navigates four times for one press.
+ */
+function attachTap(el: MountTarget, w: WidgetSpec, env: MountEnv): void {
+  const action = tapIn(w.config);
+  if (action === undefined || env.onAction === undefined) return;
+  // Read at press time, so a re-render with a different target is honoured.
+  const run = (): void => {
+    const current = tapIn(w.config);
+    if (current !== undefined) env.onAction?.(current);
+  };
+  if (tapped.has(el)) return;
+  tapped.add(el);
+
+  // It behaves like a button, so it says so and answers a keyboard.
+  el.style.cursor = 'pointer';
+  el.setAttribute('role', 'button');
+  el.setAttribute('tabindex', '0');
+  el.addEventListener('click', run);
+  el.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    run();
+  });
 }

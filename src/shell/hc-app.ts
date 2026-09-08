@@ -19,6 +19,7 @@ import { check, checkAction } from '../core/safety.js';
 import { DeviceStore } from '../core/store.js';
 import type { CommandRequest } from '../widgets/hc-controls.js';
 import { effectiveName } from '../core/present.js';
+import type { TapAction } from '../core/actions.js';
 import type { MountEnv } from './mount.js';
 import './hc-page.js';
 import './hc-overlay.js';
@@ -170,6 +171,7 @@ export class HcApp extends LitElement {
       onFetch: this.history,
       onEvents: this.events,
       onDetails: this.details,
+      onAction: this.runAction,
     };
   }
 
@@ -301,6 +303,28 @@ export class HcApp extends LitElement {
    * hands over a room and the page it belongs on, and nothing about either is
    * hardcoded here.
    */
+  /**
+   * What a placement's `on_tap` does (§5.10).
+   *
+   * `page` is the only verb the reference house stores, and it is the
+   * breadcrumb going home — which also means leaving the room, or the house
+   * page would draw itself with a room still selected under it.
+   */
+  private readonly runAction = (a: TapAction): void => {
+    if (a.do === 'page') {
+      const target = this.docs.find((d) => d.id === a.target);
+      if (target === undefined) {
+        this.overlay?.toast(`No dashboard called ${a.target ?? '(nothing)'}.`, { kind: 'warn' });
+        return;
+      }
+      this.current = target;
+      this.roomContext = {};
+      return;
+    }
+    // A tap that does nothing is worse than a tap that says why (§5.10).
+    this.overlay?.toast(`Nothing here knows how to ${a.do}.`, { kind: 'warn' });
+  };
+
   private openRoom(e: CustomEvent<{ room: string; page?: string }>): void {
     const { room, page } = e.detail;
     const target = page !== undefined ? this.docs.find((d) => d.id === page) : undefined;
@@ -321,7 +345,16 @@ export class HcApp extends LitElement {
                     this.current = this.docs.find((d) => d.id === id);
                   }}
                 >
-                  ${this.docs.map((d) => html`<option value=${d.id}>${d.name}</option>`)}
+                  ${this.docs.map(
+                    (d) =>
+                      // Marked from `current`, because the page is no longer
+                      // only ever changed here: a breadcrumb's `on_tap` moves
+                      // it too, and a picker that says otherwise is lying about
+                      // what is on the screen.
+                      html`<option value=${d.id} ?selected=${d.id === this.current?.id}>
+                        ${d.name}
+                      </option>`,
+                  )}
                 </select>
                 <select
                   @change=${(e: Event) => {
@@ -385,6 +418,7 @@ export class HcApp extends LitElement {
         .onFetch=${this.history}
         .onEvents=${this.events}
         .onDetails=${this.details}
+        .onAction=${this.runAction}
         .context=${this.roomContext}
         breakpoint=${this.breakpoint}
       ></hc-page>
