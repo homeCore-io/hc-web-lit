@@ -50,6 +50,8 @@ export const OWN_PARTS = [
   'text',
   'shape',
   'rule',
+  'image',
+  'spacer',
   // Sets of devices.
   'pill',
   'trailing',

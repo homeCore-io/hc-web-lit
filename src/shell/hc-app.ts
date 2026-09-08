@@ -43,6 +43,12 @@ import '../widgets/hc-text.js';
 import '../widgets/hc-worth-knowing.js';
 import '../widgets/hc-device-card.js';
 import '../widgets/hc-device-details.js';
+import '../widgets/hc-device-reading.js';
+import '../widgets/hc-divider.js';
+import '../widgets/hc-heading.js';
+import '../widgets/hc-icon.js';
+import '../widgets/hc-image.js';
+import '../widgets/hc-spacer.js';
 
 type Phase = 'idle' | 'connecting' | 'ready' | 'failed';
 
