@@ -78,7 +78,12 @@ export class HcWorthKnowing extends LitElement {
       height: 1.75rem;
       border-radius: var(--hc-radius-xs, 6px);
       background: color-mix(in srgb, var(--tone) 16%, var(--hc-surface-sunken, #0d1116));
-      color: var(--tone);
+      /* Toward the skin's own ink, which helps in both directions: on a dark
+         skin the ink is light and the mark lifts off its tile, on a light one
+         the ink is dark and the mark deepens. Measured at 3.01 against a lit
+         tile in soft_home before this, which passes and is one rounding away
+         from not. */
+      color: color-mix(in srgb, var(--tone) 85%, var(--hc-ink, #e9edf2));
     }
     .mark svg {
       width: 1rem;

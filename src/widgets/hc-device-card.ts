@@ -87,7 +87,12 @@ export class HcDeviceCard extends LitElement {
         var(--tile-colour) var(--tile-tint),
         var(--hc-surface-sunken, #0d1116)
       );
-      color: var(--tile-colour);
+      /* Toward the skin's own ink, which helps in both directions: on a dark
+         skin the ink is light and the mark lifts off its tile, on a light one
+         the ink is dark and the mark deepens. Measured at 3.01 against a lit
+         tile in soft_home before this, which passes and is one rounding away
+         from not. */
+      color: color-mix(in srgb, var(--tile-colour) 85%, var(--hc-ink, #e9edf2));
       transition:
         background var(--hc-motion-base, 220ms) var(--hc-motion-curve, ease-out),
         color var(--hc-motion-base, 220ms) var(--hc-motion-curve, ease-out);
