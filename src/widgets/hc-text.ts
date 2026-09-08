@@ -8,6 +8,7 @@
  */
 import { LitElement, css, html } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
+import { roleColor } from '../design/roles.js';
 import { registerWidget } from './registry.js';
 
 @customElement('hc-text')
@@ -38,25 +39,10 @@ export class HcText extends LitElement {
     return typeof v === 'string' ? v : fallback;
   }
 
-  /**
-   * Core's ink names, mapped onto the token vocabulary (§15).
-   *
-   * The document says `foreground` / `muted` / `accent` / `hairline` — a
-   * skin-independent name for a role, which is the whole point: the same page
-   * reads correctly in all four skins because it never names a colour. An
-   * unknown name falls through to the body ink rather than to a literal.
-   */
-  private static readonly INK: Record<string, string> = {
-    foreground: '--hc-ink',
-    muted: '--hc-ink-muted',
-    accent: '--hc-accent-primary',
-    hairline: '--hc-stroke-hairline',
-  };
-
   override render() {
     const scale = this.num('scale', 100) / 100;
     const tracking = this.num('tracking', 0) / 1000;
-    const ink = HcText.INK[this.str('ink', 'foreground')] ?? '--hc-ink';
+    const ink = roleColor(this.str('ink', 'foreground'));
 
     return html`
       <p
@@ -64,7 +50,7 @@ export class HcText extends LitElement {
                font-weight:${this.str('weight', 'normal')};
                letter-spacing:${tracking}em;
                text-align:${this.str('align', 'left')};
-               color:var(${ink}, var(--hc-ink, #E9EDF2))"
+               color:${ink}"
       >
         ${this.str('text', '')}
       </p>

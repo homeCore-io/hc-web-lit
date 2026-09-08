@@ -19,6 +19,8 @@ import { check, checkAction } from '../core/safety.js';
 import { DeviceStore } from '../core/store.js';
 import type { CommandRequest } from '../widgets/hc-controls.js';
 import './hc-page.js';
+import '../widgets/hc-line.js';
+import '../widgets/hc-shape.js';
 import '../widgets/hc-text.js';
 import '../widgets/hc-device-card.js';
 
