@@ -92,6 +92,13 @@ for an applied scene, a `state` string for transports (`"running"`,
 `"playing"`), or, last, a non-zero level. `entity.state == "on"` has no
 translation.
 
+**And on-ness has three answers, not two.** A lamp is on or off; a temperature
+sensor is neither, and neither is a Pico remote, a keypad, a bridge, or a scene
+that fires and forgets. About forty devices in the reference house publish
+nothing the derivation can read, so `isOn` returns `undefined` for them — and a
+card shows nothing rather than "Off", because "Off" beside a thermometer is an
+invented fact, not a cautious one.
+
 **And the level is not one number either.** A Hue bulb publishes `brightness`
 (0–255) *and* `brightness_pct` (0–100) for the same lamp; half the lights in the
 reference house publish only the percentage. A fan publishes `speed_pct`. Any
@@ -1116,7 +1123,7 @@ domain vocabulary has a name for.
 
 | Widget | Covers | Control row |
 |---|---|---|
-| `hc-scene` | `scene` ×58 | activate; shows `active` where the plugin reports it |
+| `hc-scene` | `scene` ×58 | activate; **two kinds** — see below |
 | `hc-switch` | `switch` ×28 | toggle |
 | `hc-light` | `light` ×16 | brightness (§1.1 — a percentage, whichever way the plugin publishes it), color temp, color |
 | `hc-sensor` | `temperature_sensor` ×14, `water_sensor` ×7, `rain_sensor`, `lightning_sensor`, `vibration_sensor`, `weather_station` | reading + unit + battery; no controls |
@@ -1145,6 +1152,24 @@ device type:
 
 Containers (built on P4): `hc-stack`, `hc-grid`, `hc-swipe`, `hc-tabs`,
 `hc-accordion`.
+
+**Scenes are two things wearing one `device_type`.** Activating a scene is a
+device *action*, not an attribute write — a scene is a thing you do, and it does
+not meaningfully turn off. But how one reports itself afterwards differs, and a
+client has to handle both:
+
+- **Stateful.** Lutron marks some scenes on, so a client can tell when they are
+  off and show which is currently applied. Hue publishes `active` for the same
+  purpose. Ask `isOn`.
+- **Momentary.** No feedback at all — 45 of the 58 scenes in the reference
+  house. Offer to activate it and show **no state**, because there is none.
+  Drawing these as "Off" is the failure mode: it says a thing about the house
+  that nobody knows.
+
+The distinction is `present.sceneKind()`, and it is derived from what the device
+publishes rather than declared — which is a stopgap. The plugins should say so
+in their schemas (`activate` as a `DeviceAction`, `active` with `states` where
+it exists); until they do, this reads the shape.
 
 **Buttons are a worked example of why P10 matters.** `available_buttons` arrives
 in two shapes from two plugins — Caséta sends `[2, 3, 4, 5, 6]`, Lutron sends

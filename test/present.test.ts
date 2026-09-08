@@ -6,6 +6,7 @@ import {
   isOn,
   levelOf,
   normalizeAreaName,
+  sceneKind,
 } from '../src/core/present.js';
 
 function device(over: Partial<DeviceState> = {}): DeviceState {
@@ -47,8 +48,9 @@ describe('isOn', () => {
     expect(isOn(device({ attributes: { brightness: 0 } }))).toBe(false);
   });
 
-  it('is false when the device publishes nothing it understands', () => {
-    expect(isOn(device({ attributes: { temperature: 21.5 } }))).toBe(false);
+  it('has no answer when the device publishes nothing it understands', () => {
+    // Not false. A thermometer is not off, and saying so is an invented fact.
+    expect(isOn(device({ attributes: { temperature: 21.5 } }))).toBeUndefined();
   });
 });
 
@@ -120,19 +122,33 @@ describe('shapes a real deployment publishes', () => {
     expect(levelOf(off)).toBeCloseTo(43.1);
   });
 
-  it('reads an applied scene', () => {
-    // Hue scenes publish `active`; Lutron scenes publish `on`; some publish
-    // neither and are simply never on.
+  it('reads an applied scene, and knows when a scene cannot say', () => {
+    // Lutron marks some scenes on so you can tell when they are off; Hue
+    // publishes `active`. Others report nothing at all — activating one of
+    // those is a thing you do, with no state afterwards.
     expect(isOn(device({ attributes: { active: true, area: 'office' } }))).toBe(true);
     expect(isOn(device({ attributes: { active: false, area: 'office' } }))).toBe(false);
-    expect(isOn(device({ attributes: {} }))).toBe(false);
+    expect(isOn(device({ attributes: { on: true } }))).toBe(true);
+    expect(isOn(device({ attributes: {} }))).toBeUndefined();
   });
 
-  it('handles the sensor types that have no on-ness at all', () => {
-    // A temperature sensor is not "on". Fourteen devices in the reference house
-    // publish nothing isOn can read, and false is the right answer for them.
-    expect(isOn(device({ attributes: { temperature: 21.5, temperature_unit: 'C' } }))).toBe(false);
-    expect(isOn(device({ attributes: { battery: 100 } }))).toBe(false);
+  it('tells a stateful scene from a momentary one', () => {
+    expect(sceneKind(device({ attributes: { active: false } }))).toBe('stateful');
+    expect(sceneKind(device({ attributes: { on: true } }))).toBe('stateful');
+    // 45 of 58 scenes in the reference house are this kind.
+    expect(sceneKind(device({ attributes: {} }))).toBe('momentary');
+    expect(sceneKind(device({ attributes: { area: 'office', name: 'Relax' } }))).toBe('momentary');
+  });
+
+  it('gives no answer for the device types that have no on-ness at all', () => {
+    // A temperature sensor is not "on" and it is not off either. About forty
+    // devices in the reference house are in this position — sensors, Pico
+    // remotes, keypads, bridges — and `undefined` is what lets a card show
+    // nothing rather than assert something.
+    expect(
+      isOn(device({ attributes: { temperature: 21.5, temperature_unit: 'C' } })),
+    ).toBeUndefined();
+    expect(isOn(device({ attributes: { battery: 100 } }))).toBeUndefined();
   });
 
   it('reads a lock and a contact sensor the way the plugins publish them', () => {

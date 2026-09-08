@@ -76,13 +76,22 @@ export function levelOf(d: DeviceState): number | undefined {
 }
 
 /**
- * Whether the device reads as "doing something" right now.
+ * Whether the device reads as "doing something" right now — or `undefined`
+ * when the question does not apply to it.
  *
- * The order matters. A lock is inverted — an *unlocked* lock is the state worth
- * noticing — and occupancy is the same kind of signal as motion, so an occupied
- * room reads active rather than sitting quietly next to an "occupied" subtitle.
+ * **Three answers, not two.** A lamp is on or off. A temperature sensor is
+ * neither, and neither is a Pico remote, a keypad, a bridge, or a scene that
+ * fires and forgets. About forty devices in the reference house publish nothing
+ * this can read, and answering `false` for them is not caution — it is a claim,
+ * rendered as "Off" beside a thermometer.
+ *
+ * The order matters. A lock is inverted, because an *unlocked* lock is the
+ * state worth noticing. Occupancy is the same kind of signal as motion, so an
+ * occupied room reads active rather than sitting quietly next to an "occupied"
+ * subtitle. The level is consulted last, because a dimmer that is off still
+ * reports the brightness it will return to.
  */
-export function isOn(d: DeviceState): boolean {
+export function isOn(d: DeviceState): boolean | undefined {
   const a = d.attributes;
 
   if (typeof a['on'] === 'boolean') return a['on'];
@@ -93,8 +102,8 @@ export function isOn(d: DeviceState): boolean {
   const occupancy = a['occupancy'] ?? a['occupied'];
   if (typeof occupancy === 'boolean') return occupancy;
 
-  // A scene that is currently applied. Hue publishes this; Lutron scenes carry
-  // `on`, and some carry nothing at all and are simply never "on".
+  // A scene that is currently applied. Some plugins report this and some
+  // cannot — see `sceneKind`.
   if (typeof a['active'] === 'boolean') return a['active'];
 
   const s = a['state'];
@@ -104,5 +113,26 @@ export function isOn(d: DeviceState): boolean {
   }
 
   const level = levelOf(d);
-  return level !== undefined && level > 0;
+  if (level !== undefined) return level > 0;
+
+  // Nothing the device publishes answers the question, so neither does this.
+  return undefined;
+}
+
+/**
+ * How a scene reports itself, which is not one thing.
+ *
+ * Lutron marks some scenes on, so a client can tell when they are off and show
+ * which is currently applied. Others give no feedback at all: activating them
+ * is a thing you do, and there is no status afterwards. Rendering the second
+ * kind as "Off" invents a fact.
+ *
+ * - `stateful` — reports `on` or `active`; ask `isOn`.
+ * - `momentary` — reports nothing; offer to activate it and show no state.
+ */
+export function sceneKind(d: DeviceState): 'stateful' | 'momentary' {
+  const a = d.attributes;
+  return typeof a['on'] === 'boolean' || typeof a['active'] === 'boolean'
+    ? 'stateful'
+    : 'momentary';
 }

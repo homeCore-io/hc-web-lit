@@ -16,7 +16,7 @@ import { LitElement, css, html, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { controlsFor } from '../core/controls.js';
 import type { DeviceState } from '../core/device.js';
-import { effectiveName, isOn, levelOf } from '../core/present.js';
+import { effectiveName, isOn, levelOf, sceneKind } from '../core/present.js';
 import type { CommandRequest } from './hc-controls.js';
 import './hc-controls.js';
 import { registerWidget } from './registry.js';
@@ -97,7 +97,12 @@ export class HcDeviceCard extends LitElement {
     return html`
       <div class="card ${d.available ? '' : 'offline'}" part="card">
         <div class="head">
-          <span class="dot" part="indicator" ?data-on=${on}></span>
+          <span
+            class="dot"
+            part="indicator"
+            ?data-on=${on === true}
+            ?data-unknown=${on === undefined}
+          ></span>
           <div class="body">
             <div class="name" part="name">${effectiveName(d)}</div>
             <div class="sub" part="state">${this.subtitle(d, on, level)}</div>
@@ -124,11 +129,21 @@ export class HcDeviceCard extends LitElement {
    * still reports the brightness it will return to, and printing "43%" beside a
    * dark lamp is a lie the data invites (§1.1).
    */
-  private subtitle(d: DeviceState, on: boolean, level: number | undefined) {
+  private subtitle(d: DeviceState, on: boolean | undefined, level: number | undefined) {
     if (!d.available) return 'Offline';
+
+    // A scene that gives no feedback has no state to show. Lutron marks some
+    // scenes on so you can tell when they are off; others report nothing, and
+    // activating one of those is a thing you do rather than a state you read.
+    if (d.device_type === 'scene' && sceneKind(d) === 'momentary') return nothing;
+
+    // Not "Off" — a thermometer is not off. Roughly forty devices in a real
+    // house publish nothing `isOn` can read, and saying "Off" about them is an
+    // invented fact rather than a cautious one.
+    if (on === undefined) return nothing;
+
     if (on && level !== undefined) return `On · ${Math.round(level)}%`;
-    if (on) return 'On';
-    return d.device_type === undefined ? nothing : 'Off';
+    return on ? 'On' : 'Off';
   }
 }
 
