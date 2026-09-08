@@ -240,6 +240,7 @@ export class HcPage extends LitElement {
       onFetch?: HistoryFetch;
       onEvents?: EventFetch;
       onPick?: (deviceId: string) => void;
+      onOpenRoom?: (room: string, page: string | undefined) => void;
     };
     // Live values in, at the seam — `bindings` and `count` (§14.1). A widget
     // gets a config with the house already in it and never learns the
@@ -261,6 +262,12 @@ export class HcPage extends LitElement {
     // other element resolving that token is resolving it here (§14.1).
     el.onPick = (deviceId: string) => {
       this.context = { ...this.context, picked: deviceId };
+    };
+    // Tapping a room opens it: the same document, a different `@room`.
+    el.onOpenRoom = (room, page) => {
+      this.dispatchEvent(
+        new CustomEvent('hc-open-room', { detail: { room, page }, bubbles: true, composed: true }),
+      );
     };
     el.context = this.context;
     if (this.onCommand !== undefined) el.onCommand = this.onCommand;

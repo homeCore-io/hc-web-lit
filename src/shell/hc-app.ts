@@ -25,6 +25,7 @@ import '../widgets/hc-device-list.js';
 import '../widgets/hc-history-chart.js';
 import '../widgets/hc-colour-wheel.js';
 import '../widgets/hc-line.js';
+import '../widgets/hc-room-field.js';
 import '../widgets/hc-slider.js';
 import '../widgets/hc-warmth.js';
 import '../widgets/hc-media.js';
@@ -113,6 +114,8 @@ export class HcApp extends LitElement {
   @state() private current: DashboardDefinition | undefined;
   @state() private breakpoint: DashboardBreakpoint = 'desktop';
   @state() private skin = defaultSkin;
+  /** What `@room` means on the page being shown (§14.1). */
+  @state() private roomContext: { room?: string; picked?: string } = {};
 
   private readonly store = new DeviceStore();
   private api: HcApi | undefined;
@@ -230,6 +233,20 @@ export class HcApp extends LitElement {
     return this.api.listEvents(opts);
   };
 
+  /**
+   * Open a room: the room document, with `@room` set to the one tapped.
+   *
+   * One page for every room, which is what the token exists for — the field
+   * hands over a room and the page it belongs on, and nothing about either is
+   * hardcoded here.
+   */
+  private openRoom(e: CustomEvent<{ room: string; page?: string }>): void {
+    const { room, page } = e.detail;
+    const target = page !== undefined ? this.docs.find((d) => d.id === page) : undefined;
+    if (target !== undefined) this.current = target;
+    this.roomContext = { room };
+  }
+
   override render() {
     return html`
       <header>
@@ -300,11 +317,13 @@ export class HcApp extends LitElement {
     return html`
       ${this.message !== '' ? html`<div class="note error">${this.message}</div>` : nothing}
       <hc-page
+        @hc-open-room=${(e: CustomEvent<{ room: string; page?: string }>) => this.openRoom(e)}
         .doc=${this.current}
         .store=${this.store}
         .onCommand=${this.command}
         .onFetch=${this.history}
         .onEvents=${this.events}
+        .context=${this.roomContext}
         breakpoint=${this.breakpoint}
       ></hc-page>
     `;
