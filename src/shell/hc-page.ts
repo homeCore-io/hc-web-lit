@@ -22,6 +22,7 @@ import { resolveConfig } from '../core/bindings.js';
 import { gridItems, layoutFor } from '../core/dashboard.js';
 import { Engine, type GridItem } from '../core/layout.js';
 import type { SelectionContext } from '../core/selection.js';
+import { isVisible } from '../core/visibility.js';
 import type { DeviceStore } from '../core/store.js';
 import type { CommandRequest } from '../widgets/hc-controls.js';
 import type { EventFetch } from '../widgets/hc-event-feed.js';
@@ -222,6 +223,11 @@ export class HcPage extends LitElement {
    * widget family is still being written.
    */
   private draw(w: DashboardWidget) {
+    // An element the document says to hide is not drawn at all, rather than
+    // drawn and hidden: the SETS controls exist to aim at a light you have
+    // touched, and before you touch one there is nothing to aim at (§14.1).
+    if (!isVisible(w.config ?? {}, this.store?.list() ?? [], this.context)) return nothing;
+
     const tag = tagFor(w.type);
     if (tag === undefined) return html`<div class="unknown" part="unknown">${w.type}</div>`;
 
@@ -233,6 +239,7 @@ export class HcPage extends LitElement {
       onCommand?: (r: CommandRequest) => void;
       onFetch?: HistoryFetch;
       onEvents?: EventFetch;
+      onPick?: (deviceId: string) => void;
     };
     // Live values in, at the seam — `bindings` and `count` (§14.1). A widget
     // gets a config with the house already in it and never learns the
@@ -249,6 +256,12 @@ export class HcPage extends LitElement {
       );
     }
     if (this.store !== undefined) el.devices = this.store.list();
+    // A pills row aims the SETS controls beside it (`picks: true`), so it needs
+    // a way to say what was touched. The page owns `@picked` because every
+    // other element resolving that token is resolving it here (§14.1).
+    el.onPick = (deviceId: string) => {
+      this.context = { ...this.context, picked: deviceId };
+    };
     el.context = this.context;
     if (this.onCommand !== undefined) el.onCommand = this.onCommand;
     if (this.onFetch !== undefined) el.onFetch = this.onFetch;
