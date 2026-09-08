@@ -50,10 +50,12 @@ export function isVisible(
   const id = resolveToken(token ?? '@picked', ctx);
   if (id === undefined || id === '') return false;
 
-  if (needs.length === 0) return true;
-
+  // A control aimed at a device the house no longer has is aimed at nothing,
+  // whether or not it also asked for particular attributes.
   const device = devices.find((d) => d.device_id === id);
   if (device === undefined) return false;
+
+  if (needs.length === 0) return true;
 
   // Reported *or* declared: a bulb that can take a colour temperature but has
   // not published one yet still has the control. The schema is the better
