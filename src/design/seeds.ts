@@ -116,7 +116,11 @@ export const builtInSeeds: Record<string, SkinSeeds> = {
     overlay: '#1A202A',
     ink: '#E9EDF2',
     inkMuted: '#8B95A4',
-    accent: '#7CC4FF',
+    // The brand, which CLAUDE.md §15 names outright: #FFB661. It was the cool
+    // blue here, so every element a document paints with `ink: "accent"` — the
+    // lights-on count, the breakdown bars — came out blue, where the working
+    // client draws them amber from the same document.
+    accent: '#FFB661',
     onAccent: '#06131F',
     active: '#FFB661',
     inactive: '#2A313B',

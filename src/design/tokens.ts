@@ -213,7 +213,13 @@ export function deriveMetrics(s: SkinSeeds): MetricTints {
     illuminance: '#FFD166',
     co2: s.success,
     power: s.active,
-    reading: s.accent,
+    // **Not the brand.** A reading is cool and the brand is warm, and they are
+    // two colours doing two jobs: the working client draws its chart line blue
+    // on the same page where the lights-on count and the breakdown bars are
+    // amber. Deriving this from `accent` made every skin monochrome — one hue
+    // for the brand, the readings, the charts and the bars — which is most of
+    // why a page drawn from a good document still looked generic.
+    reading: s.brightness === 'light' ? '#2C6E9B' : '#7CC4FF',
   };
 }
 

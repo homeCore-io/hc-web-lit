@@ -69,14 +69,23 @@ describe('the rules', () => {
     expect(deriveTokens(builtInSeeds['soft_home']!).surface.glassTint).toContain('0,0,0');
   });
 
-  it('derives three metric tints from the palette and fixes three', () => {
+  it('derives two metric tints from the palette and fixes four', () => {
     const s = builtInSeeds['midnight']!;
     const m = deriveMetrics(s);
     expect(m.co2).toBe(s.success);
     expect(m.power).toBe(s.active);
-    expect(m.reading).toBe(s.accent);
+    // A reading is not the brand. `reading` used to be `accent`, which made a
+    // page monochrome: one hue for the brand, the bars, the charts and the
+    // readings. The working client draws a blue chart line on the same page
+    // as an amber lights-on count, and they are two colours doing two jobs.
+    expect(m.reading).toBe('#7CC4FF');
+    expect(m.reading).not.toBe(s.accent);
     // Temperature is warm, humidity cool, light yellow — no accent implies them.
     expect(m.temperature).toBe('#FF8A5B');
+  });
+
+  it('keeps a reading legible on a light skin too', () => {
+    expect(deriveMetrics(builtInSeeds['soft_home']!).reading).toBe('#2C6E9B');
   });
 
   it('lets a skin override the rule where it wants to', () => {
@@ -184,9 +193,11 @@ describe('blue_hour', () => {
     expect(t.accent.active).toBe('#7CC4FF');
     expect(t.accent.primary).toBe('#FFB661');
 
+    // The brand is amber in both, which is the point: the two skins differ in
+    // what "this is doing something" looks like, not in whose house it is.
     const midnight = deriveTokens(builtInSeeds['midnight']!);
     expect(midnight.accent.active).toBe('#FFB661');
-    expect(midnight.accent.primary).toBe('#7CC4FF');
+    expect(midnight.accent.primary).toBe('#FFB661');
   });
 
   it('keeps the mockup s surfaces exactly', () => {
@@ -204,11 +215,15 @@ describe('blue_hour', () => {
     expect(vars['--hc-accent-primary']).toBe('#FFB661');
   });
 
-  it('takes power from the active colour, so a metric follows the swap too', () => {
+  it('takes power from the active colour, so a metric follows the swap', () => {
     // deriveMetrics maps power to `active`, which is the derivation earning
-    // its keep: the rule holds and the colour changes.
+    // its keep: the rule holds and the colour changes with the skin.
     const t = deriveTokens(builtInSeeds['blue_hour']!);
     expect(t.metric.power).toBe('#7CC4FF');
-    expect(t.metric.reading).toBe('#FFB661');
+    // A reading does not follow it. In a skin where blue means "on", a blue
+    // chart line would be claiming something; that is a tension worth naming
+    // rather than a rule to bend, and the alternative — amber readings on an
+    // amber-branded page — is the monochrome this change exists to undo.
+    expect(t.metric.reading).toBe('#7CC4FF');
   });
 });
