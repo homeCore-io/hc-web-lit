@@ -134,6 +134,57 @@ export const builtInSeeds: Record<string, SkinSeeds> = {
     motion: 'standard',
   },
 
+  /**
+   * The mockup's palette, with blue as the colour of *on*.
+   *
+   * Every shipped skin lights an active device amber and uses blue for chrome.
+   * This one swaps them: a lamp that is on glows the mockup's `--blue`
+   * (#7CC4FF), and the brand amber (#FFB661, §15) becomes the interactive
+   * colour. Same surfaces, same inks — the difference is entirely which of the
+   * two the eye reads as "this is doing something".
+   *
+   * Named for the twilight it looks like, and to sit beside `midnight`.
+   *
+   * **Why it is worth having as a skin rather than a tweak:** widgets already
+   * take both colours from tokens — a brightness track fills with
+   * `accent.active` and a warmth track with `accent.primary` — so this repaints
+   * every control, chip and indicator in the app without a single widget
+   * knowing it happened. That is the styling contract (§5.8) doing its job, and
+   * a skin is the cheapest possible test of it.
+   */
+  blue_hour: {
+    name: 'blue_hour',
+    brightness: 'dark',
+    ground: '#0B0E13',
+    raised: '#141922',
+    sunken: '#0D1116',
+    overlay: '#1A202A',
+    ink: '#E9EDF2',
+    inkMuted: '#8B95A4',
+    // The brand colour, doing brand work.
+    accent: '#FFB661',
+    onAccent: '#21160A',
+    // The colour of a light that is on.
+    active: '#7CC4FF',
+    inactive: '#2A313B',
+    success: '#6FD1A6',
+    warn: '#FFC978',
+    danger: '#FF7B72',
+    offline: '#AA737A',
+    hairline: '#262D38',
+    corners: [4, 8, 14, 22],
+    spaceUnit: 8,
+    typeScale: 1,
+    glowStrength: 1,
+    glowRadius: 34,
+    density: 'comfortable',
+    motion: 'standard',
+    // The focus ring stays blue rather than following the amber accent: it
+    // marks where the keyboard is, which is a different question from what the
+    // brand is, and blue is the one the eye is already tracking here.
+    focus: '#7CC4FF',
+  },
+
   ambient_glass: {
     name: 'ambient_glass',
     brightness: 'dark',

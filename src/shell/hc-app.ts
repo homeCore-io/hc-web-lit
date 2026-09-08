@@ -56,7 +56,10 @@ export class HcApp extends LitElement {
       font-size: 0.875rem;
     }
     .brand {
-      color: var(--hc-accent-active, #ffb661);
+      /* The brand colour, not the on colour. They are the same in four of
+         the five skins, which is exactly why this was wrong and invisible
+         until blue_hour swapped them. */
+      color: var(--hc-accent-primary, #ffb661);
       font-weight: 600;
       letter-spacing: 0.02em;
     }
@@ -241,6 +244,15 @@ export class HcApp extends LitElement {
                   }}
                 >
                   ${this.docs.map((d) => html`<option value=${d.id}>${d.name}</option>`)}
+                </select>
+                <select
+                  @change=${(e: Event) => {
+                    this.skin = (e.target as HTMLSelectElement).value;
+                  }}
+                >
+                  ${Object.keys(builtInSeeds).map(
+                    (n) => html`<option value=${n} ?selected=${n === this.skin}>${n}</option>`,
+                  )}
                 </select>
                 <select
                   .value=${this.breakpoint}

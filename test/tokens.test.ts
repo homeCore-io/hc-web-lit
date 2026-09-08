@@ -13,8 +13,8 @@ import {
 const skins = Object.keys(builtInSeeds);
 
 describe('the four built-in skins', () => {
-  it('is four of them', () => {
-    expect(skins).toEqual(['midnight', 'ambient_glass', 'control_room', 'soft_home']);
+  it('is the five that ship', () => {
+    expect(skins).toEqual(['midnight', 'blue_hour', 'ambient_glass', 'control_room', 'soft_home']);
   });
 
   for (const name of skins) {
@@ -172,5 +172,43 @@ describe('the names widgets actually use exist', () => {
     ];
 
     for (const name of used) expect(emitted).toContain(name);
+  });
+});
+
+describe('blue_hour', () => {
+  it('lights an active device blue and leaves the brand amber', () => {
+    // The whole point of the skin: every other one lights a device amber and
+    // uses blue for chrome. Swapping which of the two reads as "this is doing
+    // something" is a different house at a glance, from the same surfaces.
+    const t = deriveTokens(builtInSeeds['blue_hour']!);
+    expect(t.accent.active).toBe('#7CC4FF');
+    expect(t.accent.primary).toBe('#FFB661');
+
+    const midnight = deriveTokens(builtInSeeds['midnight']!);
+    expect(midnight.accent.active).toBe('#FFB661');
+    expect(midnight.accent.primary).toBe('#7CC4FF');
+  });
+
+  it('keeps the mockup s surfaces exactly', () => {
+    const t = deriveTokens(builtInSeeds['blue_hour']!);
+    expect(t.surface.base).toBe('#0B0E13');
+    expect(t.surface.raised).toBe('#141922');
+    expect(t.stroke.hairline).toBe('#262D38');
+  });
+
+  it('follows the accent through to what a widget actually paints', () => {
+    // A brightness track fills with accent.active and a warmth track with
+    // accent.primary, so this repaints every control without a widget knowing.
+    const vars = cssVariables(deriveTokens(builtInSeeds['blue_hour']!));
+    expect(vars['--hc-accent-active']).toBe('#7CC4FF');
+    expect(vars['--hc-accent-primary']).toBe('#FFB661');
+  });
+
+  it('takes power from the active colour, so a metric follows the swap too', () => {
+    // deriveMetrics maps power to `active`, which is the derivation earning
+    // its keep: the rule holds and the colour changes.
+    const t = deriveTokens(builtInSeeds['blue_hour']!);
+    expect(t.metric.power).toBe('#7CC4FF');
+    expect(t.metric.reading).toBe('#FFB661');
   });
 });
