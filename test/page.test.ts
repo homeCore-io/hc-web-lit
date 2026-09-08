@@ -5,6 +5,7 @@ import type { DashboardDefinition } from '../src/core/dashboard.js';
 import { DeviceStore } from '../src/core/store.js';
 import '../src/shell/hc-page.js';
 import '../src/widgets/hc-text.js';
+import { HcPage as HcPageClass } from '../src/shell/hc-page.js';
 import type { HcPage } from '../src/shell/hc-page.js';
 
 async function mount(doc: DashboardDefinition, breakpoint = 'desktop'): Promise<HcPage> {
@@ -217,5 +218,20 @@ describe('what a composed page does on a narrower screen', () => {
     await el.updateComplete;
     const frame = el.shadowRoot?.querySelector('.frame') as HTMLElement;
     expect(frame.style.transform).toBe('scale(0.5)');
+  });
+});
+
+describe('a widget larger than its placement', () => {
+  it('is clipped to the box the author drew', () => {
+    // Twelve device cards in a short rect escaped and drew over three
+    // neighbouring placements. A page that lets that happen has stopped being
+    // the arrangement somebody saved.
+    //
+    // Asserted against the rule rather than the computed style: jsdom does not
+    // apply adopted stylesheets, so `getComputedStyle` here would report the
+    // empty string whether the rule existed or not — a test that cannot fail.
+    const css = [HcPageClass.styles].flat().map(String).join('\n');
+    expect(css).toMatch(/\.placed\s*\{[^}]*overflow:\s*hidden/);
+    expect(css).toMatch(/\.cell\s*\{[^}]*overflow:\s*hidden/);
   });
 });

@@ -15,6 +15,7 @@
  * than guessing, but the *names* remain a convention.
  */
 import type { DeviceState } from './device.js';
+import { parseQuery, runQuery } from './query.js';
 import { effectiveArea, effectiveName, isOn, normalizeAreaName } from './present.js';
 
 export interface SelectionConfig {
@@ -146,12 +147,17 @@ export function selectDevices(
       break;
     }
 
-    case 'query':
-      // P2 (§5.3) is not built. An unimplemented mode selects nothing rather
-      // than falling back to everything — a widget showing the whole house
-      // because a query was ignored is worse than one showing nothing.
-      chosen = [];
+    case 'query': {
+      // P2 (§5.3). Core stores `query` as a string and defines no syntax for
+      // it, so an unparseable one selects nothing: a widget showing the wrong
+      // devices confidently is worse than one showing none and being visibly
+      // empty. An *empty* string is not that case — it is no predicate at all,
+      // which the working client settles by rendering "showing 12 of 119" for
+      // exactly this config.
+      const q = parseQuery(config.query);
+      chosen = q === undefined ? [] : runQuery(q, devices).devices;
       break;
+    }
 
     default:
       chosen = [];

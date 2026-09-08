@@ -133,12 +133,18 @@ export class HcDeviceGrid extends LitElement {
   private cardFor(d: DeviceState) {
     const tag = tagForDevice(d);
     if (tag === undefined) {
+      // Compact in a set, always. A set's job is to show *many* devices, so a
+      // row is the right unit: twelve generated control rows in one placement
+      // put a colour wheel and three sliders in a 212px box, and the working
+      // client's equivalent grid is tiles with a name, a state and a toggle.
+      // The full card, with its generated controls, is for a placement that
+      // names one device.
       return html`<hc-device-card
         .device=${d}
         .onCommand=${this.onCommand}
         .onDetails=${this.onDetails}
         .room=${this.context.room}
-        ?compact=${this.mode === 'list'}
+        compact
       ></hc-device-card>`;
     }
     const cached = this.cells.get(d.device_id);

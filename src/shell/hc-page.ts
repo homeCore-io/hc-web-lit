@@ -54,9 +54,17 @@ export class HcPage extends LitElement {
       position: absolute;
       box-sizing: border-box;
       min-width: 0;
+      /* A placement is the size the author drew, and a widget does not get to
+         disagree. A device set of twelve full cards in a short box escaped its
+         rect and drew over three neighbours — which is not a widget that needs
+         more room, it is a page that has stopped being the arrangement
+         somebody saved. Widgets that scroll (a set, a feed) do it inside
+         this. */
+      overflow: hidden;
     }
     .cell {
       min-width: 0;
+      overflow: hidden;
     }
     .unknown {
       display: grid;

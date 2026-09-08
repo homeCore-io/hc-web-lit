@@ -36,6 +36,18 @@ export class HcDeviceCard extends LitElement {
       display: grid;
       align-content: start;
       gap: 0.75rem;
+      /* A card is a surface. It had none outside compact mode, so a set of
+         them drew transparently over each other and over whatever was behind
+         — which looked like widgets escaping their placements and was really
+         a card with no background. §5.5's chrome rule is about a *nested*
+         widget; the outermost one carries its own. */
+      box-sizing: border-box;
+      padding: var(--hc-density-card-padding, 14px);
+      border-radius: var(--hc-radius-md, 14px);
+      border: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
+      background: var(--hc-surface-raised, #141922);
+      color: var(--hc-ink, #e9edf2);
+      font-family: var(--hc-font-body, system-ui, sans-serif);
       /* How lit the tile is, from the device's own level: a lamp at 10% reads
          dimmer than one at 100%, which is the style carrying real information
          rather than decorating over it.
