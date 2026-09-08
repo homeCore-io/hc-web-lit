@@ -64,7 +64,11 @@ const MARKS: Record<string, string> = {
     '<circle cx="12" cy="12" r="2"/>' +
     '<path d="M8.6 8.6a4.8 4.8 0 0 0 0 6.8M15.4 8.6a4.8 4.8 0 0 1 0 6.8"/>' +
     '<path d="M5.8 5.8a8.8 8.8 0 0 0 0 12.4M18.2 5.8a8.8 8.8 0 0 1 0 12.4"/>',
-  battery: '<rect x="2.5" y="8" width="17" height="8" rx="2.5"/><path d="M21.5 11v2"/>',
+  // One bar, because the only thing this client draws a battery for is a
+  // battery that is low.
+  battery:
+    '<rect x="2.5" y="8" width="17" height="8" rx="2.5"/><path d="M21.5 11v2"/>' +
+    '<path d="M5.5 10.5v3"/>',
   device: '<rect x="4" y="4" width="16" height="16" rx="4.5"/><circle cx="12" cy="12" r="2.5"/>',
 };
 

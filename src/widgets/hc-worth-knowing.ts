@@ -15,8 +15,25 @@ import { noticesFor, type Notice } from '../core/attention.js';
 import type { DeviceState } from '../core/device.js';
 import { registerWidget } from './registry.js';
 import { humanise } from '../core/text.js';
+import { icon } from '../design/icons.js';
 
 /** How loud each kind is. Water is a flood; a battery is a chore. */
+/**
+ * What each kind of notice looks like.
+ *
+ * The tone below says how much it matters; this says what it is. Both are
+ * presentation, and both belong beside each other rather than one in a widget
+ * and one in a stylesheet.
+ */
+const MARK: Record<string, string> = {
+  batteries: 'battery',
+  water: 'water',
+  locks: 'lock',
+  offline: 'hub',
+  faults: 'lightning',
+  open: 'door',
+};
+
 const TONE: Record<string, string> = {
   water: '--hc-accent-danger',
   faults: '--hc-accent-danger',
@@ -43,18 +60,34 @@ export class HcWorthKnowing extends LitElement {
     }
     li {
       display: flex;
-      align-items: baseline;
-      gap: 0.5rem;
+      align-items: center;
+      gap: 0.625rem;
       min-width: 0;
+      padding: calc(var(--hc-space-unit, 8px) * 0.375) 0;
       font-family: var(--hc-font-body, system-ui, sans-serif);
       color: var(--hc-ink, #e9edf2);
     }
+    /* The same tile the device rows use, in the notice's own tone. A list of
+       identical dots says four things need attention; a lock, a lock and two
+       batteries says which four, before a word is read. */
     .mark {
       flex: none;
-      width: 0.375rem;
-      height: 0.375rem;
-      border-radius: 50%;
-      align-self: center;
+      display: grid;
+      place-items: center;
+      width: 1.75rem;
+      height: 1.75rem;
+      border-radius: var(--hc-radius-xs, 6px);
+      background: color-mix(in srgb, var(--tone) 16%, var(--hc-surface-sunken, #0d1116));
+      color: var(--tone);
+    }
+    .mark svg {
+      width: 1rem;
+      height: 1rem;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.7;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
     .name {
       min-width: 0;
@@ -102,7 +135,9 @@ export class HcWorthKnowing extends LitElement {
     const showRoom = this.config['area_name'] === undefined && n.area !== undefined;
 
     return html`<li part="notice">
-      <span class="mark" style="background:var(${TONE[n.kind] ?? '--hc-ink-muted'})"></span>
+      <span class="mark" part="mark" style="--tone:var(${TONE[n.kind] ?? '--hc-ink-muted'})">
+        ${icon(MARK[n.kind] ?? 'device')}
+      </span>
       <span class="name">${n.name}</span>
       ${showRoom ? html`<span class="room">${humanise(n.area ?? '')}</span>` : ''}
       <span class="detail">${n.detail}</span>
