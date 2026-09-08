@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DashboardDefinition, DashboardWidget } from '../src/core/dashboard.js';
-import { gridItems, layoutFor } from '../src/core/dashboard.js';
+import { gridItems, layoutFor, layoutToDraw } from '../src/core/dashboard.js';
 import { Engine } from '../src/core/layout.js';
 
 /**
@@ -100,5 +100,45 @@ describe('gridItems', () => {
   it('handles a layout with no placements at all', () => {
     const layout = { breakpoint: 'tv' as const, columns: 12, row_height: 120, gap: 12 };
     expect(gridItems(layout, [])).toEqual([]);
+  });
+});
+
+describe('a size the document does not carry', () => {
+  const doc = (breakpoints: string[]): DashboardDefinition =>
+    ({
+      id: 'd',
+      name: 'D',
+      widgets: [],
+      layouts: breakpoints.map((b) => ({
+        breakpoint: b,
+        columns: 12,
+        row_height: 100,
+        gap: 12,
+        placements: [],
+      })),
+    }) as unknown as DashboardDefinition;
+
+  it('borrows the nearest layout rather than showing nothing', () => {
+    // The reference house's pages are desktop-only. A phone rendered the
+    // sentence "this page has no mobile layout", which is true and useless.
+    const got = layoutToDraw(doc(['desktop']), 'mobile');
+    expect(got?.layout.breakpoint).toBe('desktop');
+    expect(got?.borrowedFrom).toBe('desktop');
+  });
+
+  it('prefers the nearest size, outward', () => {
+    expect(layoutToDraw(doc(['tablet', 'tv']), 'mobile')?.layout.breakpoint).toBe('tablet');
+    expect(layoutToDraw(doc(['mobile', 'tv']), 'desktop')?.layout.breakpoint).toBe('tv');
+    expect(layoutToDraw(doc(['mobile']), 'tv')?.layout.breakpoint).toBe('mobile');
+  });
+
+  it('says nothing was borrowed when the size is actually there', () => {
+    const got = layoutToDraw(doc(['mobile', 'desktop']), 'mobile');
+    expect(got?.layout.breakpoint).toBe('mobile');
+    expect(got?.borrowedFrom).toBeUndefined();
+  });
+
+  it('has nothing to draw only when there is nothing at all', () => {
+    expect(layoutToDraw(doc([]), 'mobile')).toBeUndefined();
   });
 });

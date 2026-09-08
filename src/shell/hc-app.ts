@@ -59,10 +59,17 @@ export class HcApp extends LitElement {
     header {
       display: flex;
       align-items: center;
-      gap: 1rem;
+      /* Wrapping, because a phone is a stated target and this row does not fit
+         one: at 390px the status was pushed 180px past the right edge and took
+         the whole document with it, so every page scrolled sideways. */
+      flex-wrap: wrap;
+      gap: 0.5rem 1rem;
       padding: 0.75rem 1rem;
       border-bottom: 1px solid var(--hc-stroke-hairline, #262d38);
       font-size: 0.875rem;
+    }
+    header select {
+      max-width: 40vw;
     }
     .brand {
       /* The brand colour, not the on colour. They are the same in four of
@@ -81,6 +88,10 @@ export class HcApp extends LitElement {
       gap: 0.375rem;
       opacity: 0.75;
       font-variant-numeric: tabular-nums;
+      /* Never the reason the row is too wide: it is the least important thing
+         in the header and the first that should give. */
+      min-width: 0;
+      white-space: nowrap;
     }
     .dot {
       width: 0.5rem;

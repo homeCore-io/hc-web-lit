@@ -93,6 +93,55 @@ export function layoutFor(
 }
 
 /**
+ * Where to look when a document has no layout for this size.
+ *
+ * Nearest first, and outward: a phone would rather show the tablet's
+ * arrangement than the television's. Every breakpoint can reach every other,
+ * because the alternative is a blank page.
+ */
+const NEARBY: Record<DashboardBreakpoint, DashboardBreakpoint[]> = {
+  mobile: ['tablet', 'desktop', 'tv'],
+  tablet: ['desktop', 'mobile', 'tv'],
+  desktop: ['tablet', 'tv', 'mobile'],
+  tv: ['desktop', 'tablet', 'mobile'],
+};
+
+/**
+ * The layout to draw, which is not always the one asked for.
+ *
+ * Three of the four dashboards in the reference house carry a `desktop` layout
+ * and nothing else, and `layoutFor` answering honestly meant a phone rendered
+ * **nothing at all** — 36 widgets in the document, zero on the screen. A blank
+ * page is not a truthful account of a document that has plenty to show.
+ *
+ * So a missing breakpoint borrows the nearest one that exists. That is a
+ * display decision and it is never written back: §5.7's `derived_from` records
+ * a layout an *editor* computed and stored, and this client has no authoring
+ * surface — inventing placements and saving them is how a client loses
+ * somebody's arrangement.
+ *
+ * A composed layout borrowed onto a smaller screen keeps its frame and lets the
+ * page scroll, which is what the document itself asks for: the reference house
+ * page carries `frame.fit: "scroll"` on a 1240×1248 canvas. Scaling it down to
+ * a phone's width would render 3px type — legible to nobody, and not what
+ * "scroll" says.
+ */
+export function layoutToDraw(
+  doc: DashboardDefinition,
+  breakpoint: DashboardBreakpoint,
+): { layout: DashboardLayout; borrowedFrom?: DashboardBreakpoint } | undefined {
+  const exact = layoutFor(doc, breakpoint);
+  if (exact !== undefined) return { layout: exact };
+
+  for (const near of NEARBY[breakpoint] ?? []) {
+    const found = layoutFor(doc, near);
+    if (found !== undefined) return { layout: found, borrowedFrom: near };
+  }
+  // Not "no layout for this size" — no layout at all.
+  return undefined;
+}
+
+/**
  * Placements as the layout engine wants them.
  *
  * **`floating` is not on the placement.** Lifting an element above the grid is

@@ -110,16 +110,27 @@ describe('hc-page', () => {
     expect(unknown?.textContent?.trim()).toBe('sankey_from_the_future');
   });
 
-  it('says so when the document has no layout for this breakpoint', async () => {
+  it('borrows a layout rather than reporting the size it lacks', async () => {
+    // It used to say "this page has no tv layout", which is true and leaves a
+    // screen with nothing on it. Every dashboard in the reference house is
+    // desktop-only, so that sentence was the whole product on a phone.
     const el = await mount(
       base({
-        layouts: [{ breakpoint: 'desktop', columns: 12, row_height: 120, gap: 12 }],
-        widgets: [],
+        layouts: [
+          {
+            breakpoint: 'desktop',
+            columns: 12,
+            row_height: 120,
+            gap: 12,
+            placements: [{ widget_id: 'a', x: 0, y: 0, w: 6, h: 1 }],
+          },
+        ],
+        widgets: [{ id: 'a', type: 'text', config: { text: 'Drawn anyway' } }],
       }),
       'tv',
     );
-    expect(el.shadowRoot?.textContent).toContain('no tv layout');
-    expect(el.shadowRoot?.textContent).toContain('desktop');
+    expect(el.shadowRoot?.textContent).not.toContain('no tv layout');
+    expect(el.shadowRoot?.querySelectorAll('.placed,.cell').length).toBe(1);
   });
 
   it('renders nothing rather than throwing with no document', async () => {
@@ -170,5 +181,41 @@ describe('@room reads two ways', () => {
 
   it('is empty rather than the token when no room is chosen', () => {
     expect(resolveConfig({ text: '@room' }, [], {})['text']).toBe('');
+  });
+});
+
+describe('what a composed page does on a narrower screen', () => {
+  const composed = (fit: 'scroll' | 'contain' | 'cover'): DashboardDefinition =>
+    base({
+      layouts: [
+        {
+          breakpoint: 'desktop',
+          columns: 12,
+          row_height: 120,
+          gap: 12,
+          flow: 'free',
+          frame: { width: 1240, height: 1248, fit },
+          placements: [
+            { widget_id: 'h', x: 0, y: 0, w: 12, h: 1, rect: { x: 0, y: 0, w: 600, h: 48 } },
+          ],
+        },
+      ],
+      widgets: [{ id: 'h', type: 'text', config: { text: 'x' } }],
+    }) as DashboardDefinition;
+
+  it('leaves a scrolling frame at the size it was drawn', async () => {
+    // The reference house says `scroll` on a 1240px canvas. Scaling that onto
+    // a phone would render three-pixel type, which is not what scroll means.
+    const el = await mount(composed('scroll'));
+    const frame = el.shadowRoot?.querySelector('.frame') as HTMLElement;
+    expect(frame.style.transform).toBe('scale(1)');
+  });
+
+  it('fits a containing frame to the room it has', async () => {
+    const el = await mount(composed('contain'));
+    el.fitWidth = 620;
+    await el.updateComplete;
+    const frame = el.shadowRoot?.querySelector('.frame') as HTMLElement;
+    expect(frame.style.transform).toBe('scale(0.5)');
   });
 });

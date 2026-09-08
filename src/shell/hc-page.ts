@@ -18,7 +18,7 @@ import type {
   DashboardDefinition,
   DashboardWidget,
 } from '../core/dashboard.js';
-import { gridItems, layoutFor } from '../core/dashboard.js';
+import { gridItems, layoutToDraw } from '../core/dashboard.js';
 import { Engine, type GridItem } from '../core/layout.js';
 import type { SelectionContext } from '../core/selection.js';
 import { isVisible } from '../core/visibility.js';
@@ -151,17 +151,15 @@ export class HcPage extends LitElement {
     const doc = this.doc;
     if (doc === undefined) return html`<div class="empty">No dashboard.</div>`;
 
-    const layout = layoutFor(doc, this.breakpoint);
-    if (layout === undefined) {
-      return html`<div class="empty">
-        This page has no ${this.breakpoint} layout.
-        ${
-          (doc.layouts ?? []).length > 0
-            ? html`It has ${(doc.layouts ?? []).map((l) => l.breakpoint).join(', ')}.`
-            : nothing
-        }
-      </div>`;
+    // Not the layout asked for, necessarily. Three of the four dashboards in
+    // the reference house carry `desktop` and nothing else, and telling a
+    // phone that its dashboard has no mobile layout is honest and useless —
+    // the document has 36 widgets and something to show.
+    const chosen = layoutToDraw(doc, this.breakpoint);
+    if (chosen === undefined) {
+      return html`<div class="empty">This dashboard has no layouts.</div>`;
     }
+    const layout = chosen.layout;
 
     const widgets = doc.widgets ?? [];
     const byId = new Map(widgets.map((w) => [w.id, w]));
@@ -173,13 +171,25 @@ export class HcPage extends LitElement {
       : this.grid(items, byId, layout.columns, layout.row_height, layout.gap);
   }
 
+  /**
+   * A composed page, at the size its author drew it.
+   *
+   * `frame.fit` is the document's own answer to "what happens on a narrower
+   * screen", and it was being ignored: the page scaled whenever `fitWidth` was
+   * set, which is nobody, and never read the field. The reference house says
+   * `scroll` on a 1240×1248 canvas, so a tablet scrolls sideways rather than
+   * rendering the composition at two thirds — and a document that says
+   * `contain` gets what it asked for instead of the same behaviour.
+   */
   private composed(
     items: readonly GridItem[],
     byId: Map<string, DashboardWidget>,
-    frame: { width: number; height: number },
+    frame: { width: number; height: number; fit?: string | null },
     _gap: number,
   ) {
-    const scale = this.fitWidth > 0 ? this.fitWidth / frame.width : 1;
+    const fit = frame.fit ?? 'scroll';
+    const room = this.fitWidth > 0 ? this.fitWidth : this.clientWidth;
+    const scale = fit === 'scroll' || room <= 0 ? 1 : room / frame.width;
     return html`
       <div
         class="frame"
