@@ -20,6 +20,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import type { DeviceState } from '../core/device.js';
 import type { CommandRequest } from './hc-controls.js';
 import { registerWidget } from './registry.js';
+import { humanise } from '../core/text.js';
 
 @customElement('hc-slider')
 export class HcSlider extends LitElement {
@@ -211,7 +212,7 @@ const numberOr = (v: unknown, fallback: number): number => (typeof v === 'number
 
 function label(config: Record<string, unknown>, attribute: string): string {
   const given = config['label'];
-  return typeof given === 'string' && given !== '' ? given : attribute.replace(/_/g, ' ');
+  return typeof given === 'string' && given !== '' ? given : humanise(attribute);
 }
 
 registerWidget('slider', 'hc-slider');

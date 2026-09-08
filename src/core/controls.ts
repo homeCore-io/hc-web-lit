@@ -20,6 +20,7 @@ import type {
   DeviceSchema,
 } from './api.js';
 import type { DeviceState } from './device.js';
+import { humanise } from './text.js';
 
 /** A control to draw, already resolved against the device's current state. */
 export type Control =
@@ -86,8 +87,7 @@ const FORM: Partial<Record<AttributeKind, Control['form']>> = {
   color_rgb: 'color',
 };
 
-const label = (key: string, a: AttributeSchema): string =>
-  a.display_name ?? key.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+const label = (key: string, a: AttributeSchema): string => a.display_name ?? humanise(key);
 
 /**
  * The controls a device offers, in a stable order.

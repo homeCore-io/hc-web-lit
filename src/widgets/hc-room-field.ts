@@ -16,6 +16,7 @@ import type { DeviceState } from '../core/device.js';
 import { effectiveArea, isOn, normalizeAreaName } from '../core/present.js';
 import { squarify } from '../core/treemap.js';
 import { registerWidget } from './registry.js';
+import { humanise } from '../core/text.js';
 
 interface Room {
   key: string;
@@ -152,7 +153,7 @@ export class HcRoomField extends LitElement {
 
       const room = by.get(key) ?? {
         key,
-        name: (area ?? key).replace(/_/g, ' '),
+        name: humanise(area ?? key),
         value: 0,
         lights: 0,
         on: 0,

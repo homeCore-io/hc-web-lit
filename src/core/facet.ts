@@ -20,6 +20,7 @@
  */
 import type { BoolStates } from './api.js';
 import type { DeviceState } from './device.js';
+import { humanise, lowerFirst } from './text.js';
 
 /**
  * `commandable` — writable attributes or actions; the device takes orders.
@@ -213,7 +214,7 @@ export function readingOf(d: DeviceState): Reading | undefined {
     value,
     ...(unit !== undefined ? { unit } : {}),
     ...(declared?.states !== undefined ? { states: declared.states } : {}),
-    label: declared?.display_name ?? key.replace(/_/g, ' '),
+    label: declared?.display_name ?? humanise(key),
   };
 }
 
@@ -230,8 +231,7 @@ export function formatReading(r: Reading): string {
     const known = BOOLEAN_WORDS[r.key];
     if (known !== undefined) return r.value ? known[0] : known[1];
 
-    const positive = r.label.replace(/^./, (c) => c.toUpperCase());
-    return r.value ? positive : `Not ${r.label}`;
+    return r.value ? r.label : `Not ${lowerFirst(r.label)}`;
   }
   if (typeof r.value === 'number') {
     const rounded = Math.abs(r.value) >= 100 ? Math.round(r.value) : Math.round(r.value * 10) / 10;

@@ -19,6 +19,7 @@ import { effectiveName } from '../core/present.js';
 import { selectDevices, type SelectionContext } from '../core/selection.js';
 import type { CommandRequest } from './hc-controls.js';
 import { registerForDevice, registerWidget } from './registry.js';
+import { humanise } from '../core/text.js';
 
 /** Transport, in the order a person expects it, with a label for each. */
 const TRANSPORT: { id: string; label: string }[] = [
@@ -126,7 +127,7 @@ export class HcMedia extends LitElement {
         (b) =>
           html`<button
             part="action"
-            title=${b.id.replace(/_/g, ' ')}
+            title=${humanise(b.id)}
             @click=${() =>
               this.onCommand?.({ deviceId: d.device_id, action: { id: b.id, params: {} } })}
           >

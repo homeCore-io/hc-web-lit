@@ -14,6 +14,7 @@ import { customElement, property } from 'lit/decorators.js';
 import { noticesFor, type Notice } from '../core/attention.js';
 import type { DeviceState } from '../core/device.js';
 import { registerWidget } from './registry.js';
+import { humanise } from '../core/text.js';
 
 /** How loud each kind is. Water is a flood; a battery is a chore. */
 const TONE: Record<string, string> = {
@@ -103,7 +104,7 @@ export class HcWorthKnowing extends LitElement {
     return html`<li part="notice">
       <span class="mark" style="background:var(${TONE[n.kind] ?? '--hc-ink-muted'})"></span>
       <span class="name">${n.name}</span>
-      ${showRoom ? html`<span class="room">${n.area?.replace(/_/g, ' ')}</span>` : ''}
+      ${showRoom ? html`<span class="room">${humanise(n.area ?? '')}</span>` : ''}
       <span class="detail">${n.detail}</span>
     </li>`;
   }

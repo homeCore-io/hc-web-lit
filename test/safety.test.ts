@@ -50,7 +50,7 @@ describe('the safety policy', () => {
 
   it('guards actions on a guarded device', () => {
     expect(checkAction(device({ device_type: 'lock' }), 'unlock_now')).toEqual({
-      confirm: 'unlock now on Front Door?',
+      confirm: 'Unlock now on Front Door?',
     });
     expect(checkAction(device({ device_type: 'light' }), 'flash')).toEqual({ allow: true });
   });

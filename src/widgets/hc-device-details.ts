@@ -29,6 +29,7 @@ import type { HistoryFetch } from './hc-history-chart.js';
 import { registerWidget } from './registry.js';
 import './hc-controls.js';
 import './hc-history-chart.js';
+import { humanise } from '../core/text.js';
 
 /** One attribute as the sheet lists it. */
 interface Row {
@@ -188,7 +189,8 @@ export class HcDeviceDetails extends LitElement {
       <div class="head">
         <span class="name">${effectiveName(d)}</span>
         <span class="where">
-          ${effectiveArea(d) ?? 'no area'} · ${d.device_type ?? 'no type'} · ${roleOf(d)}
+          ${humanise(effectiveArea(d) ?? 'no area')} · ${humanise(d.device_type ?? 'no type')} ·
+          ${humanise(roleOf(d))}
         </span>
       </div>
 
@@ -280,11 +282,11 @@ export class HcDeviceDetails extends LitElement {
       const dec = declared?.[key];
       const row: Row = {
         key,
-        label: dec?.display_name ?? key.replace(/_/g, ' '),
+        label: dec?.display_name ?? humanise(key),
         value: formatReading({
           key,
           value,
-          label: dec?.display_name ?? key.replace(/_/g, ' '),
+          label: dec?.display_name ?? humanise(key),
           ...(dec?.unit !== undefined ? { unit: dec.unit } : {}),
           ...(dec?.states !== undefined ? { states: dec.states } : {}),
         }),

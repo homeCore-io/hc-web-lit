@@ -33,6 +33,7 @@ import {
   type Series,
 } from '../core/history.js';
 import { registerWidget } from './registry.js';
+import { humanise, words } from '../core/text.js';
 
 export type HistoryFetch = (
   deviceId: string,
@@ -199,7 +200,7 @@ export class HcHistoryChart extends LitElement {
       const rows = await this.onFetch(deviceId, { from, to, limit: 1000 });
       const found = seriesFor(rows, attribute);
       if (found === undefined) {
-        this.note = `No ${attribute} recorded in the last ${hours}h.`;
+        this.note = `No ${words(attribute)} recorded in the last ${hours}h.`;
         this.series = undefined;
         return;
       }
@@ -226,7 +227,7 @@ export class HcHistoryChart extends LitElement {
 
   private head(attribute: string, s: Series | undefined) {
     return html`<div class="head">
-      <span>${attribute.replace(/_/g, ' ')}</span>
+      <span>${humanise(attribute)}</span>
       ${
         s !== undefined
           ? html`<span class="now" part="value"

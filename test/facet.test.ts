@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DeviceSchema } from '../src/core/api.js';
 import type { DeviceState } from '../src/core/device.js';
+import { humanise, withoutRoom, words } from '../src/core/text.js';
 import {
   formatReading,
   hasPowerState,
@@ -223,10 +224,10 @@ describe('words for booleans', () => {
   });
 
   it('falls back visibly rather than inventing a word', () => {
-    expect(formatReading({ key: 'flux_capacitor', value: true, label: 'flux capacitor' })).toBe(
+    expect(formatReading({ key: 'flux_capacitor', value: true, label: 'Flux capacitor' })).toBe(
       'Flux capacitor',
     );
-    expect(formatReading({ key: 'flux_capacitor', value: false, label: 'flux capacitor' })).toBe(
+    expect(formatReading({ key: 'flux_capacitor', value: false, label: 'Flux capacitor' })).toBe(
       'Not flux capacitor',
     );
   });
@@ -245,5 +246,49 @@ describe('capability flags are not readings', () => {
   it('does not catch a reading that happens to start the same way', () => {
     expect(isHousekeeping('isolation')).toBe(false);
     expect(isHousekeeping('supported')).toBe(false);
+  });
+});
+
+describe('the humanising rule', () => {
+  it('turns an identifier into a label, capital and all', () => {
+    expect(humanise('color_temp_max')).toBe('Color temp max');
+    expect(humanise('medium-high')).toBe('Medium high');
+    expect(humanise('family_room')).toBe('Family room');
+  });
+
+  it('capitalises only the first word, because the rest are not names', () => {
+    // "Colour Temperature" reads as a heading; "Colour temperature" reads as
+    // the name of a thing, which is what it is.
+    expect(humanise('colour_temperature')).toBe('Colour temperature');
+  });
+
+  it('leaves the case alone mid-sentence', () => {
+    // A feed line is "Office Motion — no motion", and a capital there would
+    // start a new sentence inside an old one.
+    expect(words('no_motion')).toBe('no motion');
+  });
+
+  it('collapses whatever separators arrived', () => {
+    expect(humanise('a__b--c')).toBe('A b c');
+    expect(humanise('')).toBe('');
+  });
+});
+
+describe('a name on a page that is already the room', () => {
+  it('drops the room it is in, and only there', () => {
+    expect(withoutRoom('Family Room Ceiling Light', 'family_room')).toBe('Ceiling Light');
+    expect(withoutRoom('Office Desk Lamp', 'office')).toBe('Desk Lamp');
+    // The house page names the whole house, so nothing is dropped.
+    expect(withoutRoom('Office Desk Lamp', undefined)).toBe('Office Desk Lamp');
+    expect(withoutRoom('Office Desk Lamp', 'kitchen')).toBe('Office Desk Lamp');
+  });
+
+  it('keeps a name that is only the room', () => {
+    // "Office" in the office is still called Office, not nothing.
+    expect(withoutRoom('Office', 'office')).toBe('Office');
+  });
+
+  it('does not cut a word in half', () => {
+    expect(withoutRoom('Officer Hallway Light', 'office')).toBe('Officer Hallway Light');
   });
 });

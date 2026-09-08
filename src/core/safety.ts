@@ -11,6 +11,7 @@
  * can be read, tested and argued with.
  */
 import type { DeviceState } from './device.js';
+import { humanise } from './text.js';
 
 export type Verdict = { allow: true } | { allow: false; reason: string } | { confirm: string };
 
@@ -61,5 +62,5 @@ export function check(device: DeviceState, patch: Record<string, unknown>): Verd
 /** Whether an action needs asking about. Same policy, applied to actions. */
 export function checkAction(device: DeviceState, actionId: string): Verdict {
   if (!GUARDED.has(facet(device))) return { allow: true };
-  return { confirm: `${actionId.replace(/_/g, ' ')} on ${device.name_override ?? device.name}?` };
+  return { confirm: `${humanise(actionId)} on ${device.name_override ?? device.name}?` };
 }

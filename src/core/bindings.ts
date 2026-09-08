@@ -22,6 +22,7 @@ import type { DeviceState } from './device.js';
 import { isOn } from './present.js';
 import { roleOf } from './facet.js';
 import { resolveToken, type SelectionContext } from './selection.js';
+import { humanise } from './text.js';
 
 /** One live value: take `key` off `device_id` and put it in `property`. */
 export interface Binding {
@@ -93,7 +94,7 @@ const DISPLAY_KEYS = ['text', 'heading', 'label', 'caption'] as const;
  * client having an opinion about the house's own words.
  */
 function roomLabel(room: string | undefined): string {
-  return room === undefined ? '' : room.replace(/_/g, ' ');
+  return room === undefined ? '' : humanise(room);
 }
 
 /**

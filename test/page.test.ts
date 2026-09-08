@@ -154,10 +154,11 @@ describe('a placement that carries an action', () => {
 describe('@room reads two ways', () => {
   it('is the room name where a person reads it', () => {
     // The breadcrumb said "@room" until this existed.
+    // Humanised, like every other identifier a person reads (`text.ts`).
     expect(resolveConfig({ text: '@room' }, [], { room: 'family_room' })['text']).toBe(
-      'family room',
+      'Family room',
     );
-    expect(resolveConfig({ heading: '@room' }, [], { room: 'office' })['heading']).toBe('office');
+    expect(resolveConfig({ heading: '@room' }, [], { room: 'office' })['heading']).toBe('Office');
   });
 
   it('is left alone where it selects', () => {

@@ -16,6 +16,7 @@ import type { DeviceState } from '../core/device.js';
 import { effectiveArea } from '../core/present.js';
 import { roleColor } from '../design/roles.js';
 import { registerWidget } from './registry.js';
+import { humanise } from '../core/text.js';
 
 interface Group {
   name: string;
@@ -90,11 +91,11 @@ export class HcDeviceBreakdown extends LitElement {
     const key = (d: DeviceState): string => {
       switch (by) {
         case 'room':
-          return (effectiveArea(d) ?? 'no room').replace(/_/g, ' ');
+          return humanise(effectiveArea(d) ?? 'no room');
         case 'plugin':
           return d.plugin_id.replace(/^plugin\./, '');
         default:
-          return (d.device_type ?? 'unclassified').replace(/_/g, ' ');
+          return humanise(d.device_type ?? 'unclassified');
       }
     };
 

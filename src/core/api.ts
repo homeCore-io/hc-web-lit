@@ -9,6 +9,7 @@
  * operationId it implements, so a change there is greppable from here.
  */
 import type { DeviceState } from './device.js';
+import { humanise } from './text.js';
 
 /** What core rejected, with enough to act on rather than just a stack trace. */
 export class HcApiError extends Error {
@@ -101,7 +102,7 @@ export const asOption = (o: WireOption): AttributeOption =>
  */
 export function optionLabel(o: AttributeOption): string {
   if (o.label !== undefined) return o.label;
-  return o.value.replace(/[_-]+/g, ' ').replace(/^./, (c) => c.toUpperCase());
+  return humanise(o.value);
 }
 
 /** One declared attribute — `hc_types::schema::AttributeSchema`. */

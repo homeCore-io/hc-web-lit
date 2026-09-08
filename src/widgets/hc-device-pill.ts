@@ -13,8 +13,9 @@
 import { LitElement, css, html } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import type { DeviceState } from '../core/device.js';
-import { hasPowerState } from '../core/facet.js';
 import { effectiveName, isOn, levelOf } from '../core/present.js';
+import { withoutRoom } from '../core/text.js';
+import { icon, iconFor } from '../design/icons.js';
 import { inspect } from './hold.js';
 
 @customElement('hc-device-pill')
@@ -23,6 +24,13 @@ export class HcDevicePill extends LitElement {
     :host {
       display: inline-block;
       min-width: 0;
+      container-type: inline-size;
+      /* How lit the chip is, from the light's own level (set per instance). */
+      --tint: 0%;
+      --tint-colour: var(--hc-ink-muted, #8b95a4);
+    }
+    :host([data-lit]) {
+      --tint-colour: var(--hc-accent-active, #ffb661);
     }
     button {
       display: flex;
@@ -31,35 +39,68 @@ export class HcDevicePill extends LitElement {
       width: 100%;
       min-width: 0;
       box-sizing: border-box;
-      padding: 0 calc(var(--hc-space-unit, 8px) * 1.25);
+      padding: 0 calc(var(--hc-space-unit, 8px));
       height: 100%;
       min-height: 0;
       border: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
-      border-radius: var(--hc-radius-sm, 8px);
-      background: var(--hc-surface-raised, #141922);
+      border-radius: var(--hc-radius-md, 14px);
+      background: color-mix(
+        in srgb,
+        var(--tint-colour) calc(var(--tint) / 2),
+        var(--hc-surface-raised, #141922)
+      );
       color: var(--hc-ink, #e9edf2);
       font: inherit;
       cursor: pointer;
       text-align: left;
+      transition:
+        background var(--hc-motion-base, 220ms) var(--hc-motion-curve, ease-out),
+        border-color var(--hc-motion-fast, 140ms) var(--hc-motion-curve, ease-out);
     }
+    button:hover {
+      border-color: color-mix(in srgb, var(--tint-colour) 40%, var(--hc-stroke-hairline, #262d38));
+    }
+    /* Picked is what the sliders below are aimed at, so it is a stronger
+       statement than lit — a ring rather than a wash. */
     button[data-picked] {
       border-color: var(--hc-accent-active, #ffb661);
+      box-shadow: 0 0 0 1px var(--hc-accent-active, #ffb661);
     }
-    .dot {
+    button:focus-visible {
+      outline: 2px solid var(--hc-stroke-focus, #7cc4ff);
+      outline-offset: 2px;
+    }
+    .tile {
       flex: none;
-      width: 0.5rem;
-      height: 0.5rem;
-      border-radius: 50%;
-      background: var(--hc-accent-inactive, #2a313b);
+      display: grid;
+      place-items: center;
+      width: 1.5rem;
+      height: 1.5rem;
+      border-radius: var(--hc-radius-xs, 6px);
+      background: color-mix(
+        in srgb,
+        var(--tint-colour) var(--tint),
+        var(--hc-surface-sunken, #0d1116)
+      );
+      color: var(--tint-colour);
+      transition: inherit;
     }
-    .dot[data-on] {
-      background: var(--hc-accent-active, #ffb661);
+    .tile svg {
+      width: 1rem;
+      height: 1rem;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.7;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
     .name {
+      flex: 1;
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      font-weight: 500;
     }
     .level {
       margin-left: auto;
@@ -68,10 +109,22 @@ export class HcDevicePill extends LitElement {
       color: var(--hc-ink-muted, #8b95a4);
       font-variant-numeric: tabular-nums;
     }
+    :host([data-lit]) .level {
+      color: var(--hc-ink, #e9edf2);
+    }
+    /* Four lights share one 44px row, so a narrow chip spends its width on the
+       name. The level is not lost — the chip's own tint is carrying it. */
+    @container (max-width: 11rem) {
+      .level {
+        display: none;
+      }
+    }
   `;
 
   @property({ attribute: false }) device: DeviceState | undefined;
   @property({ type: Boolean }) picked = false;
+  /** The room this pill is shown in, if the page is scoped to one. */
+  @property({ attribute: false }) room: string | undefined;
   @property({ attribute: false }) onPick: ((deviceId: string) => void) | undefined;
   /** Hold to inspect, without acting on it (§5.10). */
   @property({ attribute: false }) onDetails: ((deviceId: string) => void) | undefined;
@@ -83,14 +136,23 @@ export class HcDevicePill extends LitElement {
     const on = isOn(d);
     const level = on === true ? levelOf(d) : undefined;
 
+    // The chip carries the light's own level: 14% at the bottom of the dimmer,
+    // 32% at the top. A row of these reads as a room at a glance, which a row
+    // of identical rectangles with a dot on them never did.
+    this.toggleAttribute('data-lit', on === true);
+    this.style.setProperty(
+      '--tint',
+      on === true ? `${14 + Math.round((Math.min(level ?? 100, 100) / 100) * 18)}%` : '0%',
+    );
+
     return html`<button
       ${inspect(() => this.onDetails?.(d.device_id))}
       part="pill"
       ?data-picked=${this.picked}
       @click=${() => this.onPick?.(d.device_id)}
     >
-      ${hasPowerState(d) ? html`<span class="dot" ?data-on=${on === true}></span>` : ''}
-      <span class="name">${effectiveName(d)}</span>
+      <span class="tile" part="indicator">${icon(iconFor(d))}</span>
+      <span class="name">${withoutRoom(effectiveName(d), this.room)}</span>
       ${level !== undefined ? html`<span class="level">${Math.round(level)}%</span>` : ''}
     </button>`;
   }

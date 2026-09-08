@@ -16,6 +16,7 @@ import type { AttributeSchema } from './api.js';
 import type { DeviceState } from './device.js';
 import { isHousekeeping } from './facet.js';
 import { effectiveArea, effectiveName, normalizeAreaName } from './present.js';
+import { words } from './text.js';
 
 export interface LogEntry {
   seq: number;
@@ -146,11 +147,10 @@ function describe(entry: LogEntry, keys: readonly string[]): string {
       const said = shown
         .map((k) => {
           const v = current[k];
-          if (typeof v === 'boolean')
-            return v ? k.replace(/_/g, ' ') : `no ${k.replace(/_/g, ' ')}`;
-          if (typeof v === 'number') return `${k.replace(/_/g, ' ')} ${Math.round(v * 10) / 10}`;
-          if (typeof v === 'string' && v !== '') return `${k.replace(/_/g, ' ')} ${v}`;
-          return k.replace(/_/g, ' ');
+          if (typeof v === 'boolean') return v ? words(k) : `no ${words(k)}`;
+          if (typeof v === 'number') return `${words(k)} ${Math.round(v * 10) / 10}`;
+          if (typeof v === 'string' && v !== '') return `${words(k)} ${v}`;
+          return words(k);
         })
         .join(', ');
       return rest > 0 ? `${said}, and ${rest} more` : said;
@@ -166,7 +166,7 @@ function describe(entry: LogEntry, keys: readonly string[]): string {
     case 'timer_state_changed':
       return `timer ${str(e['state']) ?? 'changed'}`;
     default:
-      return entry.event_type.replace(/_/g, ' ');
+      return words(entry.event_type);
   }
 }
 

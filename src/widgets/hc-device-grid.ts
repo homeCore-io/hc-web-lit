@@ -107,6 +107,7 @@ export class HcDeviceGrid extends LitElement {
                 .picked=${this.context.picked === d.device_id}
                 .onPick=${this.onPick}
                 .onDetails=${this.onDetails}
+                .room=${this.context.room}
               ></hc-device-pill>`,
           )}
         </div>
@@ -136,6 +137,7 @@ export class HcDeviceGrid extends LitElement {
         .device=${d}
         .onCommand=${this.onCommand}
         .onDetails=${this.onDetails}
+        .room=${this.context.room}
         ?compact=${this.mode === 'list'}
       ></hc-device-card>`;
     }
