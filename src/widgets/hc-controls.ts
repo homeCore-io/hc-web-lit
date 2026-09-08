@@ -14,6 +14,7 @@
  */
 import { LitElement, css, html, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
+import { optionLabel } from '../core/api.js';
 import type { Control } from '../core/controls.js';
 import { optionsForParam } from '../core/controls.js';
 import type { DeviceState } from '../core/device.js';
@@ -206,8 +207,8 @@ export class HcControls extends LitElement {
           >
             ${c.options.map(
               (o) =>
-                html`<option value=${o} ?selected=${o === this.current(c.key, c.value)}>
-                  ${o}
+                html`<option value=${o.value} ?selected=${o.value === this.current(c.key, c.value)}>
+                  ${optionLabel(o)}
                 </option>`,
             )}
           </select>

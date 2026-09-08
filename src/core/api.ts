@@ -69,6 +69,41 @@ export interface BoolStates {
   when_false?: { label?: string; verb?: string };
 }
 
+/**
+ * One choice in an `enum` attribute — `hc_types::schema::AttributeOption`.
+ *
+ * On the wire an option is `string | {value, label?, icon?}`, and an option
+ * carrying neither extra is serialised as a plain string, so old payloads are
+ * byte-identical. Normalised here so nothing downstream sees the union.
+ *
+ * `icon` is a **semantic name**, not a font codepoint — the same convention
+ * `DeviceAction.icon` uses — so an unknown name must fall back visibly rather
+ * than draw a missing glyph.
+ */
+export interface AttributeOption {
+  value: string;
+  label?: string;
+  icon?: string;
+}
+
+/** The wire form, before normalisation. */
+export type WireOption = string | AttributeOption;
+
+export const asOption = (o: WireOption): AttributeOption =>
+  typeof o === 'string' ? { value: o } : o;
+
+/**
+ * A choice's display text.
+ *
+ * Only the plugin can turn `cool` into "Cooling", which is the point of
+ * `label`. Without one, `medium-high` becomes "Medium high" — readable, and
+ * visibly not something anybody wrote.
+ */
+export function optionLabel(o: AttributeOption): string {
+  if (o.label !== undefined) return o.label;
+  return o.value.replace(/[_-]+/g, ' ').replace(/^./, (c) => c.toUpperCase());
+}
+
 /** One declared attribute — `hc_types::schema::AttributeSchema`. */
 export interface AttributeSchema {
   kind: AttributeKind;
@@ -78,8 +113,8 @@ export interface AttributeSchema {
   min?: number;
   max?: number;
   step?: number;
-  /** Fixed option list for the `enum` kind. */
-  options?: string[];
+  /** Fixed option list for the `enum` kind. Strings or objects — see above. */
+  options?: WireOption[];
   category?: AttributeCategory;
   states?: BoolStates;
 }
@@ -120,6 +155,19 @@ export interface ActionParam {
 export interface DeviceSchema {
   attributes?: Record<string, AttributeSchema> | null;
   actions?: DeviceAction[];
+  /**
+   * Which readings the device is *for*, most important first.
+   *
+   * `category` says which attributes are not the point; this ranks what is
+   * left. Core derives it at serve time from the device's own `device_type`,
+   * falls back to a significance rank where the type says nothing — every
+   * Z-Wave node, since they are all `device_type: "zwave"` — and sorts
+   * whatever neither table names. A plugin that declares its own keeps it.
+   *
+   * That last part matters here specifically: `attributes` is a HashMap in
+   * Rust, so "the first attribute" was never stable between reads.
+   */
+  primary?: string[];
 }
 
 /** One recorded value — `HistoryEntry` in the OpenAPI schema. */

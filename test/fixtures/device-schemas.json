@@ -1,0 +1,5678 @@
+{
+  "contract": "SCHEMA_CONTRACT_2026-09.md",
+  "note": "One device per (device_type, schema shape), anonymised. Refresh with tool/sync-device-schema-fixtures.sh.",
+  "shapes": [
+    {
+      "attributes": {
+        "effective_off": "19:27",
+        "effective_on": "06:42",
+        "kind": "solar",
+        "off_offset_minutes": 0,
+        "on": true,
+        "on_offset_minutes": 0,
+        "sunrise_today": "06:42",
+        "sunset_today": "19:27"
+      },
+      "device_type": null,
+      "plugin_id": "core.mode",
+      "schema": {
+        "attributes": {
+          "effective_off": {
+            "display_name": "Turns off at",
+            "kind": "string",
+            "writable": false
+          },
+          "effective_on": {
+            "display_name": "Turns on at",
+            "kind": "string",
+            "writable": false
+          },
+          "kind": {
+            "display_name": "Kind",
+            "kind": "enum",
+            "options": ["solar", "boolean"],
+            "writable": false
+          },
+          "off_offset_minutes": {
+            "display_name": "Off offset",
+            "kind": "integer",
+            "unit": "min",
+            "writable": false
+          },
+          "on": {
+            "display_name": "Active",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "inactive",
+                "verb": "becomes inactive"
+              },
+              "when_true": {
+                "label": "active",
+                "verb": "becomes active"
+              }
+            },
+            "writable": true
+          },
+          "on_offset_minutes": {
+            "display_name": "On offset",
+            "kind": "integer",
+            "unit": "min",
+            "writable": false
+          },
+          "sunrise_today": {
+            "display_name": "Sunrise",
+            "kind": "string",
+            "writable": false
+          },
+          "sunset_today": {
+            "display_name": "Sunset",
+            "kind": "string",
+            "writable": false
+          }
+        },
+        "primary": [
+          "on",
+          "effective_off",
+          "effective_on",
+          "kind",
+          "off_offset_minutes",
+          "on_offset_minutes",
+          "sunrise_today",
+          "sunset_today"
+        ]
+      }
+    },
+    {
+      "attributes": {
+        "arch": "esp32",
+        "brightness": 110,
+        "brightness_pct": 43.1,
+        "color": [0, 128, 0],
+        "device_time": "2026-9-8, 11:57:27",
+        "effect_id": 52,
+        "effect_intensity": 230,
+        "effect_speed": 120,
+        "effects.count": 220,
+        "ip": "10.0.10.74",
+        "led.count": 400,
+        "led.max_segments": 32,
+        "led.power_mw": 120,
+        "led.rgbw": false,
+        "mac": "20e7c86ace04",
+        "on": false,
+        "palette_id": 5,
+        "palettes.count": 72,
+        "peers.count": 0,
+        "preset_id": -1,
+        "presets.count": 13,
+        "uptime_secs": 957353,
+        "wifi.channel": 6,
+        "wifi.rssi": -55,
+        "wifi.signal_pct": 90
+      },
+      "device_type": null,
+      "plugin_id": "plugin.wled",
+      "schema": {
+        "attributes": {
+          "brightness_pct": {
+            "display_name": "Brightness",
+            "kind": "integer",
+            "max": 100.0,
+            "min": 0.0,
+            "step": 1.0,
+            "unit": "%",
+            "writable": true
+          },
+          "on": {
+            "display_name": "Power",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "off",
+                "verb": "turns off"
+              },
+              "when_true": {
+                "label": "on",
+                "verb": "turns on"
+              }
+            },
+            "writable": true
+          },
+          "preset": {
+            "display_name": "Preset",
+            "kind": "integer",
+            "max": 250.0,
+            "min": 1.0,
+            "step": 1.0,
+            "writable": true
+          }
+        },
+        "primary": ["on", "brightness_pct", "preset"]
+      }
+    },
+    {
+      "attributes": {
+        "bridge_id": "001788fffe6841b3",
+        "host": "10.0.10.23",
+        "integration_state": "connected",
+        "kind": "hue_bridge",
+        "name": "hue-001788ff",
+        "online": true,
+        "pairing_status": "paired",
+        "summary": {
+          "allow_self_signed": true,
+          "auth_configured": true,
+          "bridge_id": "001788fffe6841b3",
+          "host": "10.0.10.23",
+          "integration_state": "connected",
+          "v2_bridge": {
+            "data": [
+              {
+                "bridge_id": "001788fffe6841b3",
+                "id": "9494a4d9-315f-4d8d-86e5-07e4900d4066",
+                "owner": {
+                  "rid": "481d6c07-3088-4a56-8872-3a30e20a9fdb",
+                  "rtype": "device"
+                },
+                "time_zone": {
+                  "time_zone": "America/New_York"
+                },
+                "type": "bridge"
+              }
+            ],
+            "errors": []
+          },
+          "verify_tls": true
+        }
+      },
+      "device_type": "bridge",
+      "plugin_id": "plugin.hue",
+      "schema": null
+    },
+    {
+      "attributes": {
+        "battery": 100,
+        "open": false
+      },
+      "device_type": "contact_sensor",
+      "plugin_id": "plugin.yolink",
+      "schema": {
+        "attributes": {
+          "battery": {
+            "category": "diagnostic",
+            "display_name": "Battery",
+            "kind": "integer",
+            "max": 100.0,
+            "min": 0.0,
+            "unit": "%",
+            "writable": false
+          },
+          "open": {
+            "display_name": "Door",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "closed",
+                "verb": "closes"
+              },
+              "when_true": {
+                "label": "open",
+                "verb": "opens"
+              }
+            },
+            "writable": false
+          }
+        },
+        "primary": ["open"]
+      }
+    },
+    {
+      "attributes": {
+        "on": false,
+        "speed": "off",
+        "speed_pct": 0.0
+      },
+      "device_type": "fan",
+      "plugin_id": "plugin.lutron",
+      "schema": {
+        "attributes": {
+          "on": {
+            "display_name": "Power",
+            "kind": "bool",
+            "writable": true
+          },
+          "speed": {
+            "display_name": "Speed",
+            "kind": "enum",
+            "options": ["off", "low", "medium", "medium-high", "high"],
+            "writable": true
+          },
+          "speed_pct": {
+            "display_name": "Speed",
+            "kind": "integer",
+            "max": 100.0,
+            "min": 0.0,
+            "step": 1.0,
+            "unit": "%",
+            "writable": true
+          }
+        },
+        "primary": ["on", "speed", "speed_pct"]
+      }
+    },
+    {
+      "attributes": {
+        "customserver.dialect": "ws_settings",
+        "customserver.enable": true,
+        "customserver.interval": "60",
+        "customserver.path": "/data/report/",
+        "customserver.port": "8888",
+        "customserver.protocol": "ecowitt",
+        "customserver.server": "10.0.10.150",
+        "firmware": "V2.4.5",
+        "gateway_time": "2026-09-08T11:53",
+        "ip": "10.0.10.21",
+        "mac": "7C:87:CE:BE:93:C4",
+        "model": "GW1100B",
+        "network.dns": "10.0.10.1",
+        "network.gateway": "10.0.10.1",
+        "network.ip": "10.0.10.21",
+        "network.netmask": "255.255.255.0",
+        "network.ssid": "Ruckus_IOT",
+        "platform": "ecowitt",
+        "timezone": "America/New_York",
+        "units.light": "1",
+        "units.pressure": "1",
+        "units.rain": "1",
+        "units.temperature": "1",
+        "units.wind": "2",
+        "update_available": false
+      },
+      "device_type": "gateway",
+      "plugin_id": "plugin.ecowitt",
+      "schema": {
+        "attributes": {
+          "customserver.dialect": {
+            "category": "config",
+            "display_name": "Customserver.dialect",
+            "kind": "string",
+            "writable": false
+          },
+          "customserver.enable": {
+            "category": "config",
+            "display_name": "Customserver.enable",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "not customserver.enable",
+                "verb": "stops being customserver.enable"
+              },
+              "when_true": {
+                "label": "customserver.enable",
+                "verb": "becomes customserver.enable"
+              }
+            },
+            "writable": false
+          },
+          "customserver.interval": {
+            "category": "config",
+            "display_name": "Customserver.interval",
+            "kind": "string",
+            "writable": false
+          },
+          "customserver.path": {
+            "category": "config",
+            "display_name": "Customserver.path",
+            "kind": "string",
+            "writable": false
+          },
+          "customserver.port": {
+            "category": "config",
+            "display_name": "Customserver.port",
+            "kind": "string",
+            "writable": false
+          },
+          "customserver.protocol": {
+            "category": "config",
+            "display_name": "Customserver.protocol",
+            "kind": "string",
+            "writable": false
+          },
+          "customserver.server": {
+            "category": "config",
+            "display_name": "Customserver.server",
+            "kind": "string",
+            "writable": false
+          },
+          "firmware": {
+            "category": "diagnostic",
+            "display_name": "Firmware",
+            "kind": "string",
+            "writable": false
+          },
+          "gateway_time": {
+            "display_name": "Gateway time",
+            "kind": "string",
+            "writable": false
+          },
+          "ip": {
+            "category": "diagnostic",
+            "display_name": "Ip",
+            "kind": "string",
+            "writable": false
+          },
+          "mac": {
+            "category": "diagnostic",
+            "display_name": "Mac",
+            "kind": "string",
+            "writable": false
+          },
+          "model": {
+            "category": "diagnostic",
+            "display_name": "Model",
+            "kind": "string",
+            "writable": false
+          },
+          "network.dns": {
+            "display_name": "Network.dns",
+            "kind": "string",
+            "writable": false
+          },
+          "network.gateway": {
+            "display_name": "Network.gateway",
+            "kind": "string",
+            "writable": false
+          },
+          "network.ip": {
+            "display_name": "Network.ip",
+            "kind": "string",
+            "writable": false
+          },
+          "network.netmask": {
+            "display_name": "Network.netmask",
+            "kind": "string",
+            "writable": false
+          },
+          "network.ssid": {
+            "display_name": "Network.ssid",
+            "kind": "string",
+            "writable": false
+          },
+          "platform": {
+            "display_name": "Platform",
+            "kind": "string",
+            "writable": false
+          },
+          "timezone": {
+            "display_name": "Timezone",
+            "kind": "string",
+            "writable": false
+          },
+          "units.light": {
+            "category": "config",
+            "display_name": "Units.light",
+            "kind": "string",
+            "writable": false
+          },
+          "units.pressure": {
+            "category": "config",
+            "display_name": "Units.pressure",
+            "kind": "string",
+            "writable": false
+          },
+          "units.rain": {
+            "category": "config",
+            "display_name": "Units.rain",
+            "kind": "string",
+            "writable": false
+          },
+          "units.temperature": {
+            "category": "config",
+            "display_name": "Units.temperature",
+            "kind": "string",
+            "writable": false
+          },
+          "units.wind": {
+            "category": "config",
+            "display_name": "Units.wind",
+            "kind": "string",
+            "writable": false
+          },
+          "update_available": {
+            "display_name": "Update available",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "up to date",
+                "verb": "becomes up to date"
+              },
+              "when_true": {
+                "label": "out of date",
+                "verb": "has an update"
+              }
+            },
+            "writable": false
+          }
+        },
+        "primary": [
+          "gateway_time",
+          "network.dns",
+          "network.gateway",
+          "network.ip",
+          "network.netmask",
+          "network.ssid",
+          "platform",
+          "timezone",
+          "update_available"
+        ]
+      }
+    },
+    {
+      "attributes": {
+        "available_buttons": [
+          {
+            "name": "Button 1",
+            "number": 1
+          },
+          {
+            "name": "Button 2",
+            "number": 2
+          },
+          {
+            "name": "Button 3",
+            "number": 3
+          },
+          {
+            "name": "Button 4",
+            "number": 4
+          },
+          {
+            "name": "Button 5",
+            "number": 5
+          },
+          {
+            "name": "Button 6",
+            "number": 6
+          },
+          {
+            "name": "Button 7",
+            "number": 7
+          }
+        ]
+      },
+      "device_type": "keypad",
+      "plugin_id": "plugin.lutron",
+      "schema": {
+        "actions": [
+          {
+            "category": "Buttons",
+            "icon": "remote",
+            "id": "press_button",
+            "label": "Press a button",
+            "params": [
+              {
+                "kind": "int",
+                "label": "Button",
+                "name": "button",
+                "options_from": {
+                  "attribute": {
+                    "attribute": "available_buttons",
+                    "label_key": "name",
+                    "value_key": "number"
+                  }
+                },
+                "required": true
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "press button {button} on {device}"
+          },
+          {
+            "category": "Buttons",
+            "description": "LED component is the button number + 80; the offset is applied here.",
+            "icon": "lightbulb",
+            "id": "set_led",
+            "label": "Set a button LED",
+            "params": [
+              {
+                "kind": "int",
+                "label": "Button",
+                "name": "button",
+                "options_from": {
+                  "attribute": {
+                    "attribute": "available_buttons",
+                    "label_key": "name",
+                    "value_key": "number"
+                  }
+                },
+                "required": true
+              },
+              {
+                "default": "1",
+                "kind": "enum",
+                "label": "LED",
+                "name": "state",
+                "options": [
+                  {
+                    "label": "Off",
+                    "value": "0"
+                  },
+                  {
+                    "label": "On",
+                    "value": "1"
+                  },
+                  {
+                    "label": "Slow flash",
+                    "value": "2"
+                  },
+                  {
+                    "label": "Rapid flash",
+                    "value": "3"
+                  }
+                ],
+                "required": true
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "set the LED of button {button} on {device} to {state}"
+          }
+        ],
+        "attributes": {
+          "available_buttons": {
+            "display_name": "Buttons",
+            "kind": "json",
+            "writable": false
+          },
+          "button_1": {
+            "display_name": "Button 1",
+            "kind": "string",
+            "writable": false
+          },
+          "button_2": {
+            "display_name": "Button 2",
+            "kind": "string",
+            "writable": false
+          },
+          "button_3": {
+            "display_name": "Button 3",
+            "kind": "string",
+            "writable": false
+          },
+          "button_4": {
+            "display_name": "Button 4",
+            "kind": "string",
+            "writable": false
+          },
+          "button_5": {
+            "display_name": "Button 5",
+            "kind": "string",
+            "writable": false
+          },
+          "button_6": {
+            "display_name": "Button 6",
+            "kind": "string",
+            "writable": false
+          },
+          "button_7": {
+            "display_name": "Button 7",
+            "kind": "string",
+            "writable": false
+          }
+        },
+        "primary": [
+          "available_buttons",
+          "button_1",
+          "button_2",
+          "button_3",
+          "button_4",
+          "button_5",
+          "button_6",
+          "button_7"
+        ]
+      }
+    },
+    {
+      "attributes": {
+        "available_buttons": [
+          {
+            "name": "Button 1",
+            "number": 1
+          },
+          {
+            "name": "Button 2",
+            "number": 2
+          },
+          {
+            "name": "Button 3",
+            "number": 3
+          },
+          {
+            "name": "Button 4",
+            "number": 4
+          },
+          {
+            "name": "Button 5",
+            "number": 5
+          },
+          {
+            "name": "Button 6",
+            "number": 6
+          },
+          {
+            "name": "Button 18",
+            "number": 18
+          },
+          {
+            "name": "Button 19",
+            "number": 19
+          }
+        ],
+        "button_2": "release",
+        "button_3": "release",
+        "button_4": "release",
+        "last_button": 4,
+        "last_button_name": "Button 4",
+        "led_1": 1,
+        "led_2": 1,
+        "led_3": 1,
+        "led_4": 1,
+        "led_5": 0
+      },
+      "device_type": "keypad",
+      "plugin_id": "plugin.lutron",
+      "schema": {
+        "actions": [
+          {
+            "category": "Buttons",
+            "icon": "remote",
+            "id": "press_button",
+            "label": "Press a button",
+            "params": [
+              {
+                "kind": "int",
+                "label": "Button",
+                "name": "button",
+                "options_from": {
+                  "attribute": {
+                    "attribute": "available_buttons",
+                    "label_key": "name",
+                    "value_key": "number"
+                  }
+                },
+                "required": true
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "press button {button} on {device}"
+          },
+          {
+            "category": "Buttons",
+            "description": "LED component is the button number + 80; the offset is applied here.",
+            "icon": "lightbulb",
+            "id": "set_led",
+            "label": "Set a button LED",
+            "params": [
+              {
+                "kind": "int",
+                "label": "Button",
+                "name": "button",
+                "options_from": {
+                  "attribute": {
+                    "attribute": "available_buttons",
+                    "label_key": "name",
+                    "value_key": "number"
+                  }
+                },
+                "required": true
+              },
+              {
+                "default": "1",
+                "kind": "enum",
+                "label": "LED",
+                "name": "state",
+                "options": [
+                  {
+                    "label": "Off",
+                    "value": "0"
+                  },
+                  {
+                    "label": "On",
+                    "value": "1"
+                  },
+                  {
+                    "label": "Slow flash",
+                    "value": "2"
+                  },
+                  {
+                    "label": "Rapid flash",
+                    "value": "3"
+                  }
+                ],
+                "required": true
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "set the LED of button {button} on {device} to {state}"
+          }
+        ],
+        "attributes": {
+          "available_buttons": {
+            "display_name": "Buttons",
+            "kind": "json",
+            "writable": false
+          },
+          "button_1": {
+            "display_name": "Button 1",
+            "kind": "string",
+            "writable": false
+          },
+          "button_18": {
+            "display_name": "Button 18",
+            "kind": "string",
+            "writable": false
+          },
+          "button_19": {
+            "display_name": "Button 19",
+            "kind": "string",
+            "writable": false
+          },
+          "button_2": {
+            "display_name": "Button 2",
+            "kind": "string",
+            "writable": false
+          },
+          "button_3": {
+            "display_name": "Button 3",
+            "kind": "string",
+            "writable": false
+          },
+          "button_4": {
+            "display_name": "Button 4",
+            "kind": "string",
+            "writable": false
+          },
+          "button_5": {
+            "display_name": "Button 5",
+            "kind": "string",
+            "writable": false
+          },
+          "button_6": {
+            "display_name": "Button 6",
+            "kind": "string",
+            "writable": false
+          }
+        },
+        "primary": [
+          "available_buttons",
+          "button_1",
+          "button_18",
+          "button_19",
+          "button_2",
+          "button_3",
+          "button_4",
+          "button_5",
+          "button_6"
+        ]
+      }
+    },
+    {
+      "attributes": {
+        "bridge_id": "001788fffe6841b3",
+        "brightness_pct": 100.0,
+        "color_temp": 2890,
+        "color_temp_max": 6536,
+        "color_temp_min": 2000,
+        "color_temp_mirek": 346,
+        "color_temp_mirek_max": 500,
+        "color_temp_mirek_min": 153,
+        "color_xy": {
+          "x": 0.4452,
+          "y": 0.4068
+        },
+        "dynamic_speed": 0.0,
+        "dynamic_status": "none",
+        "effect_values": ["no_effect", "candle", "fire", "prism", "sparkle", "opal", "glisten"],
+        "kind": "hue_light",
+        "on": true,
+        "resource_id": "019f9c7b-e17d-4bf0-86c6-30610690fd62",
+        "supports_color_xy": true,
+        "supports_dimming": true,
+        "supports_gradient": false,
+        "supports_identify": true
+      },
+      "device_type": "light",
+      "plugin_id": "plugin.hue",
+      "schema": {
+        "attributes": {
+          "brightness_pct": {
+            "display_name": "Brightness",
+            "kind": "integer",
+            "max": 100.0,
+            "min": 1.0,
+            "step": 1.0,
+            "unit": "%",
+            "writable": true
+          },
+          "color_temp": {
+            "display_name": "Colour Temperature",
+            "kind": "color_temp",
+            "max": 6535.0,
+            "min": 2000.0,
+            "step": 100.0,
+            "unit": "K",
+            "writable": true
+          },
+          "color_xy": {
+            "display_name": "Colour",
+            "kind": "color_xy",
+            "writable": true
+          },
+          "on": {
+            "display_name": "Power",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "off",
+                "verb": "turns off"
+              },
+              "when_true": {
+                "label": "on",
+                "verb": "turns on"
+              }
+            },
+            "writable": true
+          }
+        },
+        "primary": ["on", "brightness_pct", "color_temp", "color_xy"]
+      }
+    },
+    {
+      "attributes": {
+        "brightness": 0,
+        "brightness_pct": 0.0,
+        "on": false
+      },
+      "device_type": "light",
+      "plugin_id": "plugin.lutron",
+      "schema": {
+        "attributes": {
+          "brightness_pct": {
+            "display_name": "Brightness",
+            "kind": "integer",
+            "max": 100.0,
+            "min": 0.0,
+            "step": 1.0,
+            "unit": "%",
+            "writable": true
+          },
+          "on": {
+            "display_name": "Power",
+            "kind": "bool",
+            "writable": true
+          }
+        },
+        "primary": ["on", "brightness_pct"]
+      }
+    },
+    {
+      "attributes": {
+        "battery": 2.0,
+        "battery_kind": "level",
+        "battery_low": false,
+        "distance": 24.0,
+        "last_strike": "1788881665",
+        "strike_count": 13.0
+      },
+      "device_type": "lightning_sensor",
+      "plugin_id": "plugin.ecowitt",
+      "schema": {
+        "attributes": {
+          "battery": {
+            "category": "diagnostic",
+            "display_name": "Battery",
+            "kind": "float",
+            "unit": "%",
+            "writable": false
+          },
+          "battery_kind": {
+            "category": "diagnostic",
+            "display_name": "Battery kind",
+            "kind": "string",
+            "writable": false
+          },
+          "battery_low": {
+            "category": "diagnostic",
+            "display_name": "Battery low",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "healthy",
+                "verb": "recovers"
+              },
+              "when_true": {
+                "label": "low",
+                "verb": "goes low"
+              }
+            },
+            "writable": false
+          },
+          "distance": {
+            "display_name": "Distance",
+            "kind": "float",
+            "writable": false
+          },
+          "last_strike": {
+            "display_name": "Last strike",
+            "kind": "string",
+            "writable": false
+          },
+          "strike_count": {
+            "display_name": "Strike count",
+            "kind": "float",
+            "writable": false
+          }
+        },
+        "primary": ["distance", "last_strike", "strike_count"]
+      }
+    },
+    {
+      "attributes": {
+        "auto_lock_secs": 0,
+        "battery": 50,
+        "door_open": false,
+        "last_alert": "UnLockFailed",
+        "locked": false,
+        "sound_level": 2
+      },
+      "device_type": "lock",
+      "plugin_id": "plugin.yolink",
+      "schema": {
+        "attributes": {
+          "auto_lock_secs": {
+            "display_name": "Auto-lock delay",
+            "kind": "integer",
+            "unit": "s",
+            "writable": false
+          },
+          "battery": {
+            "category": "diagnostic",
+            "display_name": "Battery",
+            "kind": "integer",
+            "max": 100.0,
+            "min": 0.0,
+            "unit": "%",
+            "writable": false
+          },
+          "door_open": {
+            "display_name": "Door",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "closed",
+                "verb": "closes"
+              },
+              "when_true": {
+                "label": "open",
+                "verb": "opens"
+              }
+            },
+            "writable": false
+          },
+          "last_alert": {
+            "display_name": "Last alert",
+            "kind": "string",
+            "writable": false
+          },
+          "locked": {
+            "display_name": "Lock",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "unlocked",
+                "verb": "unlocks"
+              },
+              "when_true": {
+                "label": "locked",
+                "verb": "locks"
+              }
+            },
+            "writable": true
+          },
+          "sound_level": {
+            "display_name": "Sound level",
+            "kind": "integer",
+            "writable": false
+          }
+        },
+        "primary": ["locked", "auto_lock_secs", "door_open", "last_alert", "sound_level"]
+      }
+    },
+    {
+      "attributes": {
+        "app_id": null,
+        "app_name": null,
+        "available_apps": [
+          {
+            "id": "2285",
+            "name": "Hulu",
+            "type": "appl",
+            "version": "7.5.0"
+          },
+          {
+            "id": "44191",
+            "name": "Emby",
+            "type": "appl",
+            "version": "4.1.70"
+          },
+          {
+            "id": "61322",
+            "name": "HBO Max",
+            "type": "appl",
+            "version": "7.10.0"
+          },
+          {
+            "id": "12",
+            "name": "Netflix",
+            "type": "appl",
+            "version": "5.1.130088008"
+          },
+          {
+            "id": "593099",
+            "name": "Peacock TV",
+            "type": "appl",
+            "version": "7.8.22"
+          },
+          {
+            "id": "291097",
+            "name": "Disney Plus",
+            "type": "appl",
+            "version": "1.65.2026082100"
+          },
+          {
+            "id": "46041",
+            "name": "Sling TV - Live Sports, News, Shows + Freestream",
+            "type": "appl",
+            "version": "9.12.27362"
+          },
+          {
+            "id": "13",
+            "name": "Prime Video",
+            "type": "appl",
+            "version": "16.0.2026073113"
+          },
+          {
+            "id": "551012",
+            "name": "Apple TV",
+            "type": "appl",
+            "version": "16.2.82"
+          },
+          {
+            "id": "257752",
+            "name": "GazeboTV",
+            "type": "appl",
+            "version": "10.0.1"
+          },
+          {
+            "id": "837",
+            "name": "YouTube",
+            "type": "appl",
+            "version": "2.23.115025187"
+          },
+          {
+            "id": "195316",
+            "name": "YouTube TV",
+            "type": "appl",
+            "version": "2.23.115025081"
+          },
+          {
+            "id": "23353",
+            "name": "PBS",
+            "type": "appl",
+            "version": "5.15.0"
+          },
+          {
+            "id": "151908",
+            "name": "The Roku Channel",
+            "type": "appl",
+            "version": "26.24.5"
+          },
+          {
+            "id": "28",
+            "name": "Pandora",
+            "type": "appl",
+            "version": "7.8.28"
+          },
+          {
+            "id": "2595",
+            "name": "Crunchyroll",
+            "type": "appl",
+            "version": "6.10.1"
+          },
+          {
+            "id": "2016",
+            "name": "Crackle",
+            "type": "appl",
+            "version": "1.0.2"
+          },
+          {
+            "id": "9160",
+            "name": "CNBC",
+            "type": "appl",
+            "version": "11.3.0"
+          },
+          {
+            "id": "15",
+            "name": "Your Photo Feed",
+            "type": "appl",
+            "version": "1.0.259"
+          },
+          {
+            "id": "23333",
+            "name": "PBS KIDS",
+            "type": "appl",
+            "version": "6.7.7"
+          },
+          {
+            "id": "13842",
+            "name": "Fandango",
+            "type": "appl",
+            "version": "2.0.30"
+          },
+          {
+            "id": "2213",
+            "name": "Roku Media Player",
+            "type": "appl",
+            "version": "5.5.19"
+          },
+          {
+            "id": "45706",
+            "name": "Roku TV Intro",
+            "type": "appl",
+            "version": "1.0.62"
+          },
+          {
+            "id": "562661",
+            "name": "Zoom TV for Kids",
+            "type": "appl",
+            "version": "1.2.28"
+          },
+          {
+            "id": "251088",
+            "name": "STIRR - the new free TV",
+            "type": "appl",
+            "version": "2.3.2"
+          },
+          {
+            "id": "11055",
+            "name": "Scripps News",
+            "type": "appl",
+            "version": "6.12.0"
+          },
+          {
+            "id": "30547",
+            "name": "WeatherNation",
+            "type": "appl",
+            "version": "3.1.0"
+          },
+          {
+            "id": "27536",
+            "name": "CBS News",
+            "type": "appl",
+            "version": "11.10.4"
+          },
+          {
+            "id": "273187",
+            "name": "St Patricks Day Screensaver",
+            "type": "appl",
+            "version": "1.0.1"
+          },
+          {
+            "id": "13535",
+            "name": "Plex - Free Movies & TV",
+            "type": "appl",
+            "version": "9.16.16"
+          },
+          {
+            "id": "41468",
+            "name": "Tubi - Free Movies & TV",
+            "type": "appl",
+            "version": "3.10.4"
+          },
+          {
+            "id": "34376",
+            "name": "ESPN",
+            "type": "appl",
+            "version": "6.10.2026082800"
+          },
+          {
+            "id": "606242",
+            "name": "Kids & Family on The Roku Channel",
+            "type": "appl",
+            "version": "12.5.18"
+          },
+          {
+            "id": "111255",
+            "name": "The CW",
+            "type": "appl",
+            "version": "5.19.2"
+          },
+          {
+            "id": "22297",
+            "name": "Spotify Music",
+            "type": "appl",
+            "version": "2.15.22"
+          },
+          {
+            "id": "31440",
+            "name": "Paramount Plus",
+            "type": "appl",
+            "version": "10.7.20260810"
+          },
+          {
+            "id": "143683",
+            "name": "IP Camera Viewer - Pro",
+            "type": "appl",
+            "version": "5.3.0"
+          },
+          {
+            "id": "48630",
+            "name": "Fawesome - Free Movies and TV Shows",
+            "type": "appl",
+            "version": "9.17.1544"
+          },
+          {
+            "id": "773622",
+            "name": "Backdrops",
+            "type": "appl",
+            "version": "2.12.1"
+          },
+          {
+            "id": "755953",
+            "name": "Zeam",
+            "type": "appl",
+            "version": "11.2.0"
+          },
+          {
+            "id": "574007",
+            "name": "Classic Masterpieces",
+            "type": "appl",
+            "version": "4.0.5"
+          },
+          {
+            "id": "280166",
+            "name": "Blooming Beauty",
+            "type": "appl",
+            "version": "4.0.5"
+          }
+        ],
+        "available_inputs": [
+          {
+            "id": "tvinput.hdmi4",
+            "name": "HDMI\u00a04\u00a0(eARC)",
+            "type": "tvin",
+            "version": "1.0.0"
+          },
+          {
+            "id": "tvinput.hdmi3",
+            "name": "PlayStation 4",
+            "type": "tvin",
+            "version": "1.0.0"
+          },
+          {
+            "id": "tvinput.cvbs",
+            "name": "AV",
+            "type": "tvin",
+            "version": "1.0.0"
+          },
+          {
+            "id": "tvinput.dtv",
+            "name": "Live\u00a0TV",
+            "type": "tvin",
+            "version": "1.0.0"
+          },
+          {
+            "id": "tvinput.hdmi2",
+            "name": "Blu-ray\u00a0player",
+            "type": "tvin",
+            "version": "1.0.0"
+          },
+          {
+            "id": "tvinput.hdmi1",
+            "name": "Xbox",
+            "type": "tvin",
+            "version": "1.0.0"
+          }
+        ],
+        "available_sources": [
+          "Hulu",
+          "HDMI\u00a04\u00a0(eARC)",
+          "PlayStation 4",
+          "AV",
+          "Live\u00a0TV",
+          "Blu-ray\u00a0player",
+          "Xbox",
+          "Emby",
+          "HBO Max",
+          "Netflix",
+          "Peacock TV",
+          "Disney Plus",
+          "Sling TV - Live Sports, News, Shows + Freestream",
+          "Prime Video",
+          "Apple TV",
+          "GazeboTV",
+          "YouTube",
+          "YouTube TV",
+          "PBS",
+          "The Roku Channel",
+          "Pandora",
+          "Crunchyroll",
+          "Crackle",
+          "CNBC",
+          "Your Photo Feed",
+          "PBS KIDS",
+          "Fandango",
+          "Roku Media Player",
+          "Roku TV Intro",
+          "Zoom TV for Kids",
+          "STIRR - the new free TV",
+          "Scripps News",
+          "WeatherNation",
+          "CBS News",
+          "St Patricks Day Screensaver",
+          "Plex - Free Movies & TV",
+          "Tubi - Free Movies & TV",
+          "ESPN",
+          "Kids & Family on The Roku Channel",
+          "The CW",
+          "Spotify Music",
+          "Paramount Plus",
+          "IP Camera Viewer - Pro",
+          "Fawesome - Free Movies and TV Shows",
+          "Backdrops",
+          "Zeam",
+          "Classic Masterpieces",
+          "Blooming Beauty"
+        ],
+        "device_info": {
+          "advertising_id": "4287a4a5-7efc-58c6-9022-84bd5399d822",
+          "av_sync_calibration_enabled": "3.0",
+          "build_number": "88G.34E00832A",
+          "clock_format": "24-hour",
+          "closed_caption_mode": "Off",
+          "country": "US",
+          "default_device_name": "TCL\u2022Roku TV - X00300CR4TPA",
+          "developer_enabled": false,
+          "device_automation_bridge_enabled": false,
+          "device_id": "S053Y9DR4TPA",
+          "ecp_setting_mode": "enabled",
+          "ethernet_mac": "cc:a1:2b:ad:4e:98",
+          "expert_pq_enabled": "1.0",
+          "find_remote_is_possible": false,
+          "friendly_device_name": "65\" TCL Roku TV",
+          "friendly_model_name": "TCL\u2022Roku TV",
+          "grandcentral_version": "26.35.14",
+          "has_hands_free_voice_remote": false,
+          "has_mobile_screensaver": false,
+          "has_play_on_roku": false,
+          "has_wifi_5G_support": true,
+          "headphones_connected": false,
+          "is_stick": false,
+          "is_tv": true,
+          "keyed_developer_id": "",
+          "language": "en",
+          "lightning_base_build_number": "",
+          "locale": "en_US",
+          "mobile_has_live_tv": true,
+          "model_name": "65R625",
+          "model_number": "A108X",
+          "model_region": "US",
+          "network_type": "ethernet",
+          "panel_id": 11,
+          "power_mode": "Ready",
+          "private_listening_blocked": false,
+          "screen_size": 65,
+          "search_channels_enabled": true,
+          "search_enabled": true,
+          "secure_device": true,
+          "serial_number": "X00300CR4TPA",
+          "software_build": 832,
+          "software_version": "15.3.4",
+          "support_url": "support.tcl.com/us",
+          "supports_airplay": true,
+          "supports_audio_guide": true,
+          "supports_audio_settings": false,
+          "supports_ecs_microphone": true,
+          "supports_ecs_textedit": true,
+          "supports_ethernet": true,
+          "supports_find_remote": true,
+          "supports_private_listening": true,
+          "supports_private_listening_dtv": true,
+          "supports_rva": true,
+          "supports_suspend": true,
+          "supports_trc": true,
+          "supports_wake_on_wlan": true,
+          "supports_warm_standby": true,
+          "time_zone": "US/Eastern",
+          "time_zone_auto": true,
+          "time_zone_name": "United States/Eastern",
+          "time_zone_offset": -240,
+          "time_zone_tz": "America/New_York",
+          "trc_channel_version": "26.24.5",
+          "trc_version": "3.0",
+          "tuner_type": "ATSC",
+          "udn": "280000c0-0000-1000-8000-34f150647221",
+          "ui_build_number": "88G.34E00832A",
+          "ui_resolution": "1080p",
+          "ui_software_build": 832,
+          "ui_software_version": "15.3.4",
+          "uptime": 505744,
+          "user_device_location": "Living room",
+          "user_device_name": "65\" TCL Roku TV",
+          "user_profile_type": "none",
+          "vendor_name": "TCL",
+          "voice_search_enabled": true,
+          "wifi_driver": "realtek",
+          "wifi_mac": "34:f1:50:64:72:21"
+        },
+        "ecp_control_enabled": true,
+        "friendly_name": "65\" TCL Roku TV",
+        "headphones_connected": false,
+        "is_stick": false,
+        "is_tv": true,
+        "is_tv_input": false,
+        "model_name": "65R625",
+        "model_number": "A108X",
+        "network_type": "ethernet",
+        "on": false,
+        "power_mode": "Ready",
+        "screensaver_active": false,
+        "serial_number": "X00300CR4TPA",
+        "software_version": "15.3.4",
+        "source": "Home",
+        "state": "stopped",
+        "supports_audio_volume_control": false,
+        "supports_find_remote": true,
+        "supports_private_listening": true,
+        "supports_tv_power_control": false,
+        "supports_wake_on_lan": true
+      },
+      "device_type": "media_player",
+      "plugin_id": "plugin.roku",
+      "schema": {
+        "actions": [
+          {
+            "category": "Power",
+            "icon": "power",
+            "id": "power_on",
+            "label": "Turn on",
+            "requires_role": "user",
+            "sentence": "turn on {device}",
+            "writes": "on"
+          },
+          {
+            "category": "Power",
+            "icon": "power",
+            "id": "power_off",
+            "label": "Turn off",
+            "requires_role": "user",
+            "sentence": "turn off {device}",
+            "writes": "on"
+          },
+          {
+            "category": "Power",
+            "icon": "power",
+            "id": "power_toggle",
+            "label": "Toggle power",
+            "requires_role": "user",
+            "sentence": "toggle the power of {device}"
+          },
+          {
+            "category": "Transport",
+            "icon": "play",
+            "id": "play",
+            "label": "Play",
+            "requires_role": "user",
+            "sentence": "play {device}",
+            "writes": "state"
+          },
+          {
+            "category": "Transport",
+            "icon": "pause",
+            "id": "pause",
+            "label": "Pause",
+            "requires_role": "user",
+            "sentence": "pause {device}",
+            "writes": "state"
+          },
+          {
+            "category": "Transport",
+            "icon": "play-pause",
+            "id": "play_pause",
+            "label": "Play / pause",
+            "requires_role": "user",
+            "sentence": "toggle play/pause on {device}"
+          },
+          {
+            "category": "Transport",
+            "description": "ECP has no stop; this leaves playback via Back.",
+            "icon": "stop",
+            "id": "stop",
+            "label": "Stop",
+            "requires_role": "user",
+            "sentence": "stop {device}"
+          },
+          {
+            "category": "Transport",
+            "icon": "skip-next",
+            "id": "next",
+            "label": "Skip forward",
+            "params": [
+              {
+                "default": 1,
+                "kind": "int",
+                "label": "Times",
+                "max": 100.0,
+                "min": 1.0,
+                "name": "count",
+                "required": false
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "skip {device} forward"
+          },
+          {
+            "category": "Transport",
+            "icon": "skip-previous",
+            "id": "previous",
+            "label": "Skip back",
+            "params": [
+              {
+                "default": 1,
+                "kind": "int",
+                "label": "Times",
+                "max": 100.0,
+                "min": 1.0,
+                "name": "count",
+                "required": false
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "skip {device} back"
+          },
+          {
+            "category": "Transport",
+            "icon": "replay",
+            "id": "instant_replay",
+            "label": "Instant replay",
+            "requires_role": "user",
+            "sentence": "replay on {device}"
+          },
+          {
+            "category": "Volume",
+            "icon": "volume-up",
+            "id": "volume_up",
+            "label": "Volume up",
+            "params": [
+              {
+                "default": 1,
+                "kind": "int",
+                "label": "Times",
+                "max": 100.0,
+                "min": 1.0,
+                "name": "count",
+                "required": false
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "turn {device} up {count} step(s)"
+          },
+          {
+            "category": "Volume",
+            "icon": "volume-down",
+            "id": "volume_down",
+            "label": "Volume down",
+            "params": [
+              {
+                "default": 1,
+                "kind": "int",
+                "label": "Times",
+                "max": 100.0,
+                "min": 1.0,
+                "name": "count",
+                "required": false
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "turn {device} down {count} step(s)"
+          },
+          {
+            "category": "Volume",
+            "description": "VolumeMute toggles; ECP cannot report or set mute absolutely.",
+            "icon": "volume-mute",
+            "id": "mute",
+            "label": "Mute / unmute",
+            "requires_role": "user",
+            "sentence": "toggle mute on {device}"
+          },
+          {
+            "category": "Apps",
+            "icon": "apps",
+            "id": "launch_app",
+            "label": "Launch a channel",
+            "params": [
+              {
+                "kind": "enum",
+                "label": "Channel",
+                "name": "app",
+                "options_from": {
+                  "attribute": {
+                    "attribute": "available_apps",
+                    "label_key": "name",
+                    "value_key": "id"
+                  }
+                },
+                "required": true
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "launch {app} on {device}",
+            "writes": "source"
+          },
+          {
+            "category": "Apps",
+            "icon": "input",
+            "id": "select_source",
+            "label": "Select a source",
+            "params": [
+              {
+                "kind": "enum",
+                "label": "Source",
+                "name": "source",
+                "options_from": {
+                  "attribute": {
+                    "attribute": "available_sources"
+                  }
+                },
+                "required": true
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "switch {device} to {source}",
+            "writes": "source"
+          },
+          {
+            "category": "Apps",
+            "description": "ECP cannot install unattended; this opens the Channel Store page.",
+            "icon": "download",
+            "id": "install_app",
+            "label": "Open a channel's store page",
+            "params": [
+              {
+                "kind": "string",
+                "label": "Channel id",
+                "name": "app_id",
+                "required": true
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "open the store page for {app_id} on {device}"
+          },
+          {
+            "category": "Live TV",
+            "icon": "channel-up",
+            "id": "channel_up",
+            "label": "Channel up",
+            "params": [
+              {
+                "default": 1,
+                "kind": "int",
+                "label": "Times",
+                "max": 100.0,
+                "min": 1.0,
+                "name": "count",
+                "required": false
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "step {device} up {count} channel(s)"
+          },
+          {
+            "category": "Live TV",
+            "icon": "channel-down",
+            "id": "channel_down",
+            "label": "Channel down",
+            "params": [
+              {
+                "default": 1,
+                "kind": "int",
+                "label": "Times",
+                "max": 100.0,
+                "min": 1.0,
+                "name": "count",
+                "required": false
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "step {device} down {count} channel(s)"
+          },
+          {
+            "category": "Live TV",
+            "icon": "tv",
+            "id": "tune",
+            "label": "Tune to a channel",
+            "params": [
+              {
+                "kind": "string",
+                "label": "Channel",
+                "name": "channel",
+                "options_from": {
+                  "attribute": {
+                    "attribute": "available_tv_channels",
+                    "label_key": "name",
+                    "value_key": "number"
+                  }
+                },
+                "required": true
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "tune {device} to {channel}",
+            "writes": "tv_channel"
+          },
+          {
+            "category": "Text",
+            "icon": "keyboard",
+            "id": "text",
+            "label": "Type text",
+            "params": [
+              {
+                "kind": "string",
+                "label": "Text",
+                "name": "text",
+                "required": true
+              },
+              {
+                "default": false,
+                "kind": "bool",
+                "label": "Press Enter afterwards",
+                "name": "submit",
+                "required": false
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "type {text} on {device}"
+          },
+          {
+            "category": "Remote",
+            "icon": "remote",
+            "id": "key",
+            "label": "Press a remote key",
+            "params": [
+              {
+                "kind": "enum",
+                "label": "Key",
+                "name": "key",
+                "options": [
+                  {
+                    "value": "Home"
+                  },
+                  {
+                    "value": "Back"
+                  },
+                  {
+                    "value": "Select"
+                  },
+                  {
+                    "value": "Left"
+                  },
+                  {
+                    "value": "Right"
+                  },
+                  {
+                    "value": "Up"
+                  },
+                  {
+                    "value": "Down"
+                  },
+                  {
+                    "value": "Info"
+                  },
+                  {
+                    "value": "Play"
+                  },
+                  {
+                    "value": "Rev"
+                  },
+                  {
+                    "value": "Fwd"
+                  },
+                  {
+                    "value": "InstantReplay"
+                  },
+                  {
+                    "value": "Backspace"
+                  },
+                  {
+                    "value": "Enter"
+                  },
+                  {
+                    "value": "Search"
+                  },
+                  {
+                    "value": "FindRemote"
+                  },
+                  {
+                    "value": "VolumeUp"
+                  },
+                  {
+                    "value": "VolumeDown"
+                  },
+                  {
+                    "value": "VolumeMute"
+                  },
+                  {
+                    "value": "PowerOff"
+                  },
+                  {
+                    "value": "PowerOn"
+                  },
+                  {
+                    "value": "Power"
+                  },
+                  {
+                    "value": "ChannelUp"
+                  },
+                  {
+                    "value": "ChannelDown"
+                  },
+                  {
+                    "value": "InputTuner"
+                  },
+                  {
+                    "value": "InputHDMI1"
+                  },
+                  {
+                    "value": "InputHDMI2"
+                  },
+                  {
+                    "value": "InputHDMI3"
+                  },
+                  {
+                    "value": "InputHDMI4"
+                  },
+                  {
+                    "value": "InputAV1"
+                  }
+                ],
+                "required": true
+              },
+              {
+                "default": 1,
+                "kind": "int",
+                "label": "Times",
+                "max": 100.0,
+                "min": 1.0,
+                "name": "count",
+                "required": false
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "press {key} on {device}"
+          },
+          {
+            "category": "Remote",
+            "icon": "remote",
+            "id": "key_hold",
+            "label": "Hold a remote key",
+            "params": [
+              {
+                "kind": "enum",
+                "label": "Key",
+                "name": "key",
+                "options": [
+                  {
+                    "value": "Home"
+                  },
+                  {
+                    "value": "Back"
+                  },
+                  {
+                    "value": "Select"
+                  },
+                  {
+                    "value": "Left"
+                  },
+                  {
+                    "value": "Right"
+                  },
+                  {
+                    "value": "Up"
+                  },
+                  {
+                    "value": "Down"
+                  },
+                  {
+                    "value": "Info"
+                  },
+                  {
+                    "value": "Play"
+                  },
+                  {
+                    "value": "Rev"
+                  },
+                  {
+                    "value": "Fwd"
+                  },
+                  {
+                    "value": "InstantReplay"
+                  },
+                  {
+                    "value": "Backspace"
+                  },
+                  {
+                    "value": "Enter"
+                  },
+                  {
+                    "value": "Search"
+                  },
+                  {
+                    "value": "FindRemote"
+                  },
+                  {
+                    "value": "VolumeUp"
+                  },
+                  {
+                    "value": "VolumeDown"
+                  },
+                  {
+                    "value": "VolumeMute"
+                  },
+                  {
+                    "value": "PowerOff"
+                  },
+                  {
+                    "value": "PowerOn"
+                  },
+                  {
+                    "value": "Power"
+                  },
+                  {
+                    "value": "ChannelUp"
+                  },
+                  {
+                    "value": "ChannelDown"
+                  },
+                  {
+                    "value": "InputTuner"
+                  },
+                  {
+                    "value": "InputHDMI1"
+                  },
+                  {
+                    "value": "InputHDMI2"
+                  },
+                  {
+                    "value": "InputHDMI3"
+                  },
+                  {
+                    "value": "InputHDMI4"
+                  },
+                  {
+                    "value": "InputAV1"
+                  }
+                ],
+                "required": true
+              },
+              {
+                "default": 1000,
+                "kind": "int",
+                "label": "Hold for",
+                "max": 10000.0,
+                "min": 100.0,
+                "name": "hold_ms",
+                "required": false,
+                "unit": "ms"
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "hold {key} on {device}"
+          },
+          {
+            "category": "Remote",
+            "icon": "remote",
+            "id": "key_down",
+            "label": "Press and hold a key down",
+            "params": [
+              {
+                "kind": "enum",
+                "label": "Key",
+                "name": "key",
+                "options": [
+                  {
+                    "value": "Home"
+                  },
+                  {
+                    "value": "Back"
+                  },
+                  {
+                    "value": "Select"
+                  },
+                  {
+                    "value": "Left"
+                  },
+                  {
+                    "value": "Right"
+                  },
+                  {
+                    "value": "Up"
+                  },
+                  {
+                    "value": "Down"
+                  },
+                  {
+                    "value": "Info"
+                  },
+                  {
+                    "value": "Play"
+                  },
+                  {
+                    "value": "Rev"
+                  },
+                  {
+                    "value": "Fwd"
+                  },
+                  {
+                    "value": "InstantReplay"
+                  },
+                  {
+                    "value": "Backspace"
+                  },
+                  {
+                    "value": "Enter"
+                  },
+                  {
+                    "value": "Search"
+                  },
+                  {
+                    "value": "FindRemote"
+                  },
+                  {
+                    "value": "VolumeUp"
+                  },
+                  {
+                    "value": "VolumeDown"
+                  },
+                  {
+                    "value": "VolumeMute"
+                  },
+                  {
+                    "value": "PowerOff"
+                  },
+                  {
+                    "value": "PowerOn"
+                  },
+                  {
+                    "value": "Power"
+                  },
+                  {
+                    "value": "ChannelUp"
+                  },
+                  {
+                    "value": "ChannelDown"
+                  },
+                  {
+                    "value": "InputTuner"
+                  },
+                  {
+                    "value": "InputHDMI1"
+                  },
+                  {
+                    "value": "InputHDMI2"
+                  },
+                  {
+                    "value": "InputHDMI3"
+                  },
+                  {
+                    "value": "InputHDMI4"
+                  },
+                  {
+                    "value": "InputAV1"
+                  }
+                ],
+                "required": true
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "hold {key} down on {device}"
+          },
+          {
+            "category": "Remote",
+            "icon": "remote",
+            "id": "key_up",
+            "label": "Release a held key",
+            "params": [
+              {
+                "kind": "enum",
+                "label": "Key",
+                "name": "key",
+                "options": [
+                  {
+                    "value": "Home"
+                  },
+                  {
+                    "value": "Back"
+                  },
+                  {
+                    "value": "Select"
+                  },
+                  {
+                    "value": "Left"
+                  },
+                  {
+                    "value": "Right"
+                  },
+                  {
+                    "value": "Up"
+                  },
+                  {
+                    "value": "Down"
+                  },
+                  {
+                    "value": "Info"
+                  },
+                  {
+                    "value": "Play"
+                  },
+                  {
+                    "value": "Rev"
+                  },
+                  {
+                    "value": "Fwd"
+                  },
+                  {
+                    "value": "InstantReplay"
+                  },
+                  {
+                    "value": "Backspace"
+                  },
+                  {
+                    "value": "Enter"
+                  },
+                  {
+                    "value": "Search"
+                  },
+                  {
+                    "value": "FindRemote"
+                  },
+                  {
+                    "value": "VolumeUp"
+                  },
+                  {
+                    "value": "VolumeDown"
+                  },
+                  {
+                    "value": "VolumeMute"
+                  },
+                  {
+                    "value": "PowerOff"
+                  },
+                  {
+                    "value": "PowerOn"
+                  },
+                  {
+                    "value": "Power"
+                  },
+                  {
+                    "value": "ChannelUp"
+                  },
+                  {
+                    "value": "ChannelDown"
+                  },
+                  {
+                    "value": "InputTuner"
+                  },
+                  {
+                    "value": "InputHDMI1"
+                  },
+                  {
+                    "value": "InputHDMI2"
+                  },
+                  {
+                    "value": "InputHDMI3"
+                  },
+                  {
+                    "value": "InputHDMI4"
+                  },
+                  {
+                    "value": "InputAV1"
+                  }
+                ],
+                "required": true
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "release {key} on {device}"
+          },
+          {
+            "category": "Navigation",
+            "icon": "remote",
+            "id": "home",
+            "label": "Home",
+            "params": [
+              {
+                "default": 1,
+                "kind": "int",
+                "label": "Times",
+                "max": 100.0,
+                "min": 1.0,
+                "name": "count",
+                "required": false
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "go Home on {device}"
+          },
+          {
+            "category": "Navigation",
+            "icon": "remote",
+            "id": "back",
+            "label": "Back",
+            "params": [
+              {
+                "default": 1,
+                "kind": "int",
+                "label": "Times",
+                "max": 100.0,
+                "min": 1.0,
+                "name": "count",
+                "required": false
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "go Back on {device}"
+          },
+          {
+            "category": "Navigation",
+            "icon": "remote",
+            "id": "select",
+            "label": "OK / Select",
+            "params": [
+              {
+                "default": 1,
+                "kind": "int",
+                "label": "Times",
+                "max": 100.0,
+                "min": 1.0,
+                "name": "count",
+                "required": false
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "press OK on {device}"
+          },
+          {
+            "category": "Navigation",
+            "icon": "remote",
+            "id": "up",
+            "label": "Up",
+            "params": [
+              {
+                "default": 1,
+                "kind": "int",
+                "label": "Times",
+                "max": 100.0,
+                "min": 1.0,
+                "name": "count",
+                "required": false
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "press Up {count} time(s) on {device}"
+          },
+          {
+            "category": "Navigation",
+            "icon": "remote",
+            "id": "down",
+            "label": "Down",
+            "params": [
+              {
+                "default": 1,
+                "kind": "int",
+                "label": "Times",
+                "max": 100.0,
+                "min": 1.0,
+                "name": "count",
+                "required": false
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "press Down {count} time(s) on {device}"
+          },
+          {
+            "category": "Navigation",
+            "icon": "remote",
+            "id": "left",
+            "label": "Left",
+            "params": [
+              {
+                "default": 1,
+                "kind": "int",
+                "label": "Times",
+                "max": 100.0,
+                "min": 1.0,
+                "name": "count",
+                "required": false
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "press Left {count} time(s) on {device}"
+          },
+          {
+            "category": "Navigation",
+            "icon": "remote",
+            "id": "right",
+            "label": "Right",
+            "params": [
+              {
+                "default": 1,
+                "kind": "int",
+                "label": "Times",
+                "max": 100.0,
+                "min": 1.0,
+                "name": "count",
+                "required": false
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "press Right {count} time(s) on {device}"
+          },
+          {
+            "category": "Navigation",
+            "icon": "remote",
+            "id": "info",
+            "label": "Info / options",
+            "params": [
+              {
+                "default": 1,
+                "kind": "int",
+                "label": "Times",
+                "max": 100.0,
+                "min": 1.0,
+                "name": "count",
+                "required": false
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "press Info on {device}"
+          },
+          {
+            "category": "Navigation",
+            "icon": "remote",
+            "id": "enter",
+            "label": "Enter",
+            "params": [
+              {
+                "default": 1,
+                "kind": "int",
+                "label": "Times",
+                "max": 100.0,
+                "min": 1.0,
+                "name": "count",
+                "required": false
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "press Enter on {device}"
+          },
+          {
+            "category": "Navigation",
+            "icon": "remote",
+            "id": "backspace",
+            "label": "Backspace",
+            "params": [
+              {
+                "default": 1,
+                "kind": "int",
+                "label": "Times",
+                "max": 100.0,
+                "min": 1.0,
+                "name": "count",
+                "required": false
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "press Backspace on {device}"
+          },
+          {
+            "category": "Navigation",
+            "icon": "remote",
+            "id": "find_remote",
+            "label": "Find my remote",
+            "params": [
+              {
+                "default": 1,
+                "kind": "int",
+                "label": "Times",
+                "max": 100.0,
+                "min": 1.0,
+                "name": "count",
+                "required": false
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "make {device} find its remote"
+          }
+        ],
+        "attributes": {
+          "app_name": {
+            "display_name": "Channel",
+            "kind": "string",
+            "writable": false
+          },
+          "available_apps": {
+            "display_name": "Installed channels",
+            "kind": "json",
+            "writable": false
+          },
+          "available_inputs": {
+            "display_name": "TV inputs",
+            "kind": "json",
+            "writable": false
+          },
+          "available_sources": {
+            "display_name": "Available sources",
+            "kind": "json",
+            "writable": false
+          },
+          "available_tv_channels": {
+            "display_name": "TV channel lineup",
+            "kind": "json",
+            "writable": false
+          },
+          "media_duration": {
+            "display_name": "Duration",
+            "kind": "integer",
+            "unit": "s",
+            "writable": false
+          },
+          "media_position": {
+            "display_name": "Position",
+            "kind": "integer",
+            "unit": "s",
+            "writable": false
+          },
+          "media_title": {
+            "display_name": "Now playing",
+            "kind": "string",
+            "writable": false
+          },
+          "on": {
+            "display_name": "Power",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "off",
+                "verb": "turns off"
+              },
+              "when_true": {
+                "label": "on",
+                "verb": "turns on"
+              }
+            },
+            "writable": true
+          },
+          "power_mode": {
+            "display_name": "Power mode",
+            "kind": "string",
+            "writable": false
+          },
+          "source": {
+            "display_name": "Source",
+            "kind": "string",
+            "writable": true
+          },
+          "state": {
+            "display_name": "Playback",
+            "kind": "enum",
+            "options": ["playing", "paused", "stopped", "idle", "buffering"],
+            "writable": true
+          },
+          "tv_channel": {
+            "display_name": "TV channel",
+            "kind": "string",
+            "writable": true
+          }
+        },
+        "primary": [
+          "state",
+          "on",
+          "app_name",
+          "available_apps",
+          "available_inputs",
+          "available_sources",
+          "available_tv_channels",
+          "media_duration",
+          "media_position",
+          "media_title",
+          "power_mode",
+          "source",
+          "tv_channel"
+        ]
+      }
+    },
+    {
+      "attributes": {
+        "available_favorite_items": [
+          {
+            "albumArtUri": "https://i.iheart.com/v3/re/assets.streams/66a2a4d762ed542f0901aefb",
+            "image_url": "https://i.iheart.com/v3/re/assets.streams/66a2a4d762ed542f0901aefb",
+            "title": "ALT Radio"
+          },
+          {
+            "albumArtUri": "https://sonosradio.imgix.net/station-images/260e139c-881d-46b9-98f1-3046498804ab.png?w=200&auto=format,compress",
+            "image_url": "https://sonosradio.imgix.net/station-images/260e139c-881d-46b9-98f1-3046498804ab.png?w=200&auto=format,compress",
+            "title": "Piano for Sleeping"
+          },
+          {
+            "albumArtUri": "https://sonosradio.imgix.net/station-images/95cc28c9-47ff-4640-b1e6-ab7d0e830776.jpeg?w=200&auto=format,compress",
+            "image_url": "https://sonosradio.imgix.net/station-images/95cc28c9-47ff-4640-b1e6-ab7d0e830776.jpeg?w=200&auto=format,compress",
+            "title": "Surround Sound Classical"
+          }
+        ],
+        "available_favorites": ["ALT Radio", "Piano for Sleeping", "Surround Sound Classical"],
+        "available_playlist_items": [],
+        "available_playlists": [],
+        "bass": 0,
+        "duration_secs": 0,
+        "group_coordinator": "sonos_bathroom",
+        "group_members": ["sonos_bathroom"],
+        "loudness": true,
+        "media_duration": 0,
+        "media_image_url": "https://sonosradio.imgix.net/station-images/260e139c-881d-46b9-98f1-3046498804ab.png?w=200&auto=format,compress",
+        "media_position": 0,
+        "media_title": "Piano for Sleeping",
+        "muted": false,
+        "position_secs": 0,
+        "repeat": "none",
+        "shuffle": false,
+        "sonos": {
+          "favorite_items": [
+            {
+              "albumArtUri": "https://i.iheart.com/v3/re/assets.streams/66a2a4d762ed542f0901aefb",
+              "image_url": "https://i.iheart.com/v3/re/assets.streams/66a2a4d762ed542f0901aefb",
+              "title": "ALT Radio"
+            },
+            {
+              "albumArtUri": "https://sonosradio.imgix.net/station-images/260e139c-881d-46b9-98f1-3046498804ab.png?w=200&auto=format,compress",
+              "image_url": "https://sonosradio.imgix.net/station-images/260e139c-881d-46b9-98f1-3046498804ab.png?w=200&auto=format,compress",
+              "title": "Piano for Sleeping"
+            },
+            {
+              "albumArtUri": "https://sonosradio.imgix.net/station-images/95cc28c9-47ff-4640-b1e6-ab7d0e830776.jpeg?w=200&auto=format,compress",
+              "image_url": "https://sonosradio.imgix.net/station-images/95cc28c9-47ff-4640-b1e6-ab7d0e830776.jpeg?w=200&auto=format,compress",
+              "title": "Surround Sound Classical"
+            }
+          ],
+          "favorites": ["ALT Radio", "Piano for Sleeping", "Surround Sound Classical"],
+          "group_coordinator": "sonos_bathroom",
+          "group_members": ["sonos_bathroom"],
+          "playlist_items": [],
+          "playlists": []
+        },
+        "state": "paused",
+        "supported_actions": [
+          "play",
+          "pause",
+          "stop",
+          "next",
+          "previous",
+          "set_volume",
+          "set_mute",
+          "seek",
+          "play_media",
+          "join",
+          "unjoin",
+          "set_shuffle",
+          "set_repeat",
+          "set_bass",
+          "set_treble",
+          "set_loudness"
+        ],
+        "title": "Piano for Sleeping",
+        "treble": 0,
+        "ui_enrichments": ["favorites", "playlists", "grouping", "audio_eq"],
+        "volume": 15
+      },
+      "device_type": "media_player",
+      "plugin_id": "plugin.sonos",
+      "schema": {
+        "actions": [
+          {
+            "category": "Transport",
+            "icon": "play",
+            "id": "play",
+            "label": "Play",
+            "requires_role": "user",
+            "sentence": "play {device}",
+            "writes": "state"
+          },
+          {
+            "category": "Transport",
+            "icon": "pause",
+            "id": "pause",
+            "label": "Pause",
+            "requires_role": "user",
+            "sentence": "pause {device}",
+            "writes": "state"
+          },
+          {
+            "category": "Transport",
+            "icon": "stop",
+            "id": "stop",
+            "label": "Stop",
+            "requires_role": "user",
+            "sentence": "stop {device}"
+          },
+          {
+            "category": "Transport",
+            "icon": "play-pause",
+            "id": "toggle_play_pause",
+            "label": "Play / pause",
+            "requires_role": "user",
+            "sentence": "toggle play/pause on {device}"
+          },
+          {
+            "category": "Transport",
+            "icon": "skip-next",
+            "id": "next",
+            "label": "Next track",
+            "requires_role": "user",
+            "sentence": "skip to the next track on {device}"
+          },
+          {
+            "category": "Transport",
+            "icon": "skip-previous",
+            "id": "previous",
+            "label": "Previous track",
+            "requires_role": "user",
+            "sentence": "skip to the previous track on {device}"
+          },
+          {
+            "category": "Transport",
+            "icon": "timeline",
+            "id": "seek",
+            "label": "Seek to",
+            "params": [
+              {
+                "default": 0,
+                "kind": "duration",
+                "label": "Position",
+                "name": "position",
+                "required": true
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "seek {position} into the track on {device}"
+          },
+          {
+            "category": "Volume",
+            "icon": "volume-up",
+            "id": "set_volume",
+            "label": "Set volume",
+            "params": [
+              {
+                "default": 30,
+                "kind": "int",
+                "label": "Volume",
+                "max": 100.0,
+                "min": 0.0,
+                "name": "volume",
+                "required": true,
+                "unit": "%"
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "set the volume of {device} to {volume}",
+            "writes": "volume"
+          },
+          {
+            "category": "Volume",
+            "icon": "volume-mute",
+            "id": "set_mute",
+            "label": "Mute / unmute",
+            "params": [
+              {
+                "default": true,
+                "kind": "bool",
+                "label": "Muted",
+                "name": "muted",
+                "required": false
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "set mute on {device} to {muted}",
+            "writes": "muted"
+          },
+          {
+            "category": "Playback mode",
+            "icon": "shuffle",
+            "id": "set_shuffle",
+            "label": "Shuffle",
+            "params": [
+              {
+                "default": true,
+                "kind": "bool",
+                "label": "Shuffle",
+                "name": "shuffle",
+                "required": false
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "set shuffle on {device} to {shuffle}",
+            "writes": "shuffle"
+          },
+          {
+            "category": "Playback mode",
+            "icon": "repeat",
+            "id": "set_repeat",
+            "label": "Repeat",
+            "params": [
+              {
+                "default": "all",
+                "kind": "enum",
+                "label": "Repeat",
+                "name": "repeat",
+                "options": [
+                  {
+                    "value": "none"
+                  },
+                  {
+                    "value": "one"
+                  },
+                  {
+                    "value": "all"
+                  }
+                ],
+                "required": true
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "set repeat on {device} to {repeat}",
+            "writes": "repeat"
+          },
+          {
+            "category": "Audio EQ",
+            "icon": "equalizer",
+            "id": "set_bass",
+            "label": "Set bass",
+            "params": [
+              {
+                "default": 0,
+                "kind": "int",
+                "label": "Bass",
+                "max": 10.0,
+                "min": -10.0,
+                "name": "bass",
+                "required": true
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "set the bass of {device} to {bass}",
+            "writes": "bass"
+          },
+          {
+            "category": "Audio EQ",
+            "icon": "equalizer",
+            "id": "set_treble",
+            "label": "Set treble",
+            "params": [
+              {
+                "default": 0,
+                "kind": "int",
+                "label": "Treble",
+                "max": 10.0,
+                "min": -10.0,
+                "name": "treble",
+                "required": true
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "set the treble of {device} to {treble}",
+            "writes": "treble"
+          },
+          {
+            "category": "Audio EQ",
+            "icon": "equalizer",
+            "id": "set_loudness",
+            "label": "Loudness",
+            "params": [
+              {
+                "default": true,
+                "kind": "bool",
+                "label": "Loudness",
+                "name": "loudness",
+                "required": false
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "set loudness on {device} to {loudness}",
+            "writes": "loudness"
+          },
+          {
+            "category": "Content",
+            "icon": "star",
+            "id": "play_favorite",
+            "label": "Play a favourite",
+            "params": [
+              {
+                "kind": "enum",
+                "label": "Favourite",
+                "name": "favorite",
+                "options_from": {
+                  "attribute": {
+                    "attribute": "available_favorites"
+                  }
+                },
+                "required": true
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "play the favourite {favorite} on {device}"
+          },
+          {
+            "category": "Content",
+            "icon": "playlist",
+            "id": "play_playlist",
+            "label": "Play a playlist",
+            "params": [
+              {
+                "kind": "enum",
+                "label": "Playlist",
+                "name": "playlist",
+                "options_from": {
+                  "attribute": {
+                    "attribute": "available_playlists"
+                  }
+                },
+                "required": true
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "play the playlist {playlist} on {device}"
+          },
+          {
+            "category": "Content",
+            "description": "A stream or file URI, for anything not in the favourites list.",
+            "icon": "link",
+            "id": "play_uri",
+            "label": "Play a URI",
+            "params": [
+              {
+                "kind": "string",
+                "label": "URI",
+                "name": "uri",
+                "required": true
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "play {uri} on {device}"
+          },
+          {
+            "category": "Grouping",
+            "icon": "group",
+            "id": "join",
+            "label": "Group with\u2026",
+            "params": [
+              {
+                "kind": "device_ref",
+                "label": "Group leader",
+                "name": "coordinator",
+                "options_from": {
+                  "devices": {
+                    "exclude_self": true,
+                    "facet": "media_player",
+                    "plugin_id": "plugin.sonos"
+                  }
+                },
+                "required": true
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "group {device} with {coordinator}"
+          },
+          {
+            "category": "Grouping",
+            "icon": "ungroup",
+            "id": "unjoin",
+            "label": "Ungroup",
+            "requires_role": "user",
+            "sentence": "remove {device} from its group"
+          }
+        ],
+        "attributes": {
+          "available_favorites": {
+            "display_name": "Favourites",
+            "kind": "json",
+            "writable": false
+          },
+          "available_playlists": {
+            "display_name": "Playlists",
+            "kind": "json",
+            "writable": false
+          },
+          "bass": {
+            "display_name": "Bass",
+            "kind": "integer",
+            "writable": false
+          },
+          "group_coordinator": {
+            "display_name": "Group leader",
+            "kind": "string",
+            "writable": false
+          },
+          "loudness": {
+            "display_name": "Loudness",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "off",
+                "verb": "turns off"
+              },
+              "when_true": {
+                "label": "on",
+                "verb": "turns on"
+              }
+            },
+            "writable": false
+          },
+          "muted": {
+            "display_name": "Muted",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "unmuted",
+                "verb": "is unmuted"
+              },
+              "when_true": {
+                "label": "muted",
+                "verb": "is muted"
+              }
+            },
+            "writable": false
+          },
+          "repeat": {
+            "display_name": "Repeat",
+            "kind": "string",
+            "writable": false
+          },
+          "shuffle": {
+            "display_name": "Shuffle",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "in order",
+                "verb": "stops shuffling"
+              },
+              "when_true": {
+                "label": "shuffling",
+                "verb": "starts shuffling"
+              }
+            },
+            "writable": false
+          },
+          "state": {
+            "display_name": "Playback",
+            "kind": "string",
+            "writable": false
+          },
+          "treble": {
+            "display_name": "Treble",
+            "kind": "integer",
+            "writable": false
+          },
+          "volume": {
+            "display_name": "Volume",
+            "kind": "integer",
+            "unit": "%",
+            "writable": false
+          }
+        },
+        "primary": [
+          "state",
+          "available_favorites",
+          "available_playlists",
+          "bass",
+          "group_coordinator",
+          "loudness",
+          "muted",
+          "repeat",
+          "shuffle",
+          "treble",
+          "volume"
+        ]
+      }
+    },
+    {
+      "attributes": {
+        "battery_pct": 100.0,
+        "battery_state": "normal",
+        "bridge_id": "001788fffe6841b3",
+        "enabled": true,
+        "illuminance": 30.19951720402016,
+        "illuminance_lux": 30.19951720402016,
+        "illuminance_raw": 14801.0,
+        "illuminance_unit": "lux",
+        "illuminance_valid": true,
+        "kind": "hue_motion",
+        "motion": false,
+        "motion_sensitivity": 2,
+        "resource_id": "f8574a7d-4263-497e-95bb-373a302154a2",
+        "resource_type": "motion",
+        "temperature": 70.07,
+        "temperature_c": 21.15,
+        "temperature_f": 70.07,
+        "temperature_unit": "F",
+        "temperature_valid": true
+      },
+      "device_type": "motion_sensor",
+      "plugin_id": "plugin.hue",
+      "schema": {
+        "attributes": {
+          "battery_pct": {
+            "category": "diagnostic",
+            "display_name": "Battery %",
+            "kind": "float",
+            "unit": "%",
+            "writable": false
+          },
+          "battery_state": {
+            "category": "diagnostic",
+            "display_name": "Battery State",
+            "kind": "string",
+            "writable": false
+          },
+          "bridge_id": {
+            "category": "diagnostic",
+            "display_name": "Bridge ID",
+            "kind": "string",
+            "writable": false
+          },
+          "enabled": {
+            "display_name": "Enabled",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "disabled",
+                "verb": "is disabled"
+              },
+              "when_true": {
+                "label": "enabled",
+                "verb": "is enabled"
+              }
+            },
+            "writable": false
+          },
+          "illuminance": {
+            "display_name": "Illuminance",
+            "kind": "float",
+            "unit": "lux",
+            "writable": false
+          },
+          "illuminance_lux": {
+            "display_name": "Illuminance Lux",
+            "kind": "float",
+            "unit": "lux",
+            "writable": false
+          },
+          "illuminance_raw": {
+            "display_name": "Illuminance Raw",
+            "kind": "float",
+            "writable": false
+          },
+          "illuminance_unit": {
+            "category": "diagnostic",
+            "display_name": "Illuminance Unit",
+            "kind": "string",
+            "writable": false
+          },
+          "illuminance_valid": {
+            "category": "diagnostic",
+            "display_name": "Illuminance Valid",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "stale",
+                "verb": "goes stale"
+              },
+              "when_true": {
+                "label": "valid",
+                "verb": "becomes valid"
+              }
+            },
+            "writable": false
+          },
+          "kind": {
+            "category": "diagnostic",
+            "display_name": "Kind",
+            "kind": "string",
+            "writable": false
+          },
+          "motion": {
+            "display_name": "Motion",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "clear",
+                "verb": "clears"
+              },
+              "when_true": {
+                "label": "motion",
+                "verb": "detects motion"
+              }
+            },
+            "writable": false
+          },
+          "motion_sensitivity": {
+            "display_name": "Motion Sensitivity",
+            "kind": "integer",
+            "writable": false
+          },
+          "resource_id": {
+            "category": "diagnostic",
+            "display_name": "Resource ID",
+            "kind": "string",
+            "writable": false
+          },
+          "resource_type": {
+            "category": "diagnostic",
+            "display_name": "Resource Type",
+            "kind": "string",
+            "writable": false
+          },
+          "temperature": {
+            "display_name": "Temperature",
+            "kind": "float",
+            "unit": "\u00b0C",
+            "writable": false
+          },
+          "temperature_c": {
+            "display_name": "Temperature C",
+            "kind": "float",
+            "unit": "\u00b0C",
+            "writable": false
+          },
+          "temperature_f": {
+            "display_name": "Temperature F",
+            "kind": "float",
+            "unit": "\u00b0F",
+            "writable": false
+          },
+          "temperature_unit": {
+            "category": "diagnostic",
+            "display_name": "Temperature Unit",
+            "kind": "string",
+            "writable": false
+          },
+          "temperature_valid": {
+            "category": "diagnostic",
+            "display_name": "Temperature Valid",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "stale",
+                "verb": "goes stale"
+              },
+              "when_true": {
+                "label": "valid",
+                "verb": "becomes valid"
+              }
+            },
+            "writable": false
+          }
+        },
+        "primary": [
+          "motion",
+          "temperature",
+          "illuminance",
+          "enabled",
+          "illuminance_lux",
+          "illuminance_raw",
+          "motion_sensitivity",
+          "temperature_c",
+          "temperature_f"
+        ]
+      }
+    },
+    {
+      "attributes": {
+        "occupancy": false,
+        "occupied": false
+      },
+      "device_type": "occupancy_sensor",
+      "plugin_id": "plugin.lutron",
+      "schema": {
+        "attributes": {
+          "occupancy": {
+            "display_name": "Occupancy",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "vacant",
+                "verb": "becomes vacant"
+              },
+              "when_true": {
+                "label": "occupied",
+                "verb": "detects occupancy"
+              }
+            },
+            "writable": false
+          },
+          "occupied": {
+            "display_name": "Occupied",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "vacant",
+                "verb": "becomes vacant"
+              },
+              "when_true": {
+                "label": "occupied",
+                "verb": "detects occupancy"
+              }
+            },
+            "writable": false
+          }
+        },
+        "primary": ["occupied", "occupancy"]
+      }
+    },
+    {
+      "attributes": {
+        "available_buttons": [2, 3, 4, 5, 6],
+        "button_2": "release",
+        "button_4": "release"
+      },
+      "device_type": "pico_remote",
+      "plugin_id": "plugin.caseta",
+      "schema": {
+        "attributes": {
+          "available_buttons": {
+            "display_name": "Buttons",
+            "kind": "json",
+            "writable": false
+          },
+          "button_2": {
+            "display_name": "Button 2",
+            "kind": "string",
+            "writable": false
+          },
+          "button_3": {
+            "display_name": "Button 3",
+            "kind": "string",
+            "writable": false
+          },
+          "button_4": {
+            "display_name": "Button 4",
+            "kind": "string",
+            "writable": false
+          },
+          "button_5": {
+            "display_name": "Button 5",
+            "kind": "string",
+            "writable": false
+          },
+          "button_6": {
+            "display_name": "Button 6",
+            "kind": "string",
+            "writable": false
+          }
+        },
+        "primary": ["available_buttons", "button_2", "button_3", "button_4", "button_5", "button_6"]
+      }
+    },
+    {
+      "attributes": {
+        "available_buttons": [
+          {
+            "name": "On",
+            "number": 2
+          },
+          {
+            "name": "Off",
+            "number": 4
+          }
+        ],
+        "button_2": "release",
+        "last_button": 2,
+        "last_button_name": "On"
+      },
+      "device_type": "pico_remote",
+      "plugin_id": "plugin.lutron",
+      "schema": {
+        "attributes": {
+          "available_buttons": {
+            "display_name": "Buttons",
+            "kind": "json",
+            "writable": false
+          },
+          "button_2": {
+            "display_name": "On",
+            "kind": "string",
+            "writable": false
+          },
+          "button_4": {
+            "display_name": "Off",
+            "kind": "string",
+            "writable": false
+          }
+        },
+        "primary": ["available_buttons", "button_2", "button_4"]
+      }
+    },
+    {
+      "attributes": {
+        "battery": 3.0,
+        "battery_kind": "voltage",
+        "battery_low": false,
+        "rain_24h_piezo": 0.0,
+        "rain_day_piezo": 0.0,
+        "rain_event_piezo": 0.0,
+        "rain_hour_piezo": 0.0,
+        "rain_month_piezo": 0.409,
+        "rain_rate_piezo": 0.0,
+        "rain_state_piezo": 0.0,
+        "rain_week_piezo": 0.0,
+        "rain_year_piezo": 14.764
+      },
+      "device_type": "rain_sensor",
+      "plugin_id": "plugin.ecowitt",
+      "schema": {
+        "attributes": {
+          "battery": {
+            "category": "diagnostic",
+            "display_name": "Battery",
+            "kind": "float",
+            "unit": "%",
+            "writable": false
+          },
+          "battery_kind": {
+            "category": "diagnostic",
+            "display_name": "Battery kind",
+            "kind": "string",
+            "writable": false
+          },
+          "battery_low": {
+            "category": "diagnostic",
+            "display_name": "Battery low",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "healthy",
+                "verb": "recovers"
+              },
+              "when_true": {
+                "label": "low",
+                "verb": "goes low"
+              }
+            },
+            "writable": false
+          },
+          "rain_24h_piezo": {
+            "display_name": "Rain 24h piezo",
+            "kind": "float",
+            "writable": false
+          },
+          "rain_day_piezo": {
+            "display_name": "Rain day piezo",
+            "kind": "float",
+            "writable": false
+          },
+          "rain_event_piezo": {
+            "display_name": "Rain event piezo",
+            "kind": "float",
+            "writable": false
+          },
+          "rain_hour_piezo": {
+            "display_name": "Rain hour piezo",
+            "kind": "float",
+            "writable": false
+          },
+          "rain_month_piezo": {
+            "display_name": "Rain month piezo",
+            "kind": "float",
+            "writable": false
+          },
+          "rain_rate_piezo": {
+            "display_name": "Rain rate piezo",
+            "kind": "float",
+            "writable": false
+          },
+          "rain_state_piezo": {
+            "display_name": "Rain state piezo",
+            "kind": "float",
+            "writable": false
+          },
+          "rain_week_piezo": {
+            "display_name": "Rain week piezo",
+            "kind": "float",
+            "writable": false
+          },
+          "rain_year_piezo": {
+            "display_name": "Rain year piezo",
+            "kind": "float",
+            "writable": false
+          }
+        },
+        "primary": [
+          "rain_24h_piezo",
+          "rain_day_piezo",
+          "rain_event_piezo",
+          "rain_hour_piezo",
+          "rain_month_piezo",
+          "rain_rate_piezo",
+          "rain_state_piezo",
+          "rain_week_piezo",
+          "rain_year_piezo"
+        ]
+      }
+    },
+    {
+      "attributes": {},
+      "device_type": "scene",
+      "plugin_id": "plugin.caseta",
+      "schema": {
+        "actions": [
+          {
+            "category": "Scenes",
+            "icon": "scene",
+            "id": "activate",
+            "label": "Activate the scene",
+            "requires_role": "user",
+            "sentence": "activate {device}"
+          }
+        ],
+        "attributes": {}
+      }
+    },
+    {
+      "attributes": {
+        "active": false,
+        "area": "office",
+        "bridge_id": "001788fffe6841b3",
+        "group_kind": "room",
+        "group_name": "Office",
+        "group_rid": "63c39cea-aa87-400b-bc6c-24508196cf2c",
+        "kind": "hue_scene",
+        "name": "Tropical twilight",
+        "resource_id": "01ca0aeb-6a64-418e-96e3-f79181ccb06c"
+      },
+      "device_type": "scene",
+      "plugin_id": "plugin.hue",
+      "schema": {
+        "actions": [
+          {
+            "category": "Scenes",
+            "icon": "scene",
+            "id": "activate",
+            "label": "Activate the scene",
+            "requires_role": "user",
+            "sentence": "activate {device}"
+          }
+        ],
+        "attributes": {
+          "active": {
+            "display_name": "Active",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "inactive",
+                "verb": "deactivates"
+              },
+              "when_true": {
+                "label": "active",
+                "verb": "activates"
+              }
+            },
+            "writable": false
+          }
+        },
+        "primary": ["active"]
+      }
+    },
+    {
+      "attributes": {
+        "on": false,
+        "phantom_button": 80
+      },
+      "device_type": "scene",
+      "plugin_id": "plugin.lutron",
+      "schema": {
+        "actions": [
+          {
+            "category": "Scenes",
+            "icon": "scene",
+            "id": "activate",
+            "label": "Activate the scene",
+            "requires_role": "user",
+            "sentence": "activate {device}"
+          }
+        ],
+        "attributes": {
+          "phantom_button": {
+            "category": "diagnostic",
+            "display_name": "Phantom button",
+            "kind": "integer",
+            "writable": false
+          }
+        }
+      }
+    },
+    {
+      "attributes": {
+        "on": true
+      },
+      "device_type": "scene",
+      "plugin_id": "plugin.lutron",
+      "schema": {
+        "actions": [
+          {
+            "category": "Scenes",
+            "icon": "scene",
+            "id": "activate",
+            "label": "Activate the scene",
+            "requires_role": "user",
+            "sentence": "activate {device}"
+          }
+        ],
+        "attributes": {
+          "led_component": {
+            "category": "diagnostic",
+            "display_name": "Status LED",
+            "kind": "integer",
+            "writable": false
+          },
+          "on": {
+            "display_name": "Active",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "inactive",
+                "verb": "deactivates"
+              },
+              "when_true": {
+                "label": "active",
+                "verb": "activates"
+              }
+            },
+            "writable": false
+          },
+          "phantom_button": {
+            "category": "diagnostic",
+            "display_name": "Phantom button",
+            "kind": "integer",
+            "writable": false
+          }
+        },
+        "primary": ["on"]
+      }
+    },
+    {
+      "attributes": {
+        "on": false
+      },
+      "device_type": "switch",
+      "plugin_id": "plugin.caseta",
+      "schema": {
+        "attributes": {
+          "on": {
+            "display_name": "Power",
+            "kind": "bool",
+            "writable": true
+          }
+        },
+        "primary": ["on"]
+      }
+    },
+    {
+      "attributes": {
+        "on": false,
+        "power_w": 0.0
+      },
+      "device_type": "switch",
+      "plugin_id": "plugin.yolink",
+      "schema": {
+        "attributes": {
+          "energy_kwh": {
+            "display_name": "Energy used",
+            "kind": "float",
+            "unit": "kWh",
+            "writable": false
+          },
+          "on": {
+            "display_name": "Power",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "off",
+                "verb": "turns off"
+              },
+              "when_true": {
+                "label": "on",
+                "verb": "turns on"
+              }
+            },
+            "writable": true
+          },
+          "power_w": {
+            "display_name": "Power draw",
+            "kind": "float",
+            "unit": "W",
+            "writable": false
+          }
+        },
+        "primary": ["on", "power_w", "energy_kwh"]
+      }
+    },
+    {
+      "attributes": {
+        "battery": 0.0,
+        "battery_kind": "binary",
+        "battery_low": false,
+        "humidity": 58.0,
+        "temperature": 70.88,
+        "temperature_unit": "\u00b0F"
+      },
+      "device_type": "temperature_sensor",
+      "plugin_id": "plugin.ecowitt",
+      "schema": {
+        "attributes": {
+          "battery": {
+            "category": "diagnostic",
+            "display_name": "Battery",
+            "kind": "float",
+            "unit": "%",
+            "writable": false
+          },
+          "battery_kind": {
+            "category": "diagnostic",
+            "display_name": "Battery kind",
+            "kind": "string",
+            "writable": false
+          },
+          "battery_low": {
+            "category": "diagnostic",
+            "display_name": "Battery low",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "healthy",
+                "verb": "recovers"
+              },
+              "when_true": {
+                "label": "low",
+                "verb": "goes low"
+              }
+            },
+            "writable": false
+          },
+          "humidity": {
+            "display_name": "Humidity",
+            "kind": "float",
+            "unit": "%",
+            "writable": false
+          },
+          "temperature": {
+            "display_name": "Temperature",
+            "kind": "float",
+            "writable": false
+          },
+          "temperature_unit": {
+            "category": "diagnostic",
+            "display_name": "Temperature unit",
+            "kind": "string",
+            "writable": false
+          }
+        },
+        "primary": ["temperature", "humidity"]
+      }
+    },
+    {
+      "attributes": {
+        "battery": 1.0,
+        "battery_kind": "binary",
+        "battery_low": true,
+        "humidity": 99.0,
+        "temperature": 68.36,
+        "temperature_unit": "\u00b0F"
+      },
+      "device_type": "temperature_sensor",
+      "plugin_id": "plugin.ecowitt",
+      "schema": {
+        "attributes": {
+          "battery": {
+            "display_name": "Battery",
+            "kind": "float",
+            "unit": "%",
+            "writable": false
+          },
+          "battery_kind": {
+            "display_name": "Battery kind",
+            "kind": "string",
+            "writable": false
+          },
+          "battery_low": {
+            "display_name": "Battery low",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "healthy",
+                "verb": "recovers"
+              },
+              "when_true": {
+                "label": "low",
+                "verb": "goes low"
+              }
+            },
+            "writable": false
+          },
+          "humidity": {
+            "display_name": "Humidity",
+            "kind": "float",
+            "unit": "%",
+            "writable": false
+          },
+          "temperature": {
+            "display_name": "Temperature",
+            "kind": "float",
+            "writable": false
+          },
+          "temperature_unit": {
+            "display_name": "Temperature unit",
+            "kind": "string",
+            "writable": false
+          }
+        },
+        "primary": [
+          "temperature",
+          "humidity",
+          "battery",
+          "battery_kind",
+          "battery_low",
+          "temperature_unit"
+        ]
+      }
+    },
+    {
+      "attributes": {
+        "battery": 50,
+        "humidity_pct": 55.8,
+        "temperature": 2.5,
+        "temperature_unit": "F"
+      },
+      "device_type": "temperature_sensor",
+      "plugin_id": "plugin.yolink",
+      "schema": {
+        "attributes": {
+          "battery": {
+            "category": "diagnostic",
+            "display_name": "Battery",
+            "kind": "integer",
+            "max": 100.0,
+            "min": 0.0,
+            "unit": "%",
+            "writable": false
+          },
+          "humidity_pct": {
+            "display_name": "Humidity",
+            "kind": "float",
+            "unit": "%",
+            "writable": false
+          },
+          "temperature": {
+            "display_name": "Temperature",
+            "kind": "float",
+            "writable": false
+          },
+          "temperature_unit": {
+            "display_name": "Temperature unit",
+            "kind": "string",
+            "writable": false
+          }
+        },
+        "primary": ["temperature", "humidity_pct", "temperature_unit"]
+      }
+    },
+    {
+      "attributes": {
+        "duration_secs": 300,
+        "remaining_secs": 0,
+        "repeat": false,
+        "started_at": "2026-09-08T15:43:56.747124442+00:00",
+        "state": "finished"
+      },
+      "device_type": "timer",
+      "plugin_id": "core.glue",
+      "schema": {
+        "attributes": {
+          "duration_secs": {
+            "display_name": "Duration",
+            "kind": "integer",
+            "unit": "s",
+            "writable": false
+          },
+          "remaining_secs": {
+            "display_name": "Remaining",
+            "kind": "integer",
+            "unit": "s",
+            "writable": false
+          },
+          "repeat": {
+            "display_name": "Repeat",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "one-shot",
+                "verb": "stops repeating"
+              },
+              "when_true": {
+                "label": "repeating",
+                "verb": "starts repeating"
+              }
+            },
+            "writable": false
+          },
+          "state": {
+            "display_name": "State",
+            "kind": "enum",
+            "options": ["idle", "running", "paused", "finished", "cancelled"],
+            "writable": false
+          }
+        },
+        "primary": ["state", "remaining_secs", "duration_secs", "repeat"]
+      }
+    },
+    {
+      "attributes": {
+        "available_buttons": [
+          {
+            "name": "OH Door 1",
+            "number": 1
+          },
+          {
+            "name": "OH Door 2",
+            "number": 2
+          },
+          {
+            "name": "Lights",
+            "number": 3
+          },
+          {
+            "name": "Button 4",
+            "number": 4
+          },
+          {
+            "name": "Button 5",
+            "number": 5
+          },
+          {
+            "name": "Button 6",
+            "number": 6
+          }
+        ],
+        "button_1": "hold",
+        "last_button": 1,
+        "last_button_name": "OH Door 1",
+        "led_1": 0,
+        "led_3": 0
+      },
+      "device_type": "vcrx",
+      "plugin_id": "plugin.lutron",
+      "schema": {
+        "actions": [
+          {
+            "category": "Buttons",
+            "icon": "remote",
+            "id": "press_button",
+            "label": "Press a button",
+            "params": [
+              {
+                "kind": "int",
+                "label": "Button",
+                "name": "button",
+                "options_from": {
+                  "attribute": {
+                    "attribute": "available_buttons",
+                    "label_key": "name",
+                    "value_key": "number"
+                  }
+                },
+                "required": true
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "press button {button} on {device}"
+          },
+          {
+            "category": "Buttons",
+            "description": "LED component is the button number + 80; the offset is applied here.",
+            "icon": "lightbulb",
+            "id": "set_led",
+            "label": "Set a button LED",
+            "params": [
+              {
+                "kind": "int",
+                "label": "Button",
+                "name": "button",
+                "options_from": {
+                  "attribute": {
+                    "attribute": "available_buttons",
+                    "label_key": "name",
+                    "value_key": "number"
+                  }
+                },
+                "required": true
+              },
+              {
+                "default": "1",
+                "kind": "enum",
+                "label": "LED",
+                "name": "state",
+                "options": [
+                  {
+                    "label": "Off",
+                    "value": "0"
+                  },
+                  {
+                    "label": "On",
+                    "value": "1"
+                  },
+                  {
+                    "label": "Slow flash",
+                    "value": "2"
+                  },
+                  {
+                    "label": "Rapid flash",
+                    "value": "3"
+                  }
+                ],
+                "required": true
+              }
+            ],
+            "requires_role": "user",
+            "sentence": "set the LED of button {button} on {device} to {state}"
+          }
+        ],
+        "attributes": {
+          "available_buttons": {
+            "display_name": "Buttons",
+            "kind": "json",
+            "writable": false
+          },
+          "button_1": {
+            "display_name": "OH Door 1",
+            "kind": "string",
+            "writable": false
+          },
+          "button_2": {
+            "display_name": "OH Door 2",
+            "kind": "string",
+            "writable": false
+          },
+          "button_3": {
+            "display_name": "Lights",
+            "kind": "string",
+            "writable": false
+          },
+          "button_4": {
+            "display_name": "Button 4",
+            "kind": "string",
+            "writable": false
+          },
+          "button_5": {
+            "display_name": "Button 5",
+            "kind": "string",
+            "writable": false
+          },
+          "button_6": {
+            "display_name": "Button 6",
+            "kind": "string",
+            "writable": false
+          }
+        },
+        "primary": [
+          "available_buttons",
+          "button_1",
+          "button_2",
+          "button_3",
+          "button_4",
+          "button_5",
+          "button_6"
+        ]
+      }
+    },
+    {
+      "attributes": {
+        "battery": 100,
+        "vibration": false
+      },
+      "device_type": "vibration_sensor",
+      "plugin_id": "plugin.yolink",
+      "schema": {
+        "attributes": {
+          "battery": {
+            "category": "diagnostic",
+            "display_name": "Battery",
+            "kind": "integer",
+            "max": 100.0,
+            "min": 0.0,
+            "unit": "%",
+            "writable": false
+          },
+          "vibration": {
+            "display_name": "Vibration",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "still",
+                "verb": "stops vibrating"
+              },
+              "when_true": {
+                "label": "vibrating",
+                "verb": "starts vibrating"
+              }
+            },
+            "writable": false
+          }
+        },
+        "primary": ["vibration"]
+      }
+    },
+    {
+      "attributes": {
+        "battery": 100,
+        "water_detected": false
+      },
+      "device_type": "water_sensor",
+      "plugin_id": "plugin.yolink",
+      "schema": {
+        "attributes": {
+          "battery": {
+            "category": "diagnostic",
+            "display_name": "Battery",
+            "kind": "integer",
+            "max": 100.0,
+            "min": 0.0,
+            "unit": "%",
+            "writable": false
+          },
+          "water_detected": {
+            "display_name": "Water",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "dry",
+                "verb": "dries out"
+              },
+              "when_true": {
+                "label": "wet",
+                "verb": "detects water"
+              }
+            },
+            "writable": false
+          }
+        },
+        "primary": ["water_detected"]
+      }
+    },
+    {
+      "attributes": {
+        "barometric_abs": 29.633,
+        "barometric_rel": 30.513,
+        "battery": 3.0,
+        "battery_kind": "voltage",
+        "battery_low": false,
+        "daily_max_wind": 5.14,
+        "datetime": "2026-09-08 15:57:01",
+        "gust_speed": 1.34,
+        "humidity": 57.0,
+        "light": 632.75,
+        "temperature": 78.62,
+        "temperature_unit": "\u00b0F",
+        "uvi": 5.0,
+        "vpd": 0.424,
+        "wind_direction": 283.0,
+        "wind_direction_avg10m": 283.0,
+        "wind_speed": 1.34
+      },
+      "device_type": "weather_station",
+      "plugin_id": "plugin.ecowitt",
+      "schema": {
+        "attributes": {
+          "barometric_abs": {
+            "display_name": "Barometric abs",
+            "kind": "float",
+            "writable": false
+          },
+          "barometric_rel": {
+            "display_name": "Barometric rel",
+            "kind": "float",
+            "writable": false
+          },
+          "battery": {
+            "category": "diagnostic",
+            "display_name": "Battery",
+            "kind": "float",
+            "unit": "%",
+            "writable": false
+          },
+          "battery_kind": {
+            "category": "diagnostic",
+            "display_name": "Battery kind",
+            "kind": "string",
+            "writable": false
+          },
+          "battery_low": {
+            "category": "diagnostic",
+            "display_name": "Battery low",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "healthy",
+                "verb": "recovers"
+              },
+              "when_true": {
+                "label": "low",
+                "verb": "goes low"
+              }
+            },
+            "writable": false
+          },
+          "daily_max_wind": {
+            "display_name": "Daily max wind",
+            "kind": "float",
+            "writable": false
+          },
+          "datetime": {
+            "display_name": "Datetime",
+            "kind": "string",
+            "writable": false
+          },
+          "gust_speed": {
+            "display_name": "Gust speed",
+            "kind": "float",
+            "writable": false
+          },
+          "humidity": {
+            "display_name": "Humidity",
+            "kind": "float",
+            "unit": "%",
+            "writable": false
+          },
+          "light": {
+            "display_name": "Light",
+            "kind": "float",
+            "unit": "lux",
+            "writable": false
+          },
+          "temperature": {
+            "display_name": "Temperature",
+            "kind": "float",
+            "writable": false
+          },
+          "temperature_unit": {
+            "category": "diagnostic",
+            "display_name": "Temperature unit",
+            "kind": "string",
+            "writable": false
+          },
+          "uvi": {
+            "display_name": "Uvi",
+            "kind": "float",
+            "unit": "index",
+            "writable": false
+          },
+          "vpd": {
+            "display_name": "Vpd",
+            "kind": "float",
+            "writable": false
+          },
+          "wind_direction": {
+            "display_name": "Wind direction",
+            "kind": "float",
+            "unit": "\u00b0",
+            "writable": false
+          },
+          "wind_direction_avg10m": {
+            "display_name": "Wind direction avg10m",
+            "kind": "float",
+            "unit": "\u00b0",
+            "writable": false
+          },
+          "wind_speed": {
+            "display_name": "Wind speed",
+            "kind": "float",
+            "writable": false
+          }
+        },
+        "primary": [
+          "temperature",
+          "humidity",
+          "barometric_abs",
+          "barometric_rel",
+          "daily_max_wind",
+          "datetime",
+          "gust_speed",
+          "light",
+          "uvi",
+          "vpd",
+          "wind_direction",
+          "wind_direction_avg10m",
+          "wind_speed"
+        ]
+      }
+    },
+    {
+      "attributes": {
+        "location": "Equipment Room"
+      },
+      "device_type": "zwave",
+      "plugin_id": "plugin.zwave",
+      "schema": {
+        "attributes": {
+          "location": {
+            "category": "diagnostic",
+            "display_name": "Location",
+            "kind": "string",
+            "writable": false
+          }
+        }
+      }
+    },
+    {
+      "attributes": {
+        "battery": 50,
+        "bolt_status": "unlocked",
+        "cc113_access_control_pklock_state": 0,
+        "cc113_alarmlevel": 1,
+        "cc113_alarmtype": 22,
+        "cc114_manufacturerid": 541,
+        "cc114_productid": 1,
+        "cc114_producttype": 3,
+        "cc134_applicationbuildnumber": 9930,
+        "cc134_applicationframeworkapiversion": "3.1.1",
+        "cc134_applicationframeworkbuildnumber": 52445,
+        "cc134_applicationversion": "3.3.37",
+        "cc134_firmwareversions": ["3.3", "1.32"],
+        "cc134_hardwareversion": 1,
+        "cc134_hostinterfacebuildnumber": 0,
+        "cc134_hostinterfaceversion": "unused",
+        "cc134_librarytype": 3,
+        "cc134_protocolversion": "6.7",
+        "cc134_sdkversion": "6.71.3",
+        "cc134_zwaveprotocolbuildnumber": 97,
+        "cc134_zwaveprotocolversion": "6.7.0",
+        "cc137_language": "eng",
+        "cc98_insidehandlescanopendoor": [true, false, false, false],
+        "cc98_insidehandlescanopendoorconfiguration": [true, false, false, false],
+        "cc98_outsidehandlescanopendoor": [false, false, false, false],
+        "cc98_outsidehandlescanopendoorconfiguration": [false, false, false, false],
+        "cc99_usercode_pk1": "6748",
+        "cc99_usercode_pk10": "",
+        "cc99_usercode_pk11": "",
+        "cc99_usercode_pk12": "",
+        "cc99_usercode_pk13": "",
+        "cc99_usercode_pk14": "",
+        "cc99_usercode_pk15": "",
+        "cc99_usercode_pk16": "",
+        "cc99_usercode_pk17": "",
+        "cc99_usercode_pk18": "",
+        "cc99_usercode_pk19": "",
+        "cc99_usercode_pk2": "1297",
+        "cc99_usercode_pk20": "",
+        "cc99_usercode_pk4": "",
+        "cc99_usercode_pk5": "",
+        "cc99_usercode_pk6": "",
+        "cc99_usercode_pk7": "",
+        "cc99_usercode_pk8": "",
+        "cc99_usercode_pk9": "",
+        "cc99_useridstatus_pk1": 1,
+        "cc99_useridstatus_pk10": 0,
+        "cc99_useridstatus_pk11": 0,
+        "cc99_useridstatus_pk12": 0,
+        "cc99_useridstatus_pk13": 0,
+        "cc99_useridstatus_pk14": 0,
+        "cc99_useridstatus_pk15": 0,
+        "cc99_useridstatus_pk16": 0,
+        "cc99_useridstatus_pk17": 0,
+        "cc99_useridstatus_pk18": 0,
+        "cc99_useridstatus_pk19": 0,
+        "cc99_useridstatus_pk2": 1,
+        "cc99_useridstatus_pk20": 0,
+        "cc99_useridstatus_pk4": 0,
+        "cc99_useridstatus_pk5": 0,
+        "cc99_useridstatus_pk6": 0,
+        "cc99_useridstatus_pk7": 0,
+        "cc99_useridstatus_pk8": 0,
+        "cc99_useridstatus_pk9": 0,
+        "door_status": "open",
+        "latch_status": "open",
+        "location": "Living Room",
+        "lock_operation_type": 1,
+        "locked": false,
+        "name": "Lock - Living Room"
+      },
+      "device_type": "zwave",
+      "plugin_id": "plugin.zwave",
+      "schema": {
+        "attributes": {
+          "battery": {
+            "category": "diagnostic",
+            "display_name": "Battery",
+            "kind": "integer",
+            "unit": "%",
+            "writable": false
+          },
+          "bolt_status": {
+            "display_name": "Bolt status",
+            "kind": "string",
+            "writable": false
+          },
+          "cc113_access_control_pklock_state": {
+            "display_name": "Cc113 access control pklock state",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc113_alarmlevel": {
+            "display_name": "Cc113 alarmlevel",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc113_alarmtype": {
+            "display_name": "Cc113 alarmtype",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc114_manufacturerid": {
+            "display_name": "Cc114 manufacturerid",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc114_productid": {
+            "display_name": "Cc114 productid",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc114_producttype": {
+            "display_name": "Cc114 producttype",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc134_applicationbuildnumber": {
+            "display_name": "Cc134 applicationbuildnumber",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc134_applicationframeworkapiversion": {
+            "display_name": "Cc134 applicationframeworkapiversion",
+            "kind": "string",
+            "writable": false
+          },
+          "cc134_applicationframeworkbuildnumber": {
+            "display_name": "Cc134 applicationframeworkbuildnumber",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc134_applicationversion": {
+            "display_name": "Cc134 applicationversion",
+            "kind": "string",
+            "writable": false
+          },
+          "cc134_firmwareversions": {
+            "display_name": "Cc134 firmwareversions",
+            "kind": "json",
+            "writable": false
+          },
+          "cc134_hardwareversion": {
+            "display_name": "Cc134 hardwareversion",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc134_hostinterfacebuildnumber": {
+            "display_name": "Cc134 hostinterfacebuildnumber",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc134_hostinterfaceversion": {
+            "display_name": "Cc134 hostinterfaceversion",
+            "kind": "string",
+            "writable": false
+          },
+          "cc134_librarytype": {
+            "display_name": "Cc134 librarytype",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc134_protocolversion": {
+            "display_name": "Cc134 protocolversion",
+            "kind": "string",
+            "writable": false
+          },
+          "cc134_sdkversion": {
+            "display_name": "Cc134 sdkversion",
+            "kind": "string",
+            "writable": false
+          },
+          "cc134_zwaveprotocolbuildnumber": {
+            "display_name": "Cc134 zwaveprotocolbuildnumber",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc134_zwaveprotocolversion": {
+            "display_name": "Cc134 zwaveprotocolversion",
+            "kind": "string",
+            "writable": false
+          },
+          "cc137_language": {
+            "display_name": "Cc137 language",
+            "kind": "string",
+            "writable": false
+          },
+          "cc98_insidehandlescanopendoor": {
+            "display_name": "Cc98 insidehandlescanopendoor",
+            "kind": "json",
+            "writable": false
+          },
+          "cc98_insidehandlescanopendoorconfiguration": {
+            "display_name": "Cc98 insidehandlescanopendoorconfiguration",
+            "kind": "json",
+            "writable": false
+          },
+          "cc98_outsidehandlescanopendoor": {
+            "display_name": "Cc98 outsidehandlescanopendoor",
+            "kind": "json",
+            "writable": false
+          },
+          "cc98_outsidehandlescanopendoorconfiguration": {
+            "display_name": "Cc98 outsidehandlescanopendoorconfiguration",
+            "kind": "json",
+            "writable": false
+          },
+          "cc99_usercode_pk1": {
+            "display_name": "Cc99 usercode pk1",
+            "kind": "string",
+            "writable": false
+          },
+          "cc99_usercode_pk10": {
+            "display_name": "Cc99 usercode pk10",
+            "kind": "string",
+            "writable": false
+          },
+          "cc99_usercode_pk11": {
+            "display_name": "Cc99 usercode pk11",
+            "kind": "string",
+            "writable": false
+          },
+          "cc99_usercode_pk12": {
+            "display_name": "Cc99 usercode pk12",
+            "kind": "string",
+            "writable": false
+          },
+          "cc99_usercode_pk13": {
+            "display_name": "Cc99 usercode pk13",
+            "kind": "string",
+            "writable": false
+          },
+          "cc99_usercode_pk14": {
+            "display_name": "Cc99 usercode pk14",
+            "kind": "string",
+            "writable": false
+          },
+          "cc99_usercode_pk15": {
+            "display_name": "Cc99 usercode pk15",
+            "kind": "string",
+            "writable": false
+          },
+          "cc99_usercode_pk16": {
+            "display_name": "Cc99 usercode pk16",
+            "kind": "string",
+            "writable": false
+          },
+          "cc99_usercode_pk17": {
+            "display_name": "Cc99 usercode pk17",
+            "kind": "string",
+            "writable": false
+          },
+          "cc99_usercode_pk18": {
+            "display_name": "Cc99 usercode pk18",
+            "kind": "string",
+            "writable": false
+          },
+          "cc99_usercode_pk19": {
+            "display_name": "Cc99 usercode pk19",
+            "kind": "string",
+            "writable": false
+          },
+          "cc99_usercode_pk2": {
+            "display_name": "Cc99 usercode pk2",
+            "kind": "string",
+            "writable": false
+          },
+          "cc99_usercode_pk20": {
+            "display_name": "Cc99 usercode pk20",
+            "kind": "string",
+            "writable": false
+          },
+          "cc99_usercode_pk4": {
+            "display_name": "Cc99 usercode pk4",
+            "kind": "string",
+            "writable": false
+          },
+          "cc99_usercode_pk5": {
+            "display_name": "Cc99 usercode pk5",
+            "kind": "string",
+            "writable": false
+          },
+          "cc99_usercode_pk6": {
+            "display_name": "Cc99 usercode pk6",
+            "kind": "string",
+            "writable": false
+          },
+          "cc99_usercode_pk7": {
+            "display_name": "Cc99 usercode pk7",
+            "kind": "string",
+            "writable": false
+          },
+          "cc99_usercode_pk8": {
+            "display_name": "Cc99 usercode pk8",
+            "kind": "string",
+            "writable": false
+          },
+          "cc99_usercode_pk9": {
+            "display_name": "Cc99 usercode pk9",
+            "kind": "string",
+            "writable": false
+          },
+          "cc99_useridstatus_pk1": {
+            "display_name": "Cc99 useridstatus pk1",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc99_useridstatus_pk10": {
+            "display_name": "Cc99 useridstatus pk10",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc99_useridstatus_pk11": {
+            "display_name": "Cc99 useridstatus pk11",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc99_useridstatus_pk12": {
+            "display_name": "Cc99 useridstatus pk12",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc99_useridstatus_pk13": {
+            "display_name": "Cc99 useridstatus pk13",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc99_useridstatus_pk14": {
+            "display_name": "Cc99 useridstatus pk14",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc99_useridstatus_pk15": {
+            "display_name": "Cc99 useridstatus pk15",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc99_useridstatus_pk16": {
+            "display_name": "Cc99 useridstatus pk16",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc99_useridstatus_pk17": {
+            "display_name": "Cc99 useridstatus pk17",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc99_useridstatus_pk18": {
+            "display_name": "Cc99 useridstatus pk18",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc99_useridstatus_pk19": {
+            "display_name": "Cc99 useridstatus pk19",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc99_useridstatus_pk2": {
+            "display_name": "Cc99 useridstatus pk2",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc99_useridstatus_pk20": {
+            "display_name": "Cc99 useridstatus pk20",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc99_useridstatus_pk4": {
+            "display_name": "Cc99 useridstatus pk4",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc99_useridstatus_pk5": {
+            "display_name": "Cc99 useridstatus pk5",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc99_useridstatus_pk6": {
+            "display_name": "Cc99 useridstatus pk6",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc99_useridstatus_pk7": {
+            "display_name": "Cc99 useridstatus pk7",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc99_useridstatus_pk8": {
+            "display_name": "Cc99 useridstatus pk8",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc99_useridstatus_pk9": {
+            "display_name": "Cc99 useridstatus pk9",
+            "kind": "integer",
+            "writable": false
+          },
+          "door_status": {
+            "display_name": "Door status",
+            "kind": "string",
+            "writable": false
+          },
+          "latch_status": {
+            "display_name": "Latch status",
+            "kind": "string",
+            "writable": false
+          },
+          "location": {
+            "category": "diagnostic",
+            "display_name": "Location",
+            "kind": "string",
+            "writable": false
+          },
+          "lock_operation_type": {
+            "display_name": "Lock operation type",
+            "kind": "integer",
+            "writable": true
+          },
+          "locked": {
+            "display_name": "Locked",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "unlocked",
+                "verb": "unlocks"
+              },
+              "when_true": {
+                "label": "locked",
+                "verb": "locks"
+              }
+            },
+            "writable": true
+          },
+          "name": {
+            "category": "diagnostic",
+            "display_name": "Name",
+            "kind": "string",
+            "writable": false
+          }
+        },
+        "primary": [
+          "locked",
+          "bolt_status",
+          "cc113_access_control_pklock_state",
+          "cc113_alarmlevel",
+          "cc113_alarmtype",
+          "cc114_manufacturerid",
+          "cc114_productid",
+          "cc114_producttype",
+          "cc134_applicationbuildnumber",
+          "cc134_applicationframeworkapiversion",
+          "cc134_applicationframeworkbuildnumber",
+          "cc134_applicationversion",
+          "cc134_firmwareversions",
+          "cc134_hardwareversion",
+          "cc134_hostinterfacebuildnumber",
+          "cc134_hostinterfaceversion",
+          "cc134_librarytype",
+          "cc134_protocolversion",
+          "cc134_sdkversion",
+          "cc134_zwaveprotocolbuildnumber",
+          "cc134_zwaveprotocolversion",
+          "cc137_language",
+          "cc98_insidehandlescanopendoor",
+          "cc98_insidehandlescanopendoorconfiguration",
+          "cc98_outsidehandlescanopendoor",
+          "cc98_outsidehandlescanopendoorconfiguration",
+          "cc99_usercode_pk1",
+          "cc99_usercode_pk10",
+          "cc99_usercode_pk11",
+          "cc99_usercode_pk12",
+          "cc99_usercode_pk13",
+          "cc99_usercode_pk14",
+          "cc99_usercode_pk15",
+          "cc99_usercode_pk16",
+          "cc99_usercode_pk17",
+          "cc99_usercode_pk18",
+          "cc99_usercode_pk19",
+          "cc99_usercode_pk2",
+          "cc99_usercode_pk20",
+          "cc99_usercode_pk4",
+          "cc99_usercode_pk5",
+          "cc99_usercode_pk6",
+          "cc99_usercode_pk7",
+          "cc99_usercode_pk8",
+          "cc99_usercode_pk9",
+          "cc99_useridstatus_pk1",
+          "cc99_useridstatus_pk10",
+          "cc99_useridstatus_pk11",
+          "cc99_useridstatus_pk12",
+          "cc99_useridstatus_pk13",
+          "cc99_useridstatus_pk14",
+          "cc99_useridstatus_pk15",
+          "cc99_useridstatus_pk16",
+          "cc99_useridstatus_pk17",
+          "cc99_useridstatus_pk18",
+          "cc99_useridstatus_pk19",
+          "cc99_useridstatus_pk2",
+          "cc99_useridstatus_pk20",
+          "cc99_useridstatus_pk4",
+          "cc99_useridstatus_pk5",
+          "cc99_useridstatus_pk6",
+          "cc99_useridstatus_pk7",
+          "cc99_useridstatus_pk8",
+          "cc99_useridstatus_pk9",
+          "door_status",
+          "latch_status",
+          "lock_operation_type"
+        ]
+      }
+    },
+    {
+      "attributes": {
+        "cc112_19": 0,
+        "cc112_3": 0,
+        "cc114_manufacturerid": 99,
+        "cc114_productid": 12852,
+        "cc114_producttype": 18770,
+        "cc134_applicationbuildnumber": 52445,
+        "cc134_applicationframeworkapiversion": "4.4.0",
+        "cc134_applicationframeworkbuildnumber": 52445,
+        "cc134_applicationversion": "4.4.0",
+        "cc134_firmwareversions": ["5.51"],
+        "cc134_hardwareversion": 255,
+        "cc134_hostinterfacebuildnumber": 0,
+        "cc134_hostinterfaceversion": "unused",
+        "cc134_librarytype": 3,
+        "cc134_protocolversion": "6.8",
+        "cc134_sdkversion": "6.82.0",
+        "cc134_zwaveprotocolbuildnumber": 101,
+        "cc134_zwaveprotocolversion": "6.8.0",
+        "cc37_duration": {
+          "unit": "seconds",
+          "value": 0
+        },
+        "location": "Office",
+        "name": "Outlet - Office AC",
+        "on": true
+      },
+      "device_type": "zwave",
+      "plugin_id": "plugin.zwave",
+      "schema": {
+        "attributes": {
+          "cc112_19": {
+            "display_name": "Cc112 19",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc112_3": {
+            "display_name": "Cc112 3",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc114_manufacturerid": {
+            "display_name": "Cc114 manufacturerid",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc114_productid": {
+            "display_name": "Cc114 productid",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc114_producttype": {
+            "display_name": "Cc114 producttype",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc134_applicationbuildnumber": {
+            "display_name": "Cc134 applicationbuildnumber",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc134_applicationframeworkapiversion": {
+            "display_name": "Cc134 applicationframeworkapiversion",
+            "kind": "string",
+            "writable": false
+          },
+          "cc134_applicationframeworkbuildnumber": {
+            "display_name": "Cc134 applicationframeworkbuildnumber",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc134_applicationversion": {
+            "display_name": "Cc134 applicationversion",
+            "kind": "string",
+            "writable": false
+          },
+          "cc134_firmwareversions": {
+            "display_name": "Cc134 firmwareversions",
+            "kind": "json",
+            "writable": false
+          },
+          "cc134_hardwareversion": {
+            "display_name": "Cc134 hardwareversion",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc134_hostinterfacebuildnumber": {
+            "display_name": "Cc134 hostinterfacebuildnumber",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc134_hostinterfaceversion": {
+            "display_name": "Cc134 hostinterfaceversion",
+            "kind": "string",
+            "writable": false
+          },
+          "cc134_librarytype": {
+            "display_name": "Cc134 librarytype",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc134_protocolversion": {
+            "display_name": "Cc134 protocolversion",
+            "kind": "string",
+            "writable": false
+          },
+          "cc134_sdkversion": {
+            "display_name": "Cc134 sdkversion",
+            "kind": "string",
+            "writable": false
+          },
+          "cc134_zwaveprotocolbuildnumber": {
+            "display_name": "Cc134 zwaveprotocolbuildnumber",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc134_zwaveprotocolversion": {
+            "display_name": "Cc134 zwaveprotocolversion",
+            "kind": "string",
+            "writable": false
+          },
+          "cc37_duration": {
+            "display_name": "Cc37 duration",
+            "kind": "json",
+            "writable": false
+          },
+          "location": {
+            "category": "diagnostic",
+            "display_name": "Location",
+            "kind": "string",
+            "writable": false
+          },
+          "name": {
+            "category": "diagnostic",
+            "display_name": "Name",
+            "kind": "string",
+            "writable": false
+          },
+          "on": {
+            "display_name": "On",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "off",
+                "verb": "turns off"
+              },
+              "when_true": {
+                "label": "on",
+                "verb": "turns on"
+              }
+            },
+            "writable": true
+          }
+        },
+        "primary": [
+          "on",
+          "cc112_19",
+          "cc112_3",
+          "cc114_manufacturerid",
+          "cc114_productid",
+          "cc114_producttype",
+          "cc134_applicationbuildnumber",
+          "cc134_applicationframeworkapiversion",
+          "cc134_applicationframeworkbuildnumber",
+          "cc134_applicationversion",
+          "cc134_firmwareversions",
+          "cc134_hardwareversion",
+          "cc134_hostinterfacebuildnumber",
+          "cc134_hostinterfaceversion",
+          "cc134_librarytype",
+          "cc134_protocolversion",
+          "cc134_sdkversion",
+          "cc134_zwaveprotocolbuildnumber",
+          "cc134_zwaveprotocolversion",
+          "cc37_duration"
+        ]
+      }
+    },
+    {
+      "attributes": {
+        "cc112_3": 1,
+        "cc114_manufacturerid": 99,
+        "cc114_productid": 12595,
+        "cc114_producttype": 18770,
+        "cc134_firmwareversions": ["5.26"],
+        "cc134_hardwareversion": 255,
+        "cc134_librarytype": 3,
+        "cc134_protocolversion": "4.38",
+        "location": "Master Bedroom",
+        "name": "Outlet - MBR AC",
+        "on": true
+      },
+      "device_type": "zwave",
+      "plugin_id": "plugin.zwave",
+      "schema": {
+        "attributes": {
+          "cc112_3": {
+            "display_name": "Cc112 3",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc114_manufacturerid": {
+            "display_name": "Cc114 manufacturerid",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc114_productid": {
+            "display_name": "Cc114 productid",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc114_producttype": {
+            "display_name": "Cc114 producttype",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc134_firmwareversions": {
+            "display_name": "Cc134 firmwareversions",
+            "kind": "json",
+            "writable": false
+          },
+          "cc134_hardwareversion": {
+            "display_name": "Cc134 hardwareversion",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc134_librarytype": {
+            "display_name": "Cc134 librarytype",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc134_protocolversion": {
+            "display_name": "Cc134 protocolversion",
+            "kind": "string",
+            "writable": false
+          },
+          "location": {
+            "category": "diagnostic",
+            "display_name": "Location",
+            "kind": "string",
+            "writable": false
+          },
+          "name": {
+            "category": "diagnostic",
+            "display_name": "Name",
+            "kind": "string",
+            "writable": false
+          },
+          "on": {
+            "display_name": "On",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "off",
+                "verb": "turns off"
+              },
+              "when_true": {
+                "label": "on",
+                "verb": "turns on"
+              }
+            },
+            "writable": true
+          }
+        },
+        "primary": [
+          "on",
+          "cc112_3",
+          "cc114_manufacturerid",
+          "cc114_productid",
+          "cc114_producttype",
+          "cc134_firmwareversions",
+          "cc134_hardwareversion",
+          "cc134_librarytype",
+          "cc134_protocolversion"
+        ]
+      }
+    },
+    {
+      "attributes": {
+        "battery": 99,
+        "cc112_1": 0,
+        "cc112_2": 0,
+        "cc113_access_control_pkdoor_state__simple_": 22,
+        "cc113_alarmlevel": 0,
+        "cc113_alarmtype": 0,
+        "cc113_home_security_pkcover_status": 0,
+        "cc113_power_management_pkbattery_maintenance_status": 0,
+        "cc114_manufacturerid": 330,
+        "cc114_productid": 2,
+        "cc114_producttype": 4,
+        "cc132_controllernodeid": 1,
+        "cc132_wakeupinterval": 14400,
+        "cc134_firmwareversions": ["10.1"],
+        "cc134_hardwareversion": 2,
+        "cc134_librarytype": 6,
+        "cc134_protocolversion": "4.5",
+        "contact_open": true,
+        "location": "Office",
+        "name": "Test Door Sensor"
+      },
+      "device_type": "zwave",
+      "plugin_id": "plugin.zwave",
+      "schema": {
+        "attributes": {
+          "battery": {
+            "category": "diagnostic",
+            "display_name": "Battery",
+            "kind": "integer",
+            "unit": "%",
+            "writable": false
+          },
+          "cc112_1": {
+            "display_name": "Cc112 1",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc112_2": {
+            "display_name": "Cc112 2",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc113_access_control_pkdoor_state__simple_": {
+            "display_name": "Cc113 access control pkdoor state  simple ",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc113_alarmlevel": {
+            "display_name": "Cc113 alarmlevel",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc113_alarmtype": {
+            "display_name": "Cc113 alarmtype",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc113_home_security_pkcover_status": {
+            "display_name": "Cc113 home security pkcover status",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc113_power_management_pkbattery_maintenance_status": {
+            "display_name": "Cc113 power management pkbattery maintenance status",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc114_manufacturerid": {
+            "display_name": "Cc114 manufacturerid",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc114_productid": {
+            "display_name": "Cc114 productid",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc114_producttype": {
+            "display_name": "Cc114 producttype",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc132_controllernodeid": {
+            "display_name": "Cc132 controllernodeid",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc132_wakeupinterval": {
+            "display_name": "Cc132 wakeupinterval",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc134_firmwareversions": {
+            "display_name": "Cc134 firmwareversions",
+            "kind": "json",
+            "writable": false
+          },
+          "cc134_hardwareversion": {
+            "display_name": "Cc134 hardwareversion",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc134_librarytype": {
+            "display_name": "Cc134 librarytype",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc134_protocolversion": {
+            "display_name": "Cc134 protocolversion",
+            "kind": "string",
+            "writable": false
+          },
+          "contact_open": {
+            "display_name": "Contact open",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "closed",
+                "verb": "closes"
+              },
+              "when_true": {
+                "label": "open",
+                "verb": "opens"
+              }
+            },
+            "writable": false
+          },
+          "location": {
+            "category": "diagnostic",
+            "display_name": "Location",
+            "kind": "string",
+            "writable": false
+          },
+          "name": {
+            "category": "diagnostic",
+            "display_name": "Name",
+            "kind": "string",
+            "writable": false
+          }
+        },
+        "primary": [
+          "cc112_1",
+          "cc112_2",
+          "cc113_access_control_pkdoor_state__simple_",
+          "cc113_alarmlevel",
+          "cc113_alarmtype",
+          "cc113_home_security_pkcover_status",
+          "cc113_power_management_pkbattery_maintenance_status",
+          "cc114_manufacturerid",
+          "cc114_productid",
+          "cc114_producttype",
+          "cc132_controllernodeid",
+          "cc132_wakeupinterval",
+          "cc134_firmwareversions",
+          "cc134_hardwareversion",
+          "cc134_librarytype",
+          "cc134_protocolversion",
+          "contact_open"
+        ]
+      }
+    },
+    {
+      "attributes": {
+        "battery": 75,
+        "cc112_12": 4,
+        "cc112_14": 0,
+        "cc112_15": 0,
+        "cc112_17": 1,
+        "cc112_18": 30,
+        "cc112_19": 1,
+        "cc112_20": 1,
+        "cc112_32": 10,
+        "cc113_alarmlevel": 0,
+        "cc113_alarmtype": 0,
+        "cc113_home_security_pkunknown": 254,
+        "cc114_manufacturerid": 634,
+        "cc114_productid": 18,
+        "cc114_producttype": 769,
+        "cc132_controllernodeid": 1,
+        "cc132_wakeupinterval": 43200,
+        "cc134_firmwareversions": ["1.3"],
+        "cc134_hardwareversion": 1,
+        "cc134_librarytype": 3,
+        "cc134_protocolversion": "4.61",
+        "location": "Office",
+        "motion": false,
+        "name": "Test - Motion Sensor",
+        "tamper": false
+      },
+      "device_type": "zwave",
+      "plugin_id": "plugin.zwave",
+      "schema": {
+        "attributes": {
+          "battery": {
+            "category": "diagnostic",
+            "display_name": "Battery",
+            "kind": "integer",
+            "unit": "%",
+            "writable": false
+          },
+          "cc112_12": {
+            "display_name": "Cc112 12",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc112_14": {
+            "display_name": "Cc112 14",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc112_15": {
+            "display_name": "Cc112 15",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc112_17": {
+            "display_name": "Cc112 17",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc112_18": {
+            "display_name": "Cc112 18",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc112_19": {
+            "display_name": "Cc112 19",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc112_20": {
+            "display_name": "Cc112 20",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc112_32": {
+            "display_name": "Cc112 32",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc113_alarmlevel": {
+            "display_name": "Cc113 alarmlevel",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc113_alarmtype": {
+            "display_name": "Cc113 alarmtype",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc113_home_security_pkunknown": {
+            "display_name": "Cc113 home security pkunknown",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc114_manufacturerid": {
+            "display_name": "Cc114 manufacturerid",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc114_productid": {
+            "display_name": "Cc114 productid",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc114_producttype": {
+            "display_name": "Cc114 producttype",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc132_controllernodeid": {
+            "display_name": "Cc132 controllernodeid",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc132_wakeupinterval": {
+            "display_name": "Cc132 wakeupinterval",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc134_firmwareversions": {
+            "display_name": "Cc134 firmwareversions",
+            "kind": "json",
+            "writable": false
+          },
+          "cc134_hardwareversion": {
+            "display_name": "Cc134 hardwareversion",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc134_librarytype": {
+            "display_name": "Cc134 librarytype",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc134_protocolversion": {
+            "display_name": "Cc134 protocolversion",
+            "kind": "string",
+            "writable": false
+          },
+          "location": {
+            "category": "diagnostic",
+            "display_name": "Location",
+            "kind": "string",
+            "writable": false
+          },
+          "motion": {
+            "display_name": "Motion",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "clear",
+                "verb": "stops detecting motion"
+              },
+              "when_true": {
+                "label": "detecting motion",
+                "verb": "detects motion"
+              }
+            },
+            "writable": false
+          },
+          "name": {
+            "category": "diagnostic",
+            "display_name": "Name",
+            "kind": "string",
+            "writable": false
+          },
+          "tamper": {
+            "display_name": "Tamper",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "clear",
+                "verb": "clears"
+              },
+              "when_true": {
+                "label": "tampered",
+                "verb": "is tampered"
+              }
+            },
+            "writable": false
+          }
+        },
+        "primary": [
+          "motion",
+          "cc112_12",
+          "cc112_14",
+          "cc112_15",
+          "cc112_17",
+          "cc112_18",
+          "cc112_19",
+          "cc112_20",
+          "cc112_32",
+          "cc113_alarmlevel",
+          "cc113_alarmtype",
+          "cc113_home_security_pkunknown",
+          "cc114_manufacturerid",
+          "cc114_productid",
+          "cc114_producttype",
+          "cc132_controllernodeid",
+          "cc132_wakeupinterval",
+          "cc134_firmwareversions",
+          "cc134_hardwareversion",
+          "cc134_librarytype",
+          "cc134_protocolversion",
+          "tamper"
+        ]
+      }
+    },
+    {
+      "attributes": {
+        "cc112_151": 50,
+        "cc112_152": 10,
+        "cc112_171": 30,
+        "cc112_172": 300,
+        "cc112_173": 300,
+        "cc112_174": 300,
+        "cc112_20": 1,
+        "cc112_21": 0,
+        "cc112_24": 1,
+        "cc112_27": 1,
+        "cc112_30": 1,
+        "cc112_31": 1,
+        "cc112_32": 1,
+        "cc114_manufacturerid": 634,
+        "cc114_productid": 13,
+        "cc114_producttype": 257,
+        "cc134_firmwareversions": ["1.4"],
+        "cc134_hardwareversion": 2,
+        "cc134_librarytype": 3,
+        "cc134_protocolversion": "4.38",
+        "cc50_value_pk66048": 2248.59,
+        "current_a": 2.265,
+        "energy_kwh": 769.834,
+        "location": "Office",
+        "name": "Plug - Office AC",
+        "on": true,
+        "power_w": 314.061,
+        "voltage": 121.965
+      },
+      "device_type": "zwave",
+      "plugin_id": "plugin.zwave",
+      "schema": {
+        "attributes": {
+          "cc112_151": {
+            "display_name": "Cc112 151",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc112_152": {
+            "display_name": "Cc112 152",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc112_171": {
+            "display_name": "Cc112 171",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc112_172": {
+            "display_name": "Cc112 172",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc112_173": {
+            "display_name": "Cc112 173",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc112_174": {
+            "display_name": "Cc112 174",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc112_20": {
+            "display_name": "Cc112 20",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc112_21": {
+            "display_name": "Cc112 21",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc112_24": {
+            "display_name": "Cc112 24",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc112_27": {
+            "display_name": "Cc112 27",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc112_30": {
+            "display_name": "Cc112 30",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc112_31": {
+            "display_name": "Cc112 31",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc112_32": {
+            "display_name": "Cc112 32",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc114_manufacturerid": {
+            "display_name": "Cc114 manufacturerid",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc114_productid": {
+            "display_name": "Cc114 productid",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc114_producttype": {
+            "display_name": "Cc114 producttype",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc134_firmwareversions": {
+            "display_name": "Cc134 firmwareversions",
+            "kind": "json",
+            "writable": false
+          },
+          "cc134_hardwareversion": {
+            "display_name": "Cc134 hardwareversion",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc134_librarytype": {
+            "display_name": "Cc134 librarytype",
+            "kind": "integer",
+            "writable": false
+          },
+          "cc134_protocolversion": {
+            "display_name": "Cc134 protocolversion",
+            "kind": "string",
+            "writable": false
+          },
+          "cc50_value_pk66048": {
+            "display_name": "Cc50 value pk66048",
+            "kind": "float",
+            "writable": false
+          },
+          "current_a": {
+            "display_name": "Current a",
+            "kind": "float",
+            "unit": "A",
+            "writable": false
+          },
+          "energy_kwh": {
+            "display_name": "Energy kwh",
+            "kind": "float",
+            "unit": "kWh",
+            "writable": false
+          },
+          "location": {
+            "category": "diagnostic",
+            "display_name": "Location",
+            "kind": "string",
+            "writable": false
+          },
+          "name": {
+            "category": "diagnostic",
+            "display_name": "Name",
+            "kind": "string",
+            "writable": false
+          },
+          "on": {
+            "display_name": "On",
+            "kind": "bool",
+            "states": {
+              "when_false": {
+                "label": "off",
+                "verb": "turns off"
+              },
+              "when_true": {
+                "label": "on",
+                "verb": "turns on"
+              }
+            },
+            "writable": true
+          },
+          "power_w": {
+            "display_name": "Power w",
+            "kind": "float",
+            "unit": "W",
+            "writable": false
+          },
+          "voltage": {
+            "display_name": "Voltage",
+            "kind": "float",
+            "unit": "V",
+            "writable": false
+          }
+        },
+        "primary": [
+          "on",
+          "power_w",
+          "cc112_151",
+          "cc112_152",
+          "cc112_171",
+          "cc112_172",
+          "cc112_173",
+          "cc112_174",
+          "cc112_20",
+          "cc112_21",
+          "cc112_24",
+          "cc112_27",
+          "cc112_30",
+          "cc112_31",
+          "cc112_32",
+          "cc114_manufacturerid",
+          "cc114_productid",
+          "cc114_producttype",
+          "cc134_firmwareversions",
+          "cc134_hardwareversion",
+          "cc134_librarytype",
+          "cc134_protocolversion",
+          "cc50_value_pk66048",
+          "current_a",
+          "energy_kwh",
+          "voltage"
+        ]
+      }
+    }
+  ],
+  "source": "GET /api/v1/devices?include_schema=true"
+}

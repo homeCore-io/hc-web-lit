@@ -101,7 +101,12 @@ export class HcDeviceGrid extends LitElement {
     return html`
       <div class=${this.mode === 'list' ? 'list' : 'grid'} part="set">
         ${chosen.map(
-          (d) => html`<hc-device-card .device=${d} .onCommand=${this.onCommand}></hc-device-card>`,
+          (d) =>
+            html`<hc-device-card
+              .device=${d}
+              .onCommand=${this.onCommand}
+              ?compact=${this.mode === 'list'}
+            ></hc-device-card>`,
         )}
       </div>
     `;

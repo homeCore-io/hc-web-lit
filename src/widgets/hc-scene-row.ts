@@ -12,6 +12,7 @@ import { LitElement, css, html, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import type { DeviceState } from '../core/device.js';
 import { effectiveName, isOn } from '../core/present.js';
+import { noStatusReason } from '../core/present.js';
 import { scenesInScope, sceneKind } from '../core/scenes.js';
 import type { CommandRequest } from './hc-controls.js';
 import { registerWidget } from './registry.js';
@@ -91,6 +92,7 @@ export class HcSceneRow extends LitElement {
 
     return html`<button
       part="scene"
+      title=${noStatusReason(scene) ?? nothing}
       aria-pressed=${stateful ? String(applied) : nothing}
       @click=${() => this.onCommand?.(activation(scene))}
     >
@@ -100,18 +102,18 @@ export class HcSceneRow extends LitElement {
 }
 
 /**
- * How to apply a scene — **best-effort, because nothing declares it yet.**
+ * How to apply a scene: **the action it declares.**
  *
- * No scene in the reference house publishes a schema at all (homeCore#28), so
- * neither branch here is reading a declaration; both read the shape. A scene
- * that publishes `on` is one whose plugin models it as a state, so writing
- * `on: true` is the request it is most likely to accept. One that publishes
- * nothing gets the `activate` action, which is the model the plugins are meant
- * to declare.
- *
- * When they do, this collapses to the action and the guessing stops.
+ * Every scene in the reference house now declares `activate`, which is the
+ * model — applying a scene is a thing you do, and a scene does not
+ * meaningfully turn off. The `on: true` write is kept only for a plugin that
+ * has not restarted since the upgrade and still declares nothing.
  */
 function activation(scene: DeviceState): CommandRequest {
+  const declared = (scene.schema?.actions ?? []).find((a) => a.id === 'activate');
+  if (declared !== undefined) {
+    return { deviceId: scene.device_id, action: { id: declared.id, params: {} } };
+  }
   return typeof scene.attributes['on'] === 'boolean'
     ? { deviceId: scene.device_id, patch: { on: true } }
     : { deviceId: scene.device_id, action: { id: 'activate', params: {} } };

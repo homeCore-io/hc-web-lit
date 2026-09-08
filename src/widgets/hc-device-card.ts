@@ -33,6 +33,10 @@ export class HcDeviceCard extends LitElement {
       display: grid;
       align-content: start;
       gap: 0.75rem;
+    }
+    :host([compact]) .card {
+      gap: 0;
+      padding: calc(var(--hc-space-unit, 8px) * 0.5) var(--hc-density-card-padding, 14px);
       height: 100%;
       box-sizing: border-box;
       padding: 0.75rem;
@@ -82,6 +86,17 @@ export class HcDeviceCard extends LitElement {
   /** The host's command sink. Absent means the card is read-only. */
   @property({ attribute: false }) onCommand: ((r: CommandRequest) => void) | undefined;
 
+  /**
+   * One row, no inline controls.
+   *
+   * A `device_list` placement on the real room page is 60px tall and holds
+   * thirteen devices in 420px — 32px each. A card with a generated control row
+   * is 120px, so the controls were there and scrolled out of sight, which
+   * looks like they are missing. A list row is a row; controls belong where
+   * there is room for them, and on a tap once §5.6's overlay exists.
+   */
+  @property({ type: Boolean }) compact = false;
+
   override render() {
     const d = this.device;
     if (d === undefined) return html`<div class="card"><span class="sub">No device</span></div>`;
@@ -110,7 +125,7 @@ export class HcDeviceCard extends LitElement {
           </div>
         </div>
         ${
-          controls.length > 0
+          !this.compact && controls.length > 0
             ? html`<hc-controls
                 part="controls"
                 .device=${d}

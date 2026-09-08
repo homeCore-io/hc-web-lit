@@ -11,7 +11,14 @@
  * Pure, like the layout engine and the token derivation: schema in, a list of
  * control descriptors out. What draws them is a widget's business.
  */
-import type { AttributeKind, AttributeSchema, DeviceAction, DeviceSchema } from './api.js';
+import { asOption } from './api.js';
+import type {
+  AttributeKind,
+  AttributeOption,
+  AttributeSchema,
+  DeviceAction,
+  DeviceSchema,
+} from './api.js';
 import type { DeviceState } from './device.js';
 
 /** A control to draw, already resolved against the device's current state. */
@@ -40,7 +47,8 @@ export type Control =
       key: string;
       label: string;
       value: string | undefined;
-      options: string[];
+      /** Already normalised: nothing downstream sees the string|object union. */
+      options: AttributeOption[];
     }
   | {
       form: 'colorTemp';
@@ -165,7 +173,7 @@ export function controlsFor(device: DeviceState, schema?: DeviceSchema | null): 
           key,
           label: name,
           value: typeof value === 'string' ? value : undefined,
-          options: a.options ?? [],
+          options: (a.options ?? []).map(asOption),
         });
         break;
       case 'color':

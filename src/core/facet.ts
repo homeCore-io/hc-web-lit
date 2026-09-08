@@ -100,29 +100,31 @@ const BOOLEAN_WORDS: Record<string, [string, string]> = {
 };
 
 /**
- * Attribute keys a client has to demote **because nothing declares them**.
+ * Attribute keys to demote **where nothing declares them yet**.
  *
- * `AttributeSchema.category` exists for exactly this — `diagnostic` for
- * battery, signal and firmware, `config` for settings — and **no device in the
- * reference house sets it, on any plugin**. So a lock's battery is declared
- * exactly as primary as whether it is locked, and a client that trusted the
- * declaration would lead with the battery.
+ * `AttributeCategory` is set by plugins now — core's `for_name` lexicon covers
+ * battery in all its spellings, rssi, lqi, signal_strength, firmware,
+ * sw_version, uptime, ip, mac, model, manufacturer, serial, name, area,
+ * location, kind, bridge_id, resource_id, node_id and any `*_unit` sibling, and
+ * hc-zwave, hc-ecowitt, hc-yolink and hc-isy call it. 117 attributes in the
+ * reference house carry a category where none did.
  *
- * This list is therefore a **stopgap for a gap that is filed** (homeCore#28),
- * and it is deliberately short: enough to stop the obvious burials, not an
- * attempt to out-guess the plugins on every attribute they publish.
+ * So this is a fallback rather than a policy, and it stays for two cases that
+ * will not clear up on their own (`SCHEMA_CONTRACT_2026-09.md` §3):
+ *
+ * - a plugin that has not restarted since the upgrade is still silent, because
+ *   schemas are retained MQTT topics published at registration;
+ * - a Hue facet compacted onto a light leaves that light's extra attributes
+ *   undeclared, since only aux devices published in their own right got
+ *   schemas.
+ *
+ * Trimmed to what those two cases actually produce. The `_unit` and
+ * `customserver.` rules stay because they are shape rules rather than names.
  */
 const UNDECLARED_HOUSEKEEPING = new Set([
   'battery',
   'battery_pct',
-  'battery_kind',
-  'battery_low',
   'battery_state',
-  'rssi',
-  'lqi',
-  'firmware',
-  'sw_version',
-  'uptime',
   'bridge_id',
   'resource_id',
   'kind',
@@ -131,9 +133,6 @@ const UNDECLARED_HOUSEKEEPING = new Set([
   'group_kind',
   'group_name',
   'group_rid',
-  'ip',
-  'mac',
-  'model',
 ]);
 
 export function isHousekeeping(key: string, declared?: { category?: string }): boolean {
@@ -165,18 +164,29 @@ export function readingOf(d: DeviceState): Reading | undefined {
   });
   if (candidates.length === 0) return undefined;
 
-  // Prefer the attribute the device's own type points at: a
-  // `temperature_sensor` reports `temperature`, whatever else it also reports.
-  // Reading `device_type` is reading what the plugin said, not a client table
-  // of what type names mean — and without it the first attribute in map order
-  // wins, which put a thermometer's humidity where its temperature belongs.
+  // **The declaration first.** `primary` is an ordered list of the readings a
+  // device is *for*, most important first — core derives it at serve time from
+  // the device's own type, ranks by significance where the type says nothing
+  // (every Z-Wave node, since they are all `device_type: "zwave"`), and sorts
+  // whatever neither table names. A plugin that declares its own keeps it.
+  //
+  // The ordering also fixes something this client could not have solved alone:
+  // `attributes` is a HashMap in Rust, so "the first attribute" was never
+  // stable between reads.
+  const named = (d.schema?.primary ?? [])
+    .map((key) => candidates.find(([k]) => k === key))
+    .find((entry) => entry !== undefined);
+
+  // Older core, or a schema that predates the field. This is the heuristic
+  // `primary` replaces: a `temperature_sensor` reports `temperature`, whatever
+  // else it also reports.
   const stem = (d.device_type ?? '').replace(/_sensor$/, '');
-  const preferred =
+  const guessed =
     stem === ''
       ? undefined
       : candidates.find(([key]) => key === stem || key.startsWith(`${stem}_`));
 
-  const [key, value] = preferred ?? candidates[0]!;
+  const [key, value] = named ?? guessed ?? candidates[0]!;
   const declared = attrs?.[key];
   const unit =
     declared?.unit ??

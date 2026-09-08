@@ -127,12 +127,39 @@ export function isOn(d: DeviceState): boolean | undefined {
  * is a thing you do, and there is no status afterwards. Rendering the second
  * kind as "Off" invents a fact.
  *
- * - `stateful` — reports `on` or `active`; ask `isOn`.
- * - `momentary` — reports nothing; offer to activate it and show no state.
+ * **Declared now, not inferred.** Every scene in the reference house declares
+ * an `activate` action; six also declare `on`, and those six carry
+ * `led_component` as a diagnostic — the schema says both *whether* a scene can
+ * report and *why* it cannot. A Caséta scene never reports because Caséta has
+ * no LEDs anywhere; a Lutron phantom scene reports only when its button has
+ * one, and the ones that do not are tied to a Pico.
+ *
+ * The attribute shape is still read as a fallback, for a plugin that has not
+ * restarted since the upgrade.
  */
 export function sceneKind(d: DeviceState): 'stateful' | 'momentary' {
+  const declared = d.schema?.attributes;
+  if (declared != null && Object.keys(declared).length > 0) {
+    return 'on' in declared || 'active' in declared ? 'stateful' : 'momentary';
+  }
   const a = d.attributes;
   return typeof a['on'] === 'boolean' || typeof a['active'] === 'boolean'
     ? 'stateful'
     : 'momentary';
+}
+
+/**
+ * Why a scene has no state to show, when the schema explains it.
+ *
+ * `led_component` is declared as a diagnostic on exactly the scenes that could
+ * have reported and do not, which is the difference between "this scene is off"
+ * and "nobody can tell".
+ */
+export function noStatusReason(d: DeviceState): string | undefined {
+  if (sceneKind(d) === 'stateful') return undefined;
+  const declared = d.schema?.attributes;
+  if (declared != null && 'led_component' in declared) {
+    return 'This scene has no LED to report with.';
+  }
+  return undefined;
 }

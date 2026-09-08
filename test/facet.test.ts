@@ -115,7 +115,56 @@ describe('readingOf', () => {
   });
 
   it('has nothing to report when everything is housekeeping', () => {
-    expect(readingOf(device({ attributes: { battery: 50, rssi: -60 } }))).toBeUndefined();
+    // battery is still in the fallback list, for the plugins that have not
+    // restarted since the upgrade. rssi is not: core's lexicon covers it and
+    // plugins declare it, so the declaration is what demotes it now.
+    expect(
+      readingOf(
+        device({
+          attributes: { battery: 50, rssi: -60 },
+          schema: { attributes: { rssi: { kind: 'integer', category: 'diagnostic' } } },
+        }),
+      ),
+    ).toBeUndefined();
+  });
+
+  it('leads with what the schema says the device is for', () => {
+    // `primary` is ordered, most important first, and it replaces the
+    // device_type stem heuristic. Core sorts what neither its type table nor
+    // its significance rank names, which is what makes it stable at all —
+    // `attributes` is a HashMap in Rust.
+    const r = readingOf(
+      device({
+        device_type: 'zwave',
+        attributes: { humidity: 41, temperature: 68.2, battery: 90 },
+        schema: {
+          primary: ['temperature', 'humidity'],
+          attributes: { battery: { kind: 'integer', category: 'diagnostic' } },
+        },
+      }),
+    );
+    expect(r?.key).toBe('temperature');
+  });
+
+  it('skips a primary entry the device is not currently reporting', () => {
+    const r = readingOf(
+      device({
+        attributes: { humidity: 41 },
+        schema: { primary: ['temperature', 'humidity'] },
+      }),
+    );
+    expect(r?.key).toBe('humidity');
+  });
+
+  it('still falls back to the old heuristic when primary is absent', () => {
+    // An older core, or a schema that predates the field.
+    const r = readingOf(
+      device({
+        device_type: 'temperature_sensor',
+        attributes: { humidity: 53.3, temperature: 72.9 },
+      }),
+    );
+    expect(r?.key).toBe('temperature');
   });
 });
 
