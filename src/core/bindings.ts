@@ -21,6 +21,7 @@
 import type { DeviceState } from './device.js';
 import { isOn } from './present.js';
 import { roleOf } from './facet.js';
+import { evaluate, hasInterpolation, interpolate, isExpr, type ExprScope } from './expr.js';
 import { resolveToken, type SelectionContext } from './selection.js';
 import { humanise } from './text.js';
 
@@ -111,9 +112,31 @@ export function resolveConfig(
   const bindings = Array.isArray(config['bindings']) ? (config['bindings'] as Binding[]) : [];
   const count = typeof config['count'] === 'string' ? config['count'] : undefined;
   const named = DISPLAY_KEYS.filter((k) => typeof config[k] === 'string' && config[k] === '@room');
-  if (bindings.length === 0 && count === undefined && named.length === 0) return config;
+  const expressions = Object.values(config).some((v) => isExpr(v) || hasInterpolation(v));
+  if (bindings.length === 0 && count === undefined && named.length === 0 && !expressions) {
+    return config;
+  }
 
   const out = { ...config };
+
+  // P1, at the same seam as everything else a widget must not learn the
+  // mechanism of (§6). The scope is built from what the page already resolved,
+  // so an expression sees the device `@picked` means rather than the token.
+  if (expressions) {
+    const scope = scopeFor(config, devices, ctx);
+    for (const [key, value] of Object.entries(config)) {
+      if (isExpr(value)) {
+        const got = evaluate(value.$expr, scope);
+        // An expression that throws renders a fallback, never a blank card
+        // (§6.6). There is no literal beside a `$expr`, so the fallback is to
+        // leave the key out and let the widget's own default stand.
+        if (got === undefined) delete out[key];
+        else out[key] = got;
+      } else if (hasInterpolation(value)) {
+        out[key] = interpolate(value, scope);
+      }
+    }
+  }
 
   // `@room` reads two ways and both are right. In `area_name` it selects, and
   // stays the slug the selection matches on. In a *display* field it is the
@@ -148,6 +171,34 @@ export function resolveConfig(
   }
 
   return out;
+}
+
+/**
+ * What an expression on this placement can see (§6.4).
+ *
+ * `device` is the placement's own device with `@picked` already resolved, and
+ * `devices` is keyed by id — the two spellings a document uses. Everything
+ * else in the documented scope that the page genuinely has is passed; what it
+ * does not have is absent rather than faked.
+ */
+function scopeFor(
+  config: Record<string, unknown>,
+  devices: readonly DeviceState[],
+  ctx: SelectionContext,
+): ExprScope {
+  const byId: Record<string, DeviceState> = {};
+  for (const d of devices) byId[d.device_id] = d;
+
+  const named = config['device_id'];
+  const id = typeof named === 'string' ? resolveToken(named, ctx) : undefined;
+
+  return {
+    ...(id !== undefined && byId[id] !== undefined ? { device: byId[id] } : {}),
+    devices: byId,
+    vars: (config['vars'] ?? {}) as Record<string, unknown>,
+    params: (config['params'] ?? {}) as Record<string, unknown>,
+    now: Date.now(),
+  };
 }
 
 /** Exported for a test that pins what a tally counts. */
