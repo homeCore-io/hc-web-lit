@@ -108,12 +108,71 @@ describe('readingOf', () => {
   });
 
   it('reads a boolean as a condition, not a power state', () => {
-    // "Open" is what a contact sensor means. "On" is not.
+    // "Open" is what a contact sensor means. "On" is not — and the negative
+    // side is "Closed", which is the word the device already has.
     expect(formatReading({ key: 'open', value: true, label: 'open' })).toBe('Open');
-    expect(formatReading({ key: 'open', value: false, label: 'open' })).toBe('No open');
+    expect(formatReading({ key: 'open', value: false, label: 'open' })).toBe('Closed');
   });
 
   it('has nothing to report when everything is housekeeping', () => {
     expect(readingOf(device({ attributes: { battery: 50, rssi: -60 } }))).toBeUndefined();
+  });
+});
+
+describe('the reading a device came to report', () => {
+  it('prefers the attribute the device type points at', () => {
+    // A thermometer that also reports humidity was showing 53.3% where its
+    // temperature belonged, because the first attribute in map order won.
+    // device_type is the plugin's own word, so reading it is not a client table.
+    const r = readingOf(
+      device({
+        device_type: 'temperature_sensor',
+        attributes: { humidity: 53.3, temperature: 72.9, temperature_unit: 'F' },
+      }),
+    );
+    expect(r?.key).toBe('temperature');
+    expect(formatReading(r!)).toBe('72.9 F');
+  });
+
+  it('still finds something when the type points at nothing present', () => {
+    const r = readingOf(
+      device({ device_type: 'water_sensor', attributes: { battery: 90, wet: true } }),
+    );
+    expect(r?.key).toBe('wet');
+  });
+});
+
+describe('words for booleans', () => {
+  it('uses the device s own words when it declared them', () => {
+    const r = readingOf(
+      device({
+        attributes: { on: true },
+        schema: {
+          attributes: { on: { kind: 'bool', states: { when_true: { label: 'active' } } } },
+        },
+      }),
+    );
+    expect(formatReading(r!)).toBe('Active');
+  });
+
+  it('knows the booleans every house has', () => {
+    // "No on" is what a fan read before this. A negated attribute name is a
+    // bad reading, not a wrong one.
+    expect(formatReading({ key: 'on', value: false, label: 'on' })).toBe('Off');
+    expect(formatReading({ key: 'open', value: false, label: 'open' })).toBe('Closed');
+    expect(formatReading({ key: 'occupancy', value: true, label: 'occupancy' })).toBe('Occupied');
+    expect(formatReading({ key: 'locked', value: false, label: 'locked' })).toBe('Unlocked');
+    expect(formatReading({ key: 'water_detected', value: false, label: 'water detected' })).toBe(
+      'Dry',
+    );
+  });
+
+  it('falls back visibly rather than inventing a word', () => {
+    expect(formatReading({ key: 'flux_capacitor', value: true, label: 'flux capacitor' })).toBe(
+      'Flux capacitor',
+    );
+    expect(formatReading({ key: 'flux_capacitor', value: false, label: 'flux capacitor' })).toBe(
+      'Not flux capacitor',
+    );
   });
 });

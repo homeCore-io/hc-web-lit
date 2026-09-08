@@ -19,7 +19,15 @@ import { effectiveName, isOn } from '../core/present.js';
 import type { CommandRequest } from './hc-controls.js';
 import { registerWidget } from './registry.js';
 
-const MODE_PLUGIN = 'plugin.core.mode';
+/**
+ * The mode provider's id, **both spellings**.
+ *
+ * A device from the Caséta plugin reports `plugin_id: "plugin.caseta"`; a mode
+ * device reports `"core.mode"`, with no prefix. Core's own providers are not
+ * prefixed the way installed plugins are, and matching only the prefixed form
+ * is why this widget said "No modes." on a house with two.
+ */
+const MODE_PLUGINS = new Set(['core.mode', 'plugin.core.mode']);
 
 @customElement('hc-mode-chips')
 export class HcModeChips extends LitElement {
@@ -66,7 +74,7 @@ export class HcModeChips extends LitElement {
   @property({ attribute: false }) onCommand: ((r: CommandRequest) => void) | undefined;
 
   override render() {
-    const modes = this.devices.filter((d) => d.plugin_id === MODE_PLUGIN);
+    const modes = this.devices.filter((d) => MODE_PLUGINS.has(d.plugin_id));
     if (modes.length === 0) return html`<div class="empty" part="empty">No modes.</div>`;
 
     return html`<div class="row" part="row">

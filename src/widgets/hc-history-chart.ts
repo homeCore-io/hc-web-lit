@@ -33,8 +33,8 @@ export class HcHistoryChart extends LitElement {
       height: 100%;
     }
     .chart {
-      display: grid;
-      grid-template-rows: auto 1fr;
+      display: flex;
+      flex-direction: column;
       gap: 0.25rem;
       height: 100%;
       box-sizing: border-box;
@@ -47,6 +47,7 @@ export class HcHistoryChart extends LitElement {
       background: var(--hc-surface-raised, #141922);
     }
     .head {
+      flex: none;
       display: flex;
       justify-content: space-between;
       align-items: baseline;
@@ -61,10 +62,18 @@ export class HcHistoryChart extends LitElement {
       font-weight: 600;
     }
     svg {
+      /* flex:1 with min-height:0, not height:100%. An SVG with a viewBox has
+         an intrinsic aspect ratio, and height:100% had nothing definite to
+         resolve against — so the svg took 680 / 2.5 = 272px inside a 116px
+         placement and drew its line across three other widgets. Measured in a
+         browser, not guessed. */
+      flex: 1;
+      min-height: 0;
       width: 100%;
-      height: 100%;
       display: block;
-      overflow: visible;
+      /* Clip to the box. A bare chart has no border to hide behind, so an
+         overflowing line lands on whatever is next to it. */
+      overflow: hidden;
     }
     path {
       fill: none;
@@ -137,23 +146,31 @@ export class HcHistoryChart extends LitElement {
     const attribute = typeof this.config['attribute'] === 'string' ? this.config['attribute'] : '';
     const s = this.series;
 
+    // `bare` means the composition already provides the chrome. On the real
+    // house page the band around this chart carries "INSIDE", the unit and the
+    // current reading as their own elements, so drawing a header here puts the
+    // attribute name and the value on the page twice.
     return html`<div class="chart" ?data-boxed=${!bare} part="chart">
-      <div class="head">
-        <span>${attribute.replace(/_/g, ' ')}</span>
-        ${
-          s !== undefined
-            ? html`<span class="now" part="value"
-                >${round(s.points[s.points.length - 1]?.value)}</span
-              >`
-            : nothing
-        }
-      </div>
+      ${bare ? nothing : this.head(attribute, s)}
       ${
         s === undefined
           ? html`<div class="note" part="note">${this.note}</div>`
           : html`<svg viewBox="0 0 100 40" preserveAspectRatio="none" part="plot">
               ${svg`<path d=${pathFor(s, 100, 40)} />`}
             </svg>`
+      }
+    </div>`;
+  }
+
+  private head(attribute: string, s: Series | undefined) {
+    return html`<div class="head">
+      <span>${attribute.replace(/_/g, ' ')}</span>
+      ${
+        s !== undefined
+          ? html`<span class="now" part="value"
+              >${round(s.points[s.points.length - 1]?.value)}</span
+            >`
+          : nothing
       }
     </div>`;
   }

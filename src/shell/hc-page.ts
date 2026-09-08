@@ -18,6 +18,7 @@ import type {
   DashboardDefinition,
   DashboardWidget,
 } from '../core/dashboard.js';
+import { resolveConfig } from '../core/bindings.js';
 import { gridItems, layoutFor } from '../core/dashboard.js';
 import { Engine, type GridItem } from '../core/layout.js';
 import type { SelectionContext } from '../core/selection.js';
@@ -228,7 +229,10 @@ export class HcPage extends LitElement {
       onCommand?: (r: CommandRequest) => void;
       onFetch?: HistoryFetch;
     };
-    el.config = w.config ?? {};
+    // Live values in, at the seam — `bindings` and `count` (§14.1). A widget
+    // gets a config with the house already in it and never learns the
+    // mechanism, exactly as it never learns what `@room` means.
+    el.config = resolveConfig(w.config ?? {}, this.store?.list() ?? [], this.context);
 
     // A widget that names one device gets it resolved; one that selects a set
     // gets the whole store and does its own selecting, because the selection is

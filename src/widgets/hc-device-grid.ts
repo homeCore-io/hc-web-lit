@@ -17,6 +17,7 @@ import type { SelectionContext } from '../core/selection.js';
 import { selectDevices } from '../core/selection.js';
 import type { CommandRequest } from './hc-controls.js';
 import './hc-device-card.js';
+import './hc-device-pill.js';
 import { registerWidget } from './registry.js';
 
 @customElement('hc-device-grid')
@@ -37,6 +38,15 @@ export class HcDeviceGrid extends LitElement {
       gap: calc(var(--hc-space-unit, 8px) * 0.5);
       grid-template-columns: 1fr;
     }
+    /* One row, filling the height it was given. The room page asks for these
+       in a 44px placement, which is a pill and not a card. */
+    .pills {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(0, 1fr);
+      gap: calc(var(--hc-space-unit, 8px) * 0.75);
+      height: 100%;
+    }
     .empty {
       color: var(--hc-ink-muted, #8b95a4);
       font-size: var(--hc-text-caption-size, 11px);
@@ -48,6 +58,8 @@ export class HcDeviceGrid extends LitElement {
   @property({ attribute: false }) devices: readonly DeviceState[] = [];
   @property({ attribute: false }) context: SelectionContext = {};
   @property({ attribute: false }) onCommand: ((r: CommandRequest) => void) | undefined;
+  /** `picks: true` — the row aims the controls beside it at what you touch. */
+  @property({ attribute: false }) onPick: ((deviceId: string) => void) | undefined;
   /** `grid` packs columns; `list` is one per row. */
   @property({ type: String }) mode: 'grid' | 'list' = 'grid';
 
@@ -66,6 +78,24 @@ export class HcDeviceGrid extends LitElement {
             : nothing
         }.
       </div>`;
+    }
+
+    // `layout` is core's, and "pills" is what the room page's lights row asks
+    // for. Ignoring it drew 64px cards into a 44px placement, which shows the
+    // top half of a name and reads as broken.
+    if (this.config['layout'] === 'pills') {
+      return html`
+        <div class="pills" part="set">
+          ${chosen.map(
+            (d) =>
+              html`<hc-device-pill
+                .device=${d}
+                .picked=${this.context.picked === d.device_id}
+                .onPick=${this.onPick}
+              ></hc-device-pill>`,
+          )}
+        </div>
+      `;
     }
 
     return html`

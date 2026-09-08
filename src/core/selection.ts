@@ -114,14 +114,28 @@ export function selectDevices(
     }
 
     case 'area': {
-      const want = normalizeAreaName(resolveToken(config.area_name, ctx));
+      const named = resolveToken(config.area_name, ctx);
+      // An unresolved `@room` is not "the devices with no area" — it is a page
+      // that does not yet know which room it is. Matching the empty area would
+      // fill a room page with every unassigned device in the house, which
+      // looks like an answer and is not one. Same reasoning as `query` below.
+      if (config.area_name !== undefined && named === undefined) {
+        chosen = [];
+        break;
+      }
+      const want = normalizeAreaName(named);
       chosen = devices.filter((d) => normalizeAreaName(effectiveArea(d)) === want);
       break;
     }
 
     case 'facet': {
       const facets = asList(config.facet);
-      const want = normalizeAreaName(resolveToken(config.area_name, ctx));
+      const named = resolveToken(config.area_name, ctx);
+      if (config.area_name !== undefined && named === undefined) {
+        chosen = [];
+        break;
+      }
+      const want = normalizeAreaName(named);
       chosen = devices.filter(
         (d) =>
           matchesFacet(d, facets) &&

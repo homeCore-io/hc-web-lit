@@ -18,6 +18,7 @@
  * `press_button`. Same shape of hardware, opposite answers, and the plugins
  * already said so.
  */
+import type { BoolStates } from './api.js';
 import type { DeviceState } from './device.js';
 
 /**
@@ -68,7 +69,35 @@ export interface Reading {
   value: unknown;
   unit?: string;
   label: string;
+  /** The device's own words for a boolean's two sides, when it declared them. */
+  states?: BoolStates;
 }
+
+/**
+ * Words for the booleans every house has, **because no plugin declares them.**
+ *
+ * `AttributeSchema.states` exists for exactly this — core's comment says a
+ * contact sensor's single `open` attribute otherwise renders as "open, but
+ * Not", a logic gate standing in for a word the device already has — and it is
+ * set on no device in the reference house (homeCore#29).
+ *
+ * So this covers the handful that appear everywhere and nothing else: a
+ * negated label is a bad reading, not a wrong one, and inventing words for
+ * attributes nobody has seen would be worse.
+ */
+const BOOLEAN_WORDS: Record<string, [string, string]> = {
+  on: ['On', 'Off'],
+  open: ['Open', 'Closed'],
+  locked: ['Locked', 'Unlocked'],
+  motion: ['Motion', 'Clear'],
+  occupancy: ['Occupied', 'Clear'],
+  occupied: ['Occupied', 'Clear'],
+  water_detected: ['Water detected', 'Dry'],
+  vibration: ['Vibration', 'Still'],
+  enabled: ['Enabled', 'Disabled'],
+  available: ['Available', 'Unavailable'],
+  active: ['Active', 'Inactive'],
+};
 
 /**
  * Attribute keys a client has to demote **because nothing declares them**.
@@ -130,34 +159,55 @@ export function isHousekeeping(key: string, declared?: { category?: string }): b
 export function readingOf(d: DeviceState): Reading | undefined {
   const attrs = d.schema?.attributes;
 
-  for (const [key, value] of Object.entries(d.attributes)) {
-    const declared = attrs?.[key];
-    if (isHousekeeping(key, declared)) continue;
-    if (value === null || typeof value === 'object') continue;
+  const candidates = Object.entries(d.attributes).filter(([key, value]) => {
+    if (isHousekeeping(key, attrs?.[key])) return false;
+    return value !== null && typeof value !== 'object';
+  });
+  if (candidates.length === 0) return undefined;
 
-    const unit =
-      declared?.unit ??
-      (typeof d.attributes[`${key}_unit`] === 'string'
-        ? (d.attributes[`${key}_unit`] as string)
-        : undefined);
+  // Prefer the attribute the device's own type points at: a
+  // `temperature_sensor` reports `temperature`, whatever else it also reports.
+  // Reading `device_type` is reading what the plugin said, not a client table
+  // of what type names mean — and without it the first attribute in map order
+  // wins, which put a thermometer's humidity where its temperature belongs.
+  const stem = (d.device_type ?? '').replace(/_sensor$/, '');
+  const preferred =
+    stem === ''
+      ? undefined
+      : candidates.find(([key]) => key === stem || key.startsWith(`${stem}_`));
 
-    return {
-      key,
-      value,
-      ...(unit !== undefined ? { unit } : {}),
-      label: declared?.display_name ?? key.replace(/_/g, ' '),
-    };
-  }
-  return undefined;
+  const [key, value] = preferred ?? candidates[0]!;
+  const declared = attrs?.[key];
+  const unit =
+    declared?.unit ??
+    (typeof d.attributes[`${key}_unit`] === 'string'
+      ? (d.attributes[`${key}_unit`] as string)
+      : undefined);
+
+  return {
+    key,
+    value,
+    ...(unit !== undefined ? { unit } : {}),
+    ...(declared?.states !== undefined ? { states: declared.states } : {}),
+    label: declared?.display_name ?? key.replace(/_/g, ' '),
+  };
 }
 
 /** A reading as a person reads it: `21.5 °C`, `Open`, `No water detected`. */
 export function formatReading(r: Reading): string {
   if (typeof r.value === 'boolean') {
-    // A boolean reading reports a condition, not a power state. "Open" is what
-    // a contact sensor means; "On" is not.
+    // The device's own word first. Then a word for the booleans every house
+    // has. Then the attribute's name, which is where "No on" came from — a
+    // negation is a bad reading rather than a wrong one, and the fallback
+    // should be visibly last.
+    const declared = r.value ? r.states?.when_true?.label : r.states?.when_false?.label;
+    if (declared !== undefined) return declared.replace(/^./, (c) => c.toUpperCase());
+
+    const known = BOOLEAN_WORDS[r.key];
+    if (known !== undefined) return r.value ? known[0] : known[1];
+
     const positive = r.label.replace(/^./, (c) => c.toUpperCase());
-    return r.value ? positive : `No ${r.label}`;
+    return r.value ? positive : `Not ${r.label}`;
   }
   if (typeof r.value === 'number') {
     const rounded = Math.abs(r.value) >= 100 ? Math.round(r.value) : Math.round(r.value * 10) / 10;
