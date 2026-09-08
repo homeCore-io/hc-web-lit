@@ -18,6 +18,7 @@ import { controlsFor } from '../core/controls.js';
 import type { DeviceState } from '../core/device.js';
 import { formatReading, hasPowerState, readingOf } from '../core/facet.js';
 import { effectiveName, isOn, levelOf, sceneKind } from '../core/present.js';
+import { wantsChrome } from '../core/compose.js';
 import { withoutRoom } from '../core/text.js';
 import type { CommandRequest } from './hc-controls.js';
 import './hc-controls.js';
@@ -31,6 +32,15 @@ export class HcDeviceCard extends LitElement {
     :host {
       display: block;
       container-type: inline-size;
+    }
+    /* Chrome, unless something else is already providing it (§5.5). A card
+       inside a stack that draws its own border is the double border every
+       "in-card" community card exists to suppress. */
+    :host([data-nested]) .card,
+    :host([data-nested][compact]) .card {
+      padding: 0;
+      border: 0;
+      background: transparent;
     }
     .card {
       display: grid;
@@ -238,6 +248,17 @@ export class HcDeviceCard extends LitElement {
 
   /** The room this card is shown in, if the page is scoped to one. */
   @property({ attribute: false }) room: string | undefined;
+
+  /** Inside a container, so it draws no chrome of its own (§5.5). */
+  @property({ attribute: false }) nested = false;
+
+  override updated(): void {
+    // Reflected so the rule above can be pure CSS, and so a theme can see it.
+    this.toggleAttribute('data-nested', wantsChrome(this.config, this.nested) === false);
+  }
+
+  /** A card in a set takes no config of its own; a placed one may. */
+  @property({ attribute: false }) config: Record<string, unknown> = {};
 
   /**
    * The switch the user moved, until the house confirms it.

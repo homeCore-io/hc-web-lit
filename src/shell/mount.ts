@@ -16,6 +16,7 @@ import type { SelectionContext } from '../core/selection.js';
 import type { DeviceStore } from '../core/store.js';
 import { tapIn, type TapAction } from '../core/actions.js';
 import { resolveInstance, type TemplateStore } from '../core/templates.js';
+import { tagFor } from '../widgets/registry.js';
 
 /** A widget instance as the document stores it. */
 export interface WidgetSpec {
@@ -53,6 +54,17 @@ export type MountTarget = HTMLElement & {
   onPick?: (deviceId: string) => void;
   onOpenRoom?: (room: string, page: string | undefined) => void;
   onDetails?: (deviceId: string) => void;
+  /**
+   * Everything the host gives a widget, handed over whole.
+   *
+   * A container has to mount its own children, and it cannot do that from the
+   * individual callbacks — it needs the same env the page used. This is
+   * §4.2's `HcContext` arriving where it was always going to be needed, shaped
+   * by what real widgets ask for rather than by a guess ahead of them.
+   */
+  env?: MountEnv;
+  /** Set on a child: it is inside something, so it draws no chrome (§5.5). */
+  nested?: boolean;
 };
 
 /** Elements already carrying a tap, so a re-render does not stack listeners. */
@@ -101,7 +113,27 @@ export function mountWidget(el: MountTarget, w: WidgetSpec, env: MountEnv): void
   if (env.onFetch !== undefined) el.onFetch = env.onFetch;
   if (env.onEvents !== undefined) el.onEvents = env.onEvents;
 
+  // A container mounts its own children and needs what the page had.
+  el.env = env;
+
   attachTap(el, w, env);
+}
+
+/**
+ * Build and wire one child of a container.
+ *
+ * The child is a widget like any other — same registry, same wiring, same
+ * template resolution — except that it knows it is nested, which is what
+ * suppresses its chrome (§5.5).
+ */
+export function mountChild(spec: WidgetSpec, env: MountEnv): HTMLElement | undefined {
+  const resolved = specFor(spec, env);
+  const tag = tagFor(resolved.type);
+  if (tag === undefined) return undefined;
+  const el = document.createElement(tag) as MountTarget;
+  el.nested = true;
+  mountWidget(el, resolved, env);
+  return el;
 }
 
 /**
