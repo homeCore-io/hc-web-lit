@@ -189,6 +189,13 @@ export interface LogEntry {
 export interface ApiOptions {
   /** e.g. `http://10.0.10.150:8080/api/v1` — no trailing slash. */
   baseUrl: string;
+  /**
+   * A bearer to start with: a session token, or a panel's API key (§ panel.ts).
+   * Core accepts either in the `Authorization` header and — since v0.1.68 — in
+   * the `?token=` the event stream takes, so a key needs nothing special here.
+   * It simply never refreshes, because there is no refresh token to present
+   * and a key does not expire on a clock.
+   */
   token?: string;
   /** Injectable for tests; defaults to the platform `fetch`. */
   fetch?: typeof globalThis.fetch;
@@ -235,6 +242,27 @@ export class HcApi {
 
   setToken(token: string | undefined): void {
     this.token = token;
+  }
+
+  /**
+   * `getCurrentUser`. Who this credential is, and — since v0.1.68 — what it
+   * may actually do.
+   *
+   * **Read `scopes`, not `role`.** An API key names the user who created it,
+   * so the profile that comes back is that person's, including their role,
+   * while the key's authority is the narrower set it was issued with. Deriving
+   * rights from the role hands a deliberately restricted key its owner's; this
+   * client's content server did exactly that until core started reporting the
+   * credential's own scopes.
+   *
+   * `scopes` is absent on a core older than v0.1.68, which is a different
+   * thing from an empty list and is why it is optional here.
+   */
+  async me(): Promise<{ id: string; username: string; role: string; scopes?: string[] }> {
+    return this.request<{ id: string; username: string; role: string; scopes?: string[] }>(
+      'GET',
+      '/auth/me',
+    );
   }
 
   /**

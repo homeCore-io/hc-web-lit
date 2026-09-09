@@ -19,6 +19,7 @@ import { check, checkAction } from '../core/safety.js';
 import { DeviceStore } from '../core/store.js';
 import { Authored } from '../core/authored.js';
 import { BrowserContent, ServerContent } from '../core/content.js';
+import { PanelCredential } from '../core/panel.js';
 import type { CommandRequest } from '../core/widget.js';
 import { effectiveName, isOn } from '../core/present.js';
 import type { ActionConfig } from '../core/actions.js';
@@ -211,6 +212,27 @@ export class HcApp extends LitElement {
    */
   @state() private kiosk = new URLSearchParams(globalThis.location?.search ?? '').has('kiosk');
 
+  /**
+   * This panel's own credential (§ panel.ts).
+   *
+   * Claimed at construction, which is before `?kiosk` is read below — the key
+   * comes out of the address either way, so a URL pasted into a normal browser
+   * does not leave a credential sitting in the bar. Whether it is *used* is a
+   * separate question, answered in `connectedCallback`.
+   */
+  private readonly panel = new PanelCredential();
+  private readonly panelKey = this.panel.claim();
+
+  /**
+   * What the panel's key may do, from `/auth/me`.
+   *
+   * Read rather than assumed, and shown rather than discovered: a key issued
+   * without `content:write` produces a panel where saving an icon rule fails,
+   * and the only thing worse than that is failing without saying why.
+   * Undefined against a core older than v0.1.68, which did not report it.
+   */
+  @state() private panelScopes: string[] | undefined;
+
   /** Re-renders the age while nothing is arriving, so it counts up visibly. */
   private ageTimer: ReturnType<typeof setInterval> | undefined;
   @state() private docs: DashboardDefinition[] = [];
@@ -332,6 +354,13 @@ export class HcApp extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.paint();
+
+    // A panel with a key connects itself. That is the whole feature: after a
+    // power cut the tablet's browser reopens its URL and the dashboard is
+    // back, with nobody standing in front of it and no password on the
+    // machine. Without a key this stays on the Connect button, which is right
+    // for a browser somebody is sitting at.
+    if (this.panelKey !== undefined) void this.connectWithKey(this.panelKey);
   }
 
   override disconnectedCallback(): void {
@@ -364,6 +393,54 @@ export class HcApp extends LitElement {
     try {
       const api = new HcApi({ baseUrl: this.baseUrl });
       await api.login(username, password);
+      await this.bootstrap(api);
+    } catch (e) {
+      this.fail(e);
+    }
+  }
+
+  /**
+   * Come up on this panel's own key, with nobody in front of it.
+   *
+   * The credential is checked before anything is loaded, because the failure
+   * that matters here is a *revoked* key: the panel would otherwise fetch a
+   * dashboard, open a stream, get refused, and sit there showing a login
+   * screen with a dead key underneath it that no amount of reloading fixes.
+   * Asking `/auth/me` first turns that into one clear sentence and a forgotten
+   * key, so the next `?key=` provisions cleanly.
+   */
+  private async connectWithKey(key: string): Promise<void> {
+    this.phase = 'connecting';
+    this.message = '';
+    try {
+      const api = new HcApi({ baseUrl: this.baseUrl, token: key });
+      this.panelScopes = (await api.me()).scopes;
+      await this.bootstrap(api);
+    } catch (e) {
+      if (e instanceof HcApiError && e.isAuthFailure) {
+        this.panel.forget();
+        this.phase = 'failed';
+        this.message =
+          'This panel’s key was refused. Open it once with a new ?key= to set it up again.';
+        return;
+      }
+      this.fail(e);
+    }
+  }
+
+  /**
+   * Everything after authentication, which is the same either way.
+   *
+   * A key and a password differ only in how the bearer was obtained; from here
+   * down the panel and somebody's browser are the same client, which is the
+   * point — a panel that ran a reduced path would be a second thing to keep
+   * working.
+   *
+   * Throws rather than setting the failed phase, so each caller can say what
+   * its own failure means.
+   */
+  private async bootstrap(api: HcApi): Promise<void> {
+    {
       this.api = api;
 
       // Schemas inline: one request, and the controls a device offers are known
@@ -405,11 +482,39 @@ export class HcApp extends LitElement {
       }, 10_000);
 
       this.phase = 'ready';
-    } catch (e) {
-      this.phase = 'failed';
-      this.message =
-        e instanceof HcApiError ? e.message : `Could not reach ${this.baseUrl} — ${String(e)}`;
     }
+  }
+
+  /**
+   * What this panel's key cannot do, when that is worth saying out loud.
+   *
+   * Undefined for a browser session, for a key with the content scopes, and
+   * against a core older than v0.1.68 — which did not report scopes, so an
+   * absent list means *unknown* and guessing from the role is exactly the
+   * mistake core v0.1.68 exists to stop.
+   */
+  private get panelLimit(): { text: string; why: string } | undefined {
+    const scopes = this.panelScopes;
+    if (this.panelKey === undefined || scopes === undefined) return undefined;
+    if (!scopes.includes('content:read')) {
+      return {
+        text: 'own content',
+        why: 'This key cannot read the household’s authored content, so this panel is showing its own icon rules and templates rather than the house’s. Re-issue it with content:read.',
+      };
+    }
+    if (!scopes.includes('content:write')) {
+      return {
+        text: 'read only',
+        why: 'This key cannot write authored content, so icon rules and templates cannot be saved from this panel. Re-issue it with content:write.',
+      };
+    }
+    return undefined;
+  }
+
+  private fail(e: unknown): void {
+    this.phase = 'failed';
+    this.message =
+      e instanceof HcApiError ? e.message : `Could not reach ${this.baseUrl} — ${String(e)}`;
   }
 
   /**
@@ -581,6 +686,18 @@ export class HcApp extends LitElement {
                 <span class="dot" ?data-live=${this.live}></span>
                 ${this.live ? 'live' : `last heard ${sinceHeard(this.lastHeard)}`} ·
                 ${this.store.size} devices
+              </span>`
+            : nothing
+        }
+        ${
+          // Only when it is true, and only when it costs the household
+          // something: a key without the content scopes gives this panel its
+          // *own* icon rules and templates rather than the house's, and two
+          // devices quietly disagreeing about what a mark means is worse than
+          // one that says so.
+          this.phase === 'ready' && this.panelLimit !== undefined
+            ? html`<span class="status error" title=${this.panelLimit.why}>
+                ${this.panelLimit.text}
               </span>`
             : nothing
         }
