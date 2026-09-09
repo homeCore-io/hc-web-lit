@@ -25,6 +25,7 @@ import type { CommandRequest } from '../core/widget.js';
 import { formatReading, hasPowerState, readingOf } from '../core/facet.js';
 import { effectiveName, isOn, levelOf, sceneKind } from '../core/present.js';
 import { withoutRoom } from '../core/text.js';
+import { selectDevices, type SelectionContext } from '../core/selection.js';
 import { icon, iconFor, metricVar } from '../design/icons.js';
 import { registerWidget } from '../core/registry.js';
 import { HcLayoutShell } from '../sdk/shell.js';
@@ -85,7 +86,47 @@ export class HcDeviceCard extends HcLayoutShell {
     `,
   ];
 
+  /**
+   * The device, when the host resolved one from `device_id`.
+   *
+   * Read through `chosen` rather than directly, because a `device_tile` in the
+   * reference house does not carry `device_id` at all.
+   */
   @property({ attribute: false }) device: DeviceState | undefined;
+
+  /** The store, for a placement that selects rather than names (§5.3). */
+  @property({ attribute: false }) devices: readonly DeviceState[] = [];
+  @property({ attribute: false }) override config: Record<string, unknown> = {};
+  @property({ attribute: false }) context: SelectionContext = {};
+
+  /**
+   * Which device this card is about.
+   *
+   * **`device_id` is not the only way a placement names one.** The real house
+   * stores its `device_tile` as
+   *
+   *     { selection_mode: "manual", device_ids: ["hue_…_42efbca0…"] }
+   *
+   * — the plural, because `dashboard_vocabulary`'s naming ratchet requires
+   * `device_ids` for a reference *list*, and a manual selection of one is
+   * still a list. `mountWidget` resolves the singular only, so that placement
+   * arrived with no device and the card drew "No device" on a page somebody
+   * had authored and was presumably looking at.
+   *
+   * Resolved with `selectDevices`, which is the primitive the sets already use
+   * — a second interpretation of `selection_mode` here is how two widgets come
+   * to disagree about what a document means (§5.7's reasoning, one level down).
+   *
+   * A tile draws one device, so a manual selection of several shows the first.
+   * That is a choice worth stating: `device_grid` is the widget for many, and
+   * silently drawing one of five would otherwise look like the other four had
+   * gone missing.
+   */
+  private get chosen(): DeviceState | undefined {
+    if (this.device !== undefined) return this.device;
+    if (this.devices.length === 0) return undefined;
+    return selectDevices(this.config, this.devices, this.context)[0];
+  }
   /** The host's command sink. Absent means the card is read-only. */
   @property({ attribute: false }) onCommand: ((r: CommandRequest) => void) | undefined;
   /** Hold to inspect, without acting on it (§5.10). */
@@ -119,7 +160,7 @@ export class HcDeviceCard extends HcLayoutShell {
     // because the shell owns the markup now — and once, because the gesture
     // is the element's and not the render's.
     attachInspect(this, () => {
-      const id = this.device?.device_id;
+      const id = this.chosen?.device_id;
       if (id !== undefined) this.onDetails?.(id);
     });
   }
@@ -134,7 +175,7 @@ export class HcDeviceCard extends HcLayoutShell {
 
   override updated(): void {
     super.updated();
-    const d = this.device;
+    const d = this.chosen;
     this.offline = d !== undefined && !d.available;
 
     // The widget says what state it is in; the shell owns what a state looks
@@ -161,22 +202,22 @@ export class HcDeviceCard extends HcLayoutShell {
   }
 
   protected override renderIcon() {
-    return icon(iconFor(this.device));
+    return icon(iconFor(this.chosen));
   }
 
   protected override renderPrimary(): unknown {
-    const d = this.device;
+    const d = this.chosen;
     if (d === undefined) return html`<span class="none">No device</span>`;
     return withoutRoom(effectiveName(d), this.room);
   }
 
   protected override renderSecondary(): unknown {
-    const d = this.device;
+    const d = this.chosen;
     return d === undefined ? nothing : this.words(d);
   }
 
   protected override renderBadge(): unknown {
-    const d = this.device;
+    const d = this.chosen;
     if (d === undefined) return nothing;
     const on = isOn(d);
     const level = levelOf(d);
@@ -199,7 +240,7 @@ export class HcDeviceCard extends HcLayoutShell {
   }
 
   protected override renderControls(): unknown {
-    const d = this.device;
+    const d = this.chosen;
     if (d === undefined || this.compact) return nothing;
     // Generated from what the plugin declared, not from what this widget
     // assumes a device type can do (§5.11). Empty for a device whose plugin

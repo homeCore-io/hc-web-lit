@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import '../src/widgets/hc-fan.js';
 import '../src/widgets/hc-contact.js';
 import '../src/widgets/hc-presence.js';
+import '../src/widgets/hc-device-card.js';
 import { tagForDevice } from '../src/core/registry.js';
 import { formatReading, readingAt, readingOf } from '../src/core/facet.js';
 import type { DeviceState } from '../src/core/device.js';
@@ -296,5 +297,39 @@ describe('a unit a device states twice, differently', () => {
       attributes: { illuminance: 27.66, illuminance_unit: 'lux' },
     } as Partial<DeviceState>);
     expect(formatReading(readingAt(sensor, 'illuminance')!)).toBe('27.7 lux');
+  });
+});
+
+describe('a device_tile that names its device the plural way', () => {
+  it('draws it, because that is how the reference house stores one', async () => {
+    // The authored dashboard carries
+    //   { selection_mode: "manual", device_ids: ["hue_…"] }
+    // because `dashboard_vocabulary`'s naming ratchet requires `device_ids`
+    // for a reference list, and a manual selection of one is still a list.
+    // `mountWidget` resolves only the singular, so this placement arrived with
+    // no device and drew "No device" on a page somebody had authored.
+    const lamp = base({ device_id: 'hue_1', name: 'Attic Light', attributes: { on: false } });
+    const el = await mount<HTMLElement>('hc-device-card', {
+      config: { selection_mode: 'manual', device_ids: ['hue_1'] },
+      devices: [lamp, base({ device_id: 'other', name: 'Not This One' })],
+    });
+
+    expect(text(el)).toContain('Attic Light');
+    expect(text(el)).not.toContain('No device');
+  });
+
+  it('still prefers a device the host resolved for it', async () => {
+    const named = base({ device_id: 'a', name: 'Named' });
+    const el = await mount<HTMLElement>('hc-device-card', {
+      device: named,
+      config: { selection_mode: 'manual', device_ids: ['b'] },
+      devices: [named, base({ device_id: 'b', name: 'Selected' })],
+    });
+    expect(text(el)).toContain('Named');
+  });
+
+  it('says nothing at all when neither names a device', async () => {
+    const el = await mount<HTMLElement>('hc-device-card', { config: {}, devices: [] });
+    expect(text(el)).toContain('No device');
   });
 });
