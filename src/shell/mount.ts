@@ -163,6 +163,58 @@ export function mountChild(spec: WidgetSpec, env: MountEnv): HTMLElement | undef
 }
 
 /**
+ * A container's children, reused across renders.
+ *
+ * `mountChild` builds a fresh element every time, which is right for a one-off
+ * and wrong for a container: a page re-renders on every device change, and the
+ * reference house streams 184 devices. Rebuilding then destroys and recreates
+ * every child several times a second — a visible flicker, a history chart that
+ * re-fetches six hours of readings each time, and any state a child holds
+ * (a scroll position, an expanded section) thrown away before anyone can use
+ * it. `hc-page` solved this for placements with a cache keyed by widget id;
+ * containers had no equivalent.
+ *
+ * **Keyed by position and type**, because a child spec carries no id of its
+ * own — it is a `WidgetSpec` inside a config, not a `DashboardWidget`. That is
+ * stable while the list is, and a reordered list rebuilds, which is correct
+ * rather than merely acceptable: position is the only identity the document
+ * gives these, so two children swapping places really are different children
+ * as far as anything here can tell.
+ *
+ * The cache belongs to the container and is passed in, so a container that is
+ * removed takes its children with it.
+ */
+export function mountChildren(
+  specs: readonly WidgetSpec[],
+  env: MountEnv,
+  cache: Map<string, HTMLElement>,
+): (HTMLElement | undefined)[] {
+  const live = new Set<string>();
+
+  const out = specs.map((spec, i) => {
+    const resolved = specFor(spec, env);
+    const key = `${i}:${resolved.type}`;
+    live.add(key);
+
+    const cached = cache.get(key);
+    if (cached !== undefined) {
+      mountWidget(cached as MountTarget, resolved, env);
+      return cached;
+    }
+
+    const el = mountChild(spec, env);
+    if (el !== undefined) cache.set(key, el);
+    return el;
+  });
+
+  // A child that is no longer in the config is not coming back, and a cache
+  // that only ever grows is a leak on a panel that runs for months.
+  for (const key of [...cache.keys()]) if (!live.has(key)) cache.delete(key);
+
+  return out;
+}
+
+/**
  * A placement's gestures, dispatched by the host.
  *
  * Here rather than in each widget, for the reason §5.10 gives: the widget does

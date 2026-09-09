@@ -10,7 +10,7 @@
 import { LitElement, css, html } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { childrenOf, gapOf } from '../core/compose.js';
-import { mountChild, type MountEnv } from '../shell/mount.js';
+import { mountChildren, type MountEnv } from '../shell/mount.js';
 import { registerWidget } from '../core/registry.js';
 
 @customElement('hc-stack')
@@ -33,13 +33,16 @@ export class HcStack extends LitElement {
   @property({ attribute: false }) config: Record<string, unknown> = {};
   @property({ attribute: false }) env: MountEnv | undefined;
 
+  /** Children reused across renders — see `mountChildren`. */
+  private readonly cache = new Map<string, HTMLElement>();
+
   override render() {
     const env = this.env;
     if (env === undefined) return html``;
 
     const row = this.config['direction'] === 'row';
     const align = String(this.config['align'] ?? 'stretch');
-    const children = childrenOf(this.config).map((c) => mountChild(c, env));
+    const children = mountChildren(childrenOf(this.config), env, this.cache);
 
     return html`<div
       class="stack"

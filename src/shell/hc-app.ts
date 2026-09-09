@@ -62,6 +62,9 @@ import '../widgets/hc-timer.js';
 import '../widgets/hc-image.js';
 import '../widgets/hc-spacer.js';
 import '../widgets/hc-stack.js';
+import '../widgets/hc-swipe.js';
+import '../widgets/hc-tabs.js';
+import '../widgets/hc-accordion.js';
 
 type Phase = 'idle' | 'connecting' | 'ready' | 'failed';
 

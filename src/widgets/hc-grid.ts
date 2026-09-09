@@ -9,7 +9,7 @@
 import { LitElement, css, html } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { childrenOf, gapOf } from '../core/compose.js';
-import { mountChild, type MountEnv } from '../shell/mount.js';
+import { mountChildren, type MountEnv } from '../shell/mount.js';
 import { registerWidget } from '../core/registry.js';
 
 @customElement('hc-grid')
@@ -32,6 +32,9 @@ export class HcGrid extends LitElement {
   @property({ attribute: false }) config: Record<string, unknown> = {};
   @property({ attribute: false }) env: MountEnv | undefined;
 
+  /** Children reused across renders — see `mountChildren`. */
+  private readonly cache = new Map<string, HTMLElement>();
+
   override render() {
     const env = this.env;
     if (env === undefined) return html``;
@@ -49,7 +52,9 @@ export class HcGrid extends LitElement {
       part="set"
       style="grid-template-columns:${template};gap:${gapOf(this.config)}px"
     >
-      ${childrenOf(this.config).map((c) => mountChild(c, env) ?? html`<div part="empty"></div>`)}
+      ${mountChildren(childrenOf(this.config), env, this.cache).map(
+        (el) => el ?? html`<div part="empty"></div>`,
+      )}
     </div>`;
   }
 }
