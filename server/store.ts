@@ -15,6 +15,7 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, extname, join, resolve } from 'node:path';
+import { sanitiseSvg, sniff } from './assets.ts';
 
 /** A key is a file name, so it may not wander out of the directory. */
 const SAFE_KEY = /^[a-z0-9][a-z0-9._-]{0,63}$/i;
@@ -97,21 +98,49 @@ export class Store {
   }
 
   /** Store bytes, addressed by their hash — the same id twice is one file. */
-  async putAsset(bytes: Buffer, ext = ''): Promise<{ id: string; bytes: number }> {
+  /**
+   * Store a file, by the hash of what is actually stored.
+   *
+   * **Sniffed, not trusted, and sanitised before hashing.** The extension a
+   * caller sends is a claim; the first bytes are the fact (§ assets.ts). An
+   * SVG is cleaned on the way in and the *cleaned* bytes are what gets
+   * hashed — so the id names what will be served rather than what arrived,
+   * and uploading the same hostile file twice cannot produce one id that is
+   * clean and another that is not.
+   */
+  async putAsset(bytes: Buffer, ext = ''): Promise<{ id: string; bytes: number; kind: string }> {
     if (bytes.byteLength > this.limits.maxBytes) throw new Error('too large');
-    const id = createHash('sha256').update(bytes).digest('hex');
-    const file = this.path('assets', id + (extname(ext) || ''));
+
+    const seen = sniff(bytes);
+    const stored =
+      seen.kind === 'svg' ? Buffer.from(sanitiseSvg(bytes.toString('utf8')), 'utf8') : bytes;
+
+    const id = createHash('sha256').update(stored).digest('hex');
+    // The sniffed kind names the file, so what is on the disk says what it is
+    // even to somebody reading the directory without this program. `ext` is
+    // kept only as a fallback for a format not on the list.
+    const suffix = seen.kind !== '' ? `.${seen.kind}` : extname(ext) || '';
+    const file = this.path('assets', id + suffix);
     await mkdir(dirname(file), { recursive: true });
-    await writeFile(file, bytes);
-    return { id, bytes: bytes.byteLength };
+    await writeFile(file, stored);
+    return { id, bytes: stored.byteLength, kind: seen.kind };
   }
 
-  async getAsset(id: string): Promise<Buffer | undefined> {
+  /**
+   * The bytes and what they are.
+   *
+   * Sniffed again on the way out rather than inferred from the file name: the
+   * name is only a convenience for a person reading the directory, and a
+   * content type derived from a string is a content type somebody can choose.
+   */
+  async getAsset(id: string): Promise<{ bytes: Buffer; type: string } | undefined> {
     if (!SAFE_ID.test(id)) return undefined;
     try {
       const dir = this.path('assets');
       const found = (await readdir(dir)).find((f) => f.startsWith(id));
-      return found === undefined ? undefined : await readFile(join(dir, found));
+      if (found === undefined) return undefined;
+      const bytes = await readFile(join(dir, found));
+      return { bytes, type: sniff(bytes).type };
     } catch {
       return undefined;
     }

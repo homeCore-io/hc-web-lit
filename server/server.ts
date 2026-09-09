@@ -19,6 +19,7 @@ import { stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve } from 'node:path';
 import { Auth, mayRead, mayWrite } from './auth.ts';
+import { assetHeaders } from './assets.ts';
 import { Extensions } from './extensions.ts';
 import { Store } from './store.ts';
 
@@ -198,14 +199,14 @@ export const handler = async (req: IncomingMessage, res: ServerResponse): Promis
 
     const asset = /^\/api\/assets\/([0-9a-f]{64})$/.exec(url);
     if (asset !== null && method === 'GET') {
-      const bytes = await store.getAsset(asset[1]!);
-      if (bytes === undefined) return send(res, 404, { error: 'no such asset' });
-      // Addressed by the hash of its contents, so it can never change.
-      res.writeHead(200, {
-        'content-type': 'application/octet-stream',
-        'cache-control': 'public, max-age=31536000, immutable',
-      });
-      return void res.end(bytes);
+      const found = await store.getAsset(asset[1]!);
+      if (found === undefined) return send(res, 404, { error: 'no such asset' });
+      // Typed so a browser will render it, and sandboxed so that being able
+      // to render it is not a way into this origin (§ assets.ts). Both, and
+      // for the same reason: the store exists to serve a household's own
+      // pictures, and it serves them from the origin the session lives in.
+      res.writeHead(200, assetHeaders(found.type));
+      return void res.end(found.bytes);
     }
 
     if (url.startsWith('/api/')) return send(res, 404, { error: 'no such route' });

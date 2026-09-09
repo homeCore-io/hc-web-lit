@@ -64,7 +64,7 @@ describe('assets', () => {
     const b = await store.putAsset(Buffer.from('hello'));
     expect(a.id).toBe(b.id);
     expect(await readdir(join(root, 'assets'))).toHaveLength(1);
-    expect((await store.getAsset(a.id))?.toString()).toBe('hello');
+    expect((await store.getAsset(a.id))?.bytes.toString()).toBe('hello');
   });
 
   it('has nothing for an id that is not one', async () => {
