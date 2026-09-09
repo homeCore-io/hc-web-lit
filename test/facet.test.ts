@@ -91,8 +91,10 @@ describe('readingOf', () => {
         }),
       }),
     );
-    expect(r).toMatchObject({ key: 'temperature', unit: 'C', label: 'Temperature' });
-    expect(formatReading(r!)).toBe('21.5 C');
+    // `°C`, not `C`: plugins publish the bare letter and a person reads the
+    // degree sign, so `unitFor` adds it for F/C/K and leaves `lux` alone.
+    expect(r).toMatchObject({ key: 'temperature', unit: '°C', label: 'Temperature' });
+    expect(formatReading(r!)).toBe('21.5 °C');
   });
 
   it('steps over battery even though no plugin declares it diagnostic', () => {
@@ -187,7 +189,7 @@ describe('the reading a device came to report', () => {
       }),
     );
     expect(r?.key).toBe('temperature');
-    expect(formatReading(r!)).toBe('72.9 F');
+    expect(formatReading(r!)).toBe('72.9 °F');
   });
 
   it('still finds something when the type points at nothing present', () => {

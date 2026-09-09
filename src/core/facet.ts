@@ -64,6 +64,40 @@ export function hasPowerState(d: DeviceState): boolean {
   return roleOf(d) === 'commandable';
 }
 
+/**
+ * The unit for one attribute, from the two places a device can say it.
+ *
+ * **The published sibling wins over the declaration**, which is the opposite
+ * of the usual rule here and is a deliberate exception. A schema describes an
+ * attribute in general; `<key>_unit` is published beside the value and
+ * describes *this reading*. When they disagree the live one is the one to
+ * trust, and they do disagree in the reference house: a Hue motion sensor
+ * declares `temperature` as `unit: "°C"` and publishes
+ *
+ *     temperature: 71.33   temperature_unit: "F"
+ *     temperature_f: 71.33  temperature_c: 21.85
+ *
+ * so the value is plainly Fahrenheit and the declaration is wrong
+ * (homeCore#40). Preferring the declaration renders "71.3 °C", which is not a
+ * rounding error or a cosmetic slip — it is a house on fire, drawn calmly.
+ *
+ * Where only one of the two exists, that one is used and nothing is inferred.
+ */
+function unitFor(d: DeviceState, key: string, declared?: { unit?: string }): string | undefined {
+  const published = d.attributes[`${key}_unit`];
+  if (typeof published === 'string' && published !== '') return degrees(published);
+  return declared?.unit;
+}
+
+/**
+ * `F` and `C` are how a plugin publishes a temperature unit; `°F` is how a
+ * person reads one. Bare letters only — a plugin that already sent `°F`, or
+ * sent `lux` or `ppm`, is left exactly as it wrote it.
+ */
+function degrees(unit: string): string {
+  return /^[FCK]$/.test(unit) ? `\u00b0${unit}` : unit;
+}
+
 /** One reading, ready to draw. */
 export interface Reading {
   key: string;
@@ -203,11 +237,36 @@ export function readingOf(d: DeviceState): Reading | undefined {
 
   const [key, value] = named ?? guessed ?? candidates[0]!;
   const declared = attrs?.[key];
-  const unit =
-    declared?.unit ??
-    (typeof d.attributes[`${key}_unit`] === 'string'
-      ? (d.attributes[`${key}_unit`] as string)
-      : undefined);
+  const unit = unitFor(d, key, declared);
+
+  return {
+    key,
+    value,
+    ...(unit !== undefined ? { unit } : {}),
+    ...(declared?.states !== undefined ? { states: declared.states } : {}),
+    label: declared?.display_name ?? humanise(key),
+  };
+}
+
+/**
+ * A reading for one named attribute, rather than the device's headline.
+ *
+ * `readingOf` answers "what is this device *for*", which is the right question
+ * almost everywhere. A few devices are more than one instrument in a housing —
+ * a Hue motion sensor declares `motion`, `illuminance` and `temperature`, and
+ * all three are real — so a widget that has decided which attribute it wants
+ * needs the same unit and label resolution without the ranking.
+ *
+ * Shared rather than reimplemented, because the fiddly part is not the value:
+ * it is that a unit may be declared on the schema *or* published beside the
+ * attribute as `<key>_unit`, and only one of those is obvious.
+ */
+export function readingAt(d: DeviceState, key: string): Reading | undefined {
+  const value = d.attributes[key];
+  if (value === undefined || value === null || typeof value === 'object') return undefined;
+
+  const declared = d.schema?.attributes?.[key];
+  const unit = unitFor(d, key, declared);
 
   return {
     key,
