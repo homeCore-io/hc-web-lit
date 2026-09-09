@@ -35,6 +35,27 @@ export interface Caller {
 export const READ_SCOPE = 'dashboards:read';
 export const WRITE_SCOPE = 'dashboards:write';
 
+/**
+ * Scopes for a client's own content, if core grows them.
+ *
+ * Preferred where present and ignored where absent, so a core that gains them
+ * needs no flag day and a core that never does keeps working. The fallback
+ * above is not a stopgap — it is the honest existing statement about who may
+ * edit dashboard-shaped things.
+ */
+export const CONTENT_READ_SCOPE = 'content:read';
+export const CONTENT_WRITE_SCOPE = 'content:write';
+
+/** Whether these scopes allow a read, by either name. */
+export function mayRead(scopes: readonly string[]): boolean {
+  return scopes.includes(CONTENT_READ_SCOPE) || scopes.includes(READ_SCOPE);
+}
+
+/** Whether these scopes allow a write, by either name. */
+export function mayWrite(scopes: readonly string[]): boolean {
+  return scopes.includes(CONTENT_WRITE_SCOPE) || scopes.includes(WRITE_SCOPE);
+}
+
 interface Cached<T> {
   value: T;
   until: number;
@@ -61,11 +82,21 @@ export class Auth {
     return m?.[1]?.trim();
   }
 
-  private async scopesFor(role: string): Promise<string[]> {
+  /**
+   * What a role may do, asked with the caller's own credential.
+   *
+   * `/auth/roles` answers unauthenticated today, and this could rely on that —
+   * but a route that is open is not a promise that it stays open, and the
+   * failure if it closes is silent: an empty scope map, every write refused,
+   * and nothing saying why. The caller has a bearer; using it costs nothing.
+   */
+  private async scopesFor(role: string, token: string): Promise<string[]> {
     if (this.roles === undefined || this.roles.until < Date.now()) {
       const map = new Map<string, string[]>();
       try {
-        const res = await this.doFetch(`${this.base}/api/v1/auth/roles`);
+        const res = await this.doFetch(`${this.base}/api/v1/auth/roles`, {
+          headers: { authorization: `Bearer ${token}` },
+        });
         if (res.ok) {
           const list = (await res.json()) as { role?: string; scopes?: string[] }[];
           for (const r of list) if (r.role !== undefined) map.set(r.role, r.scopes ?? []);
@@ -103,7 +134,7 @@ export class Auth {
             id: me.id ?? '',
             username: me.username ?? '',
             role: me.role,
-            scopes: await this.scopesFor(me.role),
+            scopes: await this.scopesFor(me.role, token),
           };
         }
       }

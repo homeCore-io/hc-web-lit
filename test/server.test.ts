@@ -10,7 +10,7 @@ import { mkdtemp, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { Auth, WRITE_SCOPE } from '../server/auth.ts';
+import { Auth, WRITE_SCOPE, mayRead, mayWrite } from '../server/auth.ts';
 import { Store } from '../server/store.ts';
 import { ServerContent } from '../src/core/content.js';
 
@@ -214,5 +214,25 @@ describe('who may read and write', () => {
     await auth.caller('stale');
     await auth.caller('stale');
     expect(asked).toBe(1);
+  });
+});
+
+describe('which scope decides', () => {
+  it('prefers a content scope where core has one', () => {
+    // So a core that grows them needs no flag day here.
+    expect(mayWrite(['content:write'])).toBe(true);
+    expect(mayRead(['content:read'])).toBe(true);
+  });
+
+  it('accepts the dashboard scopes where core has not', () => {
+    // Not a stopgap: it is the honest existing statement about who may edit
+    // dashboard-shaped things, and templates and icon rules are that.
+    expect(mayWrite(['dashboards:write'])).toBe(true);
+    expect(mayRead(['dashboards:read'])).toBe(true);
+  });
+
+  it('refuses a reader either way', () => {
+    expect(mayWrite(['dashboards:read', 'content:read'])).toBe(false);
+    expect(mayRead([])).toBe(false);
   });
 });

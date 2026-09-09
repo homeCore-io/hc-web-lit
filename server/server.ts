@@ -18,7 +18,7 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve } from 'node:path';
-import { Auth, READ_SCOPE, WRITE_SCOPE } from './auth.ts';
+import { Auth, mayRead, mayWrite } from './auth.ts';
 import { Store } from './store.ts';
 
 const PORT = Number(process.env['HC_PORT'] ?? 8090);
@@ -120,9 +120,11 @@ export const handler = async (req: IncomingMessage, res: ServerResponse): Promis
       // Both directions use core's own scopes rather than a second rule: every
       // role core ships can read dashboards, and three of the seven cannot
       // write them, which is the line this content wants drawn too.
-      const needed = method === 'GET' ? READ_SCOPE : WRITE_SCOPE;
-      if (!caller.scopes.includes(needed)) {
-        return send(res, 403, { error: `${caller.role} lacks ${needed}` });
+      const allowed = method === 'GET' ? mayRead(caller.scopes) : mayWrite(caller.scopes);
+      if (!allowed) {
+        return send(res, 403, {
+          error: `${caller.role} may not ${method === 'GET' ? 'read' : 'write'} here`,
+        });
       }
     }
 
