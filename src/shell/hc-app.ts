@@ -101,6 +101,29 @@ export class HcApp extends LitElement {
     header select {
       max-width: 40vw;
     }
+    /* Fixed rather than in the flow: a panel's layout should not move when the
+       network drops, or every reconnect reflows the page somebody is reading. */
+    .stale {
+      position: fixed;
+      right: 0.75rem;
+      bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.35rem 0.7rem;
+      border-radius: var(--hc-radius-pill, 999px);
+      background: var(--hc-surface-overlay, #1b2230);
+      color: var(--hc-ink-muted, #8b95a4);
+      font-size: var(--hc-text-caption-size, 11px);
+      box-shadow: var(--hc-elevation-overlay, 0 24px 60px rgb(0 0 0 / 0.5));
+      pointer-events: none;
+    }
+    .stale .dot {
+      background: var(--hc-accent-warn, #ffc978);
+    }
+    [hidden] {
+      display: none !important;
+    }
     .brand {
       /* The brand colour, not the on colour. They are the same in four of
          the five skins, which is exactly why this was wrong and invisible
@@ -170,6 +193,23 @@ export class HcApp extends LitElement {
    * and one that was dark at 7am is a picture of the past.
    */
   @state() private lastHeard = 0;
+
+  /**
+   * A wall panel, rather than somebody's browser.
+   *
+   * Entered with `?kiosk` in the url, because that is what a kiosk app is
+   * given: a URL and nothing else. It hides *this* client's chrome — the
+   * brand, the pickers, the device count — none of which a panel on a wall has
+   * any use for, and none of which a kiosk browser can hide for us because
+   * they are ours rather than the browser's.
+   *
+   * **No wake lock.** The Screen Wake Lock API needs a secure context, and a
+   * panel reaches this over plain HTTP on a LAN, where `navigator.wakeLock` is
+   * simply absent — measured, not assumed. Kiosk browsers do screen management
+   * properly anyway, with motion and schedules; a page can only say "never
+   * sleep", which is the wrong answer at 3am.
+   */
+  @state() private kiosk = new URLSearchParams(globalThis.location?.search ?? '').has('kiosk');
 
   /** Re-renders the age while nothing is arriving, so it counts up visibly. */
   private ageTimer: ReturnType<typeof setInterval> | undefined;
@@ -489,7 +529,7 @@ export class HcApp extends LitElement {
 
   override render() {
     return html`
-      <header>
+      <header ?hidden=${this.kiosk}>
         <span class="brand">homeCore</span>
         ${
           this.phase === 'ready'
@@ -546,6 +586,17 @@ export class HcApp extends LitElement {
         }
       </header>
       <main>${this.body()}</main>
+      ${
+        // The one thing a panel must never hide. Chrome goes; "what you are
+        // looking at is four minutes old" stays, because a dashboard that
+        // quietly shows the past is worse than one that shows nothing.
+        this.kiosk && this.phase === 'ready' && !this.live
+          ? html`<div class="stale" part="stale">
+              <span class="dot"></span>
+              last heard ${sinceHeard(this.lastHeard)}
+            </div>`
+          : nothing
+      }
     `;
   }
 
