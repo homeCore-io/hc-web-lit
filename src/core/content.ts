@@ -9,12 +9,13 @@
  * endpoints; building on them would be asking for the removal to break this
  * client too.
  *
- * **Persistence is an adapter, and the choice is not settled.** A browser can
- * keep this per device, which is right for a preference and wrong for content:
- * a wall tablet and a phone would each hold their own idea of what the icon
- * rules are. What is certain is the shape — read, write, remove, list — so
- * that is what is built, with a browser adapter that works today and a memory
- * one for tests and for a device where storage is switched off.
+ * **Two adapters, and the difference between them matters.** hc-web-lit is a
+ * self-contained system with storage of its own, so `ServerContent` is the
+ * real one: content written on a phone is there on the wall tablet, because
+ * there is one copy of it. `BrowserContent` keeps things per device, which is
+ * right for a preference and wrong for content two devices should agree on —
+ * it is the fallback for a deployment serving only static files, and the thing
+ * that keeps the app working before the server is running.
  */
 
 /** Somewhere to keep a small amount of JSON. */
@@ -103,5 +104,73 @@ export class MemoryContent implements ContentStore {
 
   keys(): string[] {
     return [...this.map.keys()];
+  }
+}
+
+/**
+ * hc-web-lit's own storage, over its own HTTP API.
+ *
+ * **Read once, then served from memory.** A `ContentStore` is synchronous
+ * because a widget asking for an icon rule cannot await one mid-render, so
+ * this loads everything at startup and writes through in the background. That
+ * is honest for what this holds — a household's rules and templates, kilobytes
+ * of it, changing when somebody edits them — and would not be for anything
+ * large or shared between writers.
+ */
+export class ServerContent implements ContentStore {
+  private readonly cache = new Map<string, unknown>();
+  private readonly base: string;
+  private readonly doFetch: typeof globalThis.fetch;
+
+  constructor(opts: { base?: string; fetch?: typeof globalThis.fetch } = {}) {
+    this.base = opts.base ?? '/api/content';
+    this.doFetch = opts.fetch ?? globalThis.fetch.bind(globalThis);
+  }
+
+  /**
+   * Load what the server holds.
+   *
+   * Returns whether it answered, so a host can fall back rather than start an
+   * app that silently forgets everything: a deployment of static files has no
+   * server here, and that is a supported way to run this.
+   */
+  async load(): Promise<boolean> {
+    try {
+      const res = await this.doFetch(this.base);
+      if (!res.ok) return false;
+      const { keys } = (await res.json()) as { keys?: string[] };
+      for (const key of keys ?? []) {
+        const one = await this.doFetch(`${this.base}/${key}`);
+        if (one.ok) this.cache.set(key, await one.json());
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  read<T>(key: string): T | undefined {
+    return this.cache.get(key) as T | undefined;
+  }
+
+  write<T>(key: string, value: T): void {
+    // In memory immediately, on disk when the round trip finishes. A person
+    // who edits a rule sees it apply; a failed write costs the next reload,
+    // not the edit.
+    this.cache.set(key, value);
+    void this.doFetch(`${this.base}/${key}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(value),
+    }).catch(() => undefined);
+  }
+
+  remove(key: string): void {
+    this.cache.delete(key);
+    void this.doFetch(`${this.base}/${key}`, { method: 'DELETE' }).catch(() => undefined);
+  }
+
+  keys(): string[] {
+    return [...this.cache.keys()];
   }
 }

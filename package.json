@@ -18,7 +18,9 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "serve": "node server/server.ts",
+    "start": "npm run build && npm run serve"
   },
   "dependencies": {
     "lit": "^3.2.1"

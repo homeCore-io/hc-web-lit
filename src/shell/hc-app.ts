@@ -18,7 +18,7 @@ import { EventStream } from '../core/events.js';
 import { check, checkAction } from '../core/safety.js';
 import { DeviceStore } from '../core/store.js';
 import { Authored } from '../core/authored.js';
-import { BrowserContent } from '../core/content.js';
+import { BrowserContent, ServerContent } from '../core/content.js';
 import type { CommandRequest } from '../core/widget.js';
 import { effectiveName, isOn } from '../core/present.js';
 import type { ActionConfig } from '../core/actions.js';
@@ -161,7 +161,7 @@ export class HcApp extends LitElement {
    * for a preference and an open question for content two devices should
    * agree on.
    */
-  private readonly authored = new Authored(new BrowserContent());
+  private authored = new Authored(new BrowserContent());
 
   /**
    * The one overlay stack (§5.6).
@@ -296,6 +296,13 @@ export class HcApp extends LitElement {
 
       // Schemas inline: one request, and the controls a device offers are known
       // on first paint rather than after N more round trips (§5.11).
+      // hc-web-lit's own storage where it is running, the browser's where it
+      // is not. A static deployment is a supported way to run this, and it
+      // should keep a household's rules on the machine they were typed on
+      // rather than forget them.
+      const shared = new ServerContent();
+      if (await shared.load()) this.authored = new Authored(shared);
+
       // Before the first paint, so a mark drawn from a rule is drawn from it
       // the first time rather than after a flicker.
       this.authored.apply();

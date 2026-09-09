@@ -9,6 +9,10 @@
     // Strict, and then the four `tsc` leaves off even under `strict`. The ABI
     // types are the contract (§13) — a contract with implicit `any` in it is
     // not one.
+    // Node runs the server by stripping types, so its imports name `.ts` —
+    // which is the one place this project sees them, and the config has to
+    // allow it for the test that drives that code.
+    "allowImportingTsExtensions": true,
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
@@ -26,5 +30,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "test", "*.config.ts"]
+  "include": ["src", "test", "server", "*.config.ts"]
 }
