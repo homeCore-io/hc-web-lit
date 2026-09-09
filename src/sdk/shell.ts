@@ -28,12 +28,14 @@
  * ones nobody in this repo wrote — which is the whole reason card-mod does not
  * need to exist here.
  */
-import { LitElement, css, html, nothing, type TemplateResult } from 'lit';
+import { LitElement, css, html, nothing, type CSSResultGroup, type TemplateResult } from 'lit';
 import { property } from 'lit/decorators.js';
 import { wantsChrome } from '../core/compose.js';
 
 export abstract class HcLayoutShell extends LitElement {
-  static override styles = css`
+  // Typed as a group so a specialisation can add its own beside these
+  // rather than replacing them.
+  static override styles: CSSResultGroup = css`
     :host {
       display: block;
       height: 100%;
