@@ -18,8 +18,8 @@ import { EventStream } from '../core/events.js';
 import { check, checkAction } from '../core/safety.js';
 import { DeviceStore } from '../core/store.js';
 import type { CommandRequest } from '../widgets/hc-controls.js';
-import { effectiveName } from '../core/present.js';
-import type { TapAction } from '../core/actions.js';
+import { effectiveName, isOn } from '../core/present.js';
+import type { ActionConfig } from '../core/actions.js';
 import type { MountEnv } from './mount.js';
 import './hc-page.js';
 import './hc-overlay.js';
@@ -329,19 +329,77 @@ export class HcApp extends LitElement {
    * breadcrumb going home — which also means leaving the room, or the house
    * page would draw itself with a room still selected under it.
    */
-  private readonly runAction = (a: TapAction): void => {
-    if (a.do === 'page') {
-      const target = this.docs.find((d) => d.id === a.target);
-      if (target === undefined) {
-        this.overlay?.toast(`No dashboard called ${a.target ?? '(nothing)'}.`, { kind: 'warn' });
+  /**
+   * Every action, dispatched in one place (§5.10).
+   *
+   * The host does this rather than the widget, and that is what makes the
+   * safety policy real: a lock never actuates from a plain tap regardless of
+   * what a placement's config says, and a widget nobody in this repo wrote
+   * cannot opt out by mishandling its own events (§11.3).
+   */
+  private readonly runAction = async (a: ActionConfig): Promise<void> => {
+    switch (a.do) {
+      case 'none':
+        return;
+
+      case 'page': {
+        const target = this.docs.find((d) => d.id === a.target);
+        if (target === undefined) {
+          this.overlay?.toast(`No dashboard called ${a.target ?? '(nothing)'}.`, { kind: 'warn' });
+          return;
+        }
+        // Going home also leaves the room, or the house page would draw itself
+        // with a room still selected under it.
+        this.current = target;
+        this.roomContext = {};
         return;
       }
-      this.current = target;
-      this.roomContext = {};
-      return;
+
+      case 'details': {
+        const id = a.device_id ?? a.target ?? this.roomContext.picked;
+        if (id === undefined) return;
+        this.details(id);
+        return;
+      }
+
+      case 'url': {
+        // A new tab, always. A kiosk that navigated away from the dashboard
+        // would need somebody to walk to it and press back.
+        if (a.target !== undefined) globalThis.open(a.target, '_blank', 'noopener');
+        return;
+      }
+
+      case 'toggle': {
+        const id = a.device_id ?? a.target ?? this.roomContext.picked;
+        const device = id === undefined ? undefined : this.store.get(id);
+        if (device === undefined) {
+          this.overlay?.toast('That device is not in the house.', { kind: 'warn' });
+          return;
+        }
+        // Through the same sink a control uses, so the safety policy and the
+        // confirmation are applied once rather than per caller.
+        await this.command({ deviceId: device.device_id, patch: { on: isOn(device) !== true } });
+        return;
+      }
+
+      case 'service': {
+        const id = a.device_id ?? a.target;
+        if (a.service === undefined || id === undefined) {
+          this.overlay?.toast('That action names no service.', { kind: 'warn' });
+          return;
+        }
+        await this.command({
+          deviceId: id,
+          action: { id: a.service, params: a.payload ?? {} },
+        });
+        return;
+      }
+
+      default:
+        // A verb from a newer client, or a typo. Saying so beats a tap that
+        // silently does nothing (§5.10).
+        this.overlay?.toast(`Nothing here knows how to ${a.do}.`, { kind: 'warn' });
     }
-    // A tap that does nothing is worse than a tap that says why (§5.10).
-    this.overlay?.toast(`Nothing here knows how to ${a.do}.`, { kind: 'warn' });
   };
 
   private openRoom(e: CustomEvent<{ room: string; page?: string }>): void {

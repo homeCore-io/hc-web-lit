@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { tapIn } from '../src/core/actions.js';
+import { actionsIn, actuates, tapIn } from '../src/core/actions.js';
 import { resolveConfig } from '../src/core/bindings.js';
 import type { DashboardDefinition } from '../src/core/dashboard.js';
 import { DeviceStore } from '../src/core/store.js';
@@ -160,6 +160,38 @@ describe('a placement that carries an action', () => {
     expect(tapIn({ on_tap: {} })).toBeUndefined();
     expect(tapIn({ on_tap: 'page' })).toBeUndefined();
     expect(tapIn({ on_tap: { do: '' } })).toBeUndefined();
+  });
+
+  it('always has a hold, because §5.10 says inspecting is always available', () => {
+    // The guarantee lives in the model, not in each widget's good intentions.
+    expect(actionsIn(undefined).hold).toEqual({ do: 'details' });
+    expect(actionsIn({ on_tap: { do: 'page' } }).hold).toEqual({ do: 'details' });
+    expect(actionsIn({ on_hold: { do: 'none' } }).hold).toEqual({ do: 'none' });
+  });
+
+  it('reads all three gestures', () => {
+    const got = actionsIn({
+      on_tap: { do: 'toggle', device_id: 'hue_1' },
+      on_double_tap: { do: 'url', target: 'https://example.test' },
+    });
+    expect(got.tap).toEqual({ do: 'toggle', device_id: 'hue_1' });
+    expect(got.doubleTap).toEqual({ do: 'url', target: 'https://example.test' });
+  });
+
+  it('knows which verbs reach into the house', () => {
+    // The safety policy applies to these and not the rest: navigating cannot
+    // unlock a door, and confirming it would teach somebody to confirm
+    // without reading (§11.3).
+    expect(actuates({ do: 'toggle' })).toBe(true);
+    expect(actuates({ do: 'service', service: 'press_button' })).toBe(true);
+    expect(actuates({ do: 'page' })).toBe(false);
+    expect(actuates({ do: 'details' })).toBe(false);
+  });
+
+  it('carries the fields a service call needs', () => {
+    expect(
+      tapIn({ on_tap: { do: 'service', service: 'press_button', payload: { button: 3 } } }),
+    ).toEqual({ do: 'service', service: 'press_button', payload: { button: 3 } });
   });
 });
 

@@ -14,7 +14,7 @@ import type { EventFetch } from '../widgets/hc-event-feed.js';
 import { resolveConfig } from '../core/bindings.js';
 import type { SelectionContext } from '../core/selection.js';
 import type { DeviceStore } from '../core/store.js';
-import { tapIn, type TapAction } from '../core/actions.js';
+import { actionsIn, type ActionConfig } from '../core/actions.js';
 import { resolveInstance, type TemplateStore } from '../core/templates.js';
 import { tagFor } from '../widgets/registry.js';
 
@@ -37,7 +37,7 @@ export interface MountEnv {
   /** The non-actuating way to inspect a device (§5.10) — hold, everywhere. */
   onDetails?: (deviceId: string) => void;
   /** What a placement's `on_tap` does. The host dispatches it (§5.10). */
-  onAction?: (a: TapAction) => void;
+  onAction?: (a: ActionConfig) => void;
   /** Where widget templates come from (§5.4). Absent means none are defined. */
   templates?: TemplateStore;
 }
@@ -116,7 +116,7 @@ export function mountWidget(el: MountTarget, w: WidgetSpec, env: MountEnv): void
   // A container mounts its own children and needs what the page had.
   el.env = env;
 
-  attachTap(el, w, env);
+  attachActions(el, w, env);
 }
 
 /**
@@ -137,35 +137,82 @@ export function mountChild(spec: WidgetSpec, env: MountEnv): HTMLElement | undef
 }
 
 /**
- * A placement's own tap, dispatched by the host.
+ * A placement's gestures, dispatched by the host.
  *
  * Here rather than in each widget, for the reason §5.10 gives: the widget does
- * not decide what its tap means, so it cannot decline the safety policy, and a
- * decorative text a third party wrote gets `on_tap` without knowing the word.
+ * not decide what its gestures mean, so it cannot decline the safety policy,
+ * and a decorative text somebody else wrote gets them without knowing the
+ * words. `hold` is always wired, because §5.10 makes inspecting a device
+ * always available — a guarantee, not a habit each widget keeps.
  *
- * The listener is attached once. `mountWidget` runs on every render — 184
- * devices on a stream is continuous — and a listener per render is a page that
- * navigates four times for one press.
+ * Attached once. `mountWidget` runs on every render — 184 devices on a stream
+ * is continuous — and a listener per render is a page that navigates four
+ * times for one press.
  */
-function attachTap(el: MountTarget, w: WidgetSpec, env: MountEnv): void {
-  const action = tapIn(w.config);
-  if (action === undefined || env.onAction === undefined) return;
-  // Read at press time, so a re-render with a different target is honoured.
-  const run = (): void => {
-    const current = tapIn(w.config);
-    if (current !== undefined) env.onAction?.(current);
-  };
-  if (tapped.has(el)) return;
+function attachActions(el: MountTarget, w: WidgetSpec, env: MountEnv): void {
+  if (env.onAction === undefined || tapped.has(el)) return;
   tapped.add(el);
 
-  // It behaves like a button, so it says so and answers a keyboard.
-  el.style.cursor = 'pointer';
-  el.setAttribute('role', 'button');
-  el.setAttribute('tabindex', '0');
-  el.addEventListener('click', run);
+  // Read at press time, so a re-render with a different target is honoured.
+  const now = (): ReturnType<typeof actionsIn> => actionsIn(w.config);
+  const run = (a: ActionConfig | undefined): void => {
+    if (a === undefined || a.do === 'none') return;
+    env.onAction?.(a);
+  };
+
+  const declared = now();
+  if (declared.tap !== undefined) {
+    el.style.cursor = 'pointer';
+    el.setAttribute('role', 'button');
+    el.setAttribute('tabindex', '0');
+  }
+
+  let timer: ReturnType<typeof setTimeout> | 0 = 0;
+  let held = false;
+
+  el.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    held = false;
+    timer = globalThis.setTimeout(() => {
+      timer = 0;
+      held = true;
+      run(now().hold);
+    }, HOLD_MS);
+  });
+
+  const cancel = (): void => {
+    if (timer !== 0) globalThis.clearTimeout(timer);
+    timer = 0;
+  };
+  el.addEventListener('pointerup', cancel);
+  el.addEventListener('pointercancel', cancel);
+  el.addEventListener('pointerleave', cancel);
+
+  el.addEventListener('click', (e) => {
+    // A hold that fired has already done the thing; letting the click through
+    // would also toggle the light it was held to inspect, which is the one
+    // outcome a non-actuating gesture must never have.
+    if (held) {
+      held = false;
+      e.stopPropagation();
+      e.preventDefault();
+      return;
+    }
+    run(now().tap);
+  });
+
+  el.addEventListener('dblclick', () => run(now().doubleTap));
+
   el.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' && e.key !== ' ') return;
     e.preventDefault();
-    run();
+    run(now().tap);
   });
+
+  // On touch the platform's own long-press lands here, and the sheet is what
+  // the gesture is for on a wall panel rather than a selection menu.
+  el.addEventListener('contextmenu', (e) => e.preventDefault());
 }
+
+/** How long is a hold — the same 500ms the platform waits before a menu. */
+const HOLD_MS = 500;
