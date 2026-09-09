@@ -236,3 +236,41 @@ describe('which scope decides', () => {
     expect(mayRead([])).toBe(false);
   });
 });
+
+describe('an API key is not its owner', () => {
+  const coreWith = (me: Record<string, unknown>) =>
+    ((url: string) => {
+      const s = String(url);
+      if (s.endsWith('/auth/me')) {
+        return Promise.resolve(new Response(JSON.stringify(me), { status: 200 }));
+      }
+      if (s.endsWith('/auth/roles')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([{ role: 'admin', scopes: ['dashboards:read', 'dashboards:write'] }]),
+            { status: 200 },
+          ),
+        );
+      }
+      return Promise.resolve(new Response(null, { status: 404 }));
+    }) as unknown as typeof globalThis.fetch;
+
+  it('takes the scopes the credential carries', async () => {
+    // A key names its owner, so `role` is the owner's. A panel's read-only key
+    // belonging to an admin must not inherit the admin's write access.
+    const auth = new Auth({
+      fetch: coreWith({ id: 'u', username: 'admin', role: 'admin', scopes: ['content:read'] }),
+    });
+    const caller = await auth.caller('hc_sk_panel');
+    expect(caller?.role).toBe('admin');
+    expect(mayRead(caller?.scopes ?? [])).toBe(true);
+    expect(mayWrite(caller?.scopes ?? [])).toBe(false);
+  });
+
+  it('falls back to the role against a core that does not report scopes', async () => {
+    // Older cores answer `/auth/me` without them, and refusing every caller
+    // would be a worse failure than the one this guards against.
+    const auth = new Auth({ fetch: coreWith({ id: 'u', username: 'admin', role: 'admin' }) });
+    expect(mayWrite((await auth.caller('t'))?.scopes ?? [])).toBe(true);
+  });
+});

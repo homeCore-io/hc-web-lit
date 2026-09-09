@@ -128,13 +128,24 @@ export class Auth {
         headers: { authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        const me = (await res.json()) as { id?: string; username?: string; role?: string };
+        const me = (await res.json()) as {
+          id?: string;
+          username?: string;
+          role?: string;
+          scopes?: string[];
+        };
         if (me.role !== undefined) {
           caller = {
             id: me.id ?? '',
             username: me.username ?? '',
             role: me.role,
-            scopes: await this.scopesFor(me.role, token),
+            // **The credential's scopes, not the role's.** An API key names
+            // its owner, so `role` here is the owner's — and a panel's
+            // read-only key belonging to an admin would otherwise be handed
+            // write access to everything a household authored. Core reports
+            // the effective scopes; the role lookup is the fallback for a core
+            // that does not yet.
+            scopes: Array.isArray(me.scopes) ? me.scopes : await this.scopesFor(me.role, token),
           };
         }
       }
