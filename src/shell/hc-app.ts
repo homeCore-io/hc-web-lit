@@ -17,6 +17,8 @@ import type { DashboardBreakpoint, DashboardDefinition } from '../core/dashboard
 import { EventStream } from '../core/events.js';
 import { check, checkAction } from '../core/safety.js';
 import { DeviceStore } from '../core/store.js';
+import { Authored } from '../core/authored.js';
+import { BrowserContent } from '../core/content.js';
 import type { CommandRequest } from '../core/widget.js';
 import { effectiveName, isOn } from '../core/present.js';
 import type { ActionConfig } from '../core/actions.js';
@@ -150,6 +152,18 @@ export class HcApp extends LitElement {
   private readonly store = new DeviceStore();
 
   /**
+   * What this household authored — templates, icon rules — and where it is
+   * kept.
+   *
+   * Built here rather than fetched: none of it is a fact about the house, so
+   * none of it belongs to core (and the endpoints that hold it there today are
+   * on their way out). The browser adapter keeps it per device, which is right
+   * for a preference and an open question for content two devices should
+   * agree on.
+   */
+  private readonly authored = new Authored(new BrowserContent());
+
+  /**
    * The one overlay stack (§5.6).
    *
    * A query rather than a stored reference: it is in this element's own shadow
@@ -199,6 +213,7 @@ export class HcApp extends LitElement {
       onDetails: this.details,
       onAction: this.runAction,
       onArt: this.art,
+      templates: this.authored.templates(),
     };
   }
 
@@ -281,6 +296,9 @@ export class HcApp extends LitElement {
 
       // Schemas inline: one request, and the controls a device offers are known
       // on first paint rather than after N more round trips (§5.11).
+      // Before the first paint, so a mark drawn from a rule is drawn from it
+      // the first time rather than after a flicker.
+      this.authored.apply();
       this.store.reset(await api.listDevices({ includeSchema: true }));
       this.docs = (await api.listDashboards()) as DashboardDefinition[];
       this.current = this.docs[0];
@@ -504,6 +522,7 @@ export class HcApp extends LitElement {
         .onEvents=${this.events}
         .onDetails=${this.details}
         .onArt=${this.art}
+        .templates=${this.authored.templates()}
         .onAction=${this.runAction}
         .context=${this.roomContext}
         breakpoint=${this.breakpoint}
