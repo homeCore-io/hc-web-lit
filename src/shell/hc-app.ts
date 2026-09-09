@@ -59,6 +59,23 @@ import '../widgets/hc-stack.js';
 
 type Phase = 'idle' | 'connecting' | 'ready' | 'failed';
 
+/**
+ * How long since the house said anything, in words rather than a timestamp.
+ *
+ * Rounded coarsely on purpose: nobody standing in front of a panel needs
+ * seconds, and a number that ticks draws the eye to itself rather than to what
+ * it is about.
+ */
+export function sinceHeard(at: number): string {
+  if (at === 0) return 'not yet';
+  const secs = Math.max(0, Math.round((Date.now() - at) / 1000));
+  if (secs < 45) return 'just now';
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  return hours < 24 ? `${hours}h ago` : `${Math.round(hours / 24)}d ago`;
+}
+
 @customElement('hc-app')
 export class HcApp extends LitElement {
   static override styles = css`
@@ -142,6 +159,20 @@ export class HcApp extends LitElement {
   @state() private phase: Phase = 'idle';
   @state() private message = '';
   @state() private live = false;
+
+  /**
+   * When the house last said anything.
+   *
+   * §16 asks for a *clear* stale indicator, and "reconnecting" is not one: it
+   * says the socket is down and nothing about whether what is on the screen is
+   * a minute old or since breakfast. On a wall panel that difference is the
+   * whole question — a dark lamp that was dark a minute ago is information,
+   * and one that was dark at 7am is a picture of the past.
+   */
+  @state() private lastHeard = 0;
+
+  /** Re-renders the age while nothing is arriving, so it counts up visibly. */
+  private ageTimer: ReturnType<typeof setInterval> | undefined;
   @state() private docs: DashboardDefinition[] = [];
   @state() private current: DashboardDefinition | undefined;
   @state() private breakpoint: DashboardBreakpoint = 'desktop';
@@ -266,6 +297,7 @@ export class HcApp extends LitElement {
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.stream?.stop();
+    if (this.ageTimer !== undefined) clearInterval(this.ageTimer);
   }
 
   /**
@@ -312,12 +344,23 @@ export class HcApp extends LitElement {
 
       this.stream = new EventStream({
         url: api.streamUrl({ type: ['device_state_changed', 'device_availability_changed'] }),
-        onEvent: (e) => this.store.apply(e),
+        onEvent: (e) => {
+          this.store.apply(e);
+          this.lastHeard = Date.now();
+        },
         onStatus: (connected) => {
           this.live = connected;
+          if (connected) this.lastHeard = Date.now();
         },
       });
       this.stream.start();
+      this.lastHeard = Date.now();
+      // Only while disconnected: a page that re-rendered every ten seconds
+      // while everything was fine would be a wall panel burning battery to
+      // tell somebody nothing changed.
+      this.ageTimer = setInterval(() => {
+        if (!this.live) this.requestUpdate();
+      }, 10_000);
 
       this.phase = 'ready';
     } catch (e) {
@@ -494,7 +537,8 @@ export class HcApp extends LitElement {
           this.phase === 'ready'
             ? html`<span class="status">
                 <span class="dot" ?data-live=${this.live}></span>
-                ${this.live ? 'live' : 'reconnecting'} · ${this.store.size} devices
+                ${this.live ? 'live' : `last heard ${sinceHeard(this.lastHeard)}`} ·
+                ${this.store.size} devices
               </span>`
             : nothing
         }

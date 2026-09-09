@@ -20,4 +20,19 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // The service worker runs in a worker, not a page: `self` and `caches` are
+    // its globals and `window` is not one of them. Linted rather than ignored
+    // — it is the only code that decides what a disconnected tablet sees, so
+    // it is the last file that should go unchecked.
+    files: ['public/sw.js'],
+    languageOptions: {
+      globals: { self: 'readonly', caches: 'readonly', fetch: 'readonly', URL: 'readonly' },
+    },
+    rules: {
+      // A service worker's whole job is intercepting fetches; the rule above
+      // is about widgets reaching past the host, which this is not.
+      'no-restricted-globals': 'off',
+    },
+  },
 );
