@@ -30,7 +30,17 @@ export type HcEvent =
   DeviceStateChanged | DeviceAvailabilityChanged | { type: string; [k: string]: unknown };
 
 export interface EventStreamOptions {
-  url: string;
+  /**
+   * Where to connect, resolved at each attempt rather than once.
+   *
+   * The url carries the session in a query parameter, because a browser cannot
+   * set a header on a WebSocket upgrade. A fixed string therefore pins a
+   * credential for the life of the stream — and this stream is meant to
+   * outlive it: a panel reconnecting for a month with the token it was born
+   * with reconnects forever and is never again authorised. A function is asked
+   * again every time, so a refreshed session is picked up by the next attempt.
+   */
+  url: string | (() => string);
   onEvent: (e: HcEvent) => void;
   onStatus?: (connected: boolean) => void;
   /** Injectable for tests. */
@@ -72,7 +82,19 @@ export class EventStream {
 
   private open(): void {
     const make = this.opts.socketFactory ?? ((u: string) => new WebSocket(u));
-    const socket = make(this.opts.url);
+
+    let url: string;
+    try {
+      url = typeof this.opts.url === 'function' ? this.opts.url() : this.opts.url;
+    } catch {
+      // No session to connect with yet — mid-refresh, or logged out. Try again
+      // on the backoff rather than giving up: this is a state that resolves.
+      this.opts.onStatus?.(false);
+      this.scheduleReopen();
+      return;
+    }
+
+    const socket = make(url);
     this.socket = socket;
 
     socket.onopen = () => {

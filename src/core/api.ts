@@ -199,6 +199,18 @@ export class HcApi {
   private readonly doFetch: typeof globalThis.fetch;
   private token: string | undefined;
 
+  /**
+   * The refresh token, and the one in-flight attempt to use it.
+   *
+   * **Refresh tokens are single-use and rotating**, and core is explicit about
+   * what a replay means: "presenting an already-used token is treated as theft
+   * and revokes the entire token chain." So two requests that expire together
+   * must not each refresh — that is not a race that loses a request, it is a
+   * race that logs the house out. Everyone waits on the same promise.
+   */
+  private refreshToken: string | undefined;
+  private refreshing: Promise<boolean> | undefined;
+
   constructor(opts: ApiOptions) {
     this.baseUrl = opts.baseUrl.replace(/\/+$/, '');
     this.token = opts.token;
@@ -237,6 +249,7 @@ export class HcApi {
       password,
     });
     this.token = result.token;
+    this.refreshToken = result.refresh_token;
     return result;
   }
 
@@ -399,6 +412,46 @@ export class HcApi {
     }
   }
 
+  /**
+   * Trade the refresh token for a new session, once at a time.
+   *
+   * Returns whether there is a usable session afterwards. A failure clears
+   * both tokens rather than leaving a dead one in place: a client that keeps
+   * presenting a revoked credential looks to core exactly like the theft it
+   * was designed to detect.
+   */
+  private async refresh(): Promise<boolean> {
+    if (this.refreshing !== undefined) return this.refreshing;
+    if (this.refreshToken === undefined) return false;
+
+    this.refreshing = (async () => {
+      try {
+        const res = await this.doFetch(`${this.baseUrl}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: this.refreshToken }),
+        });
+        if (!res.ok) {
+          this.token = undefined;
+          this.refreshToken = undefined;
+          return false;
+        }
+        const result = (await res.json()) as LoginResult;
+        this.token = result.token;
+        // Rotated: the one just used is spent, and keeping it would arm the
+        // replay detection with our own credential.
+        this.refreshToken = result.refresh_token;
+        return true;
+      } catch {
+        return false;
+      } finally {
+        this.refreshing = undefined;
+      }
+    })();
+
+    return this.refreshing;
+  }
+
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const headers: Record<string, string> = {};
     if (this.token !== undefined) headers['Authorization'] = `Bearer ${this.token}`;
@@ -409,6 +462,13 @@ export class HcApi {
       headers,
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
+
+    // An expired session is the ordinary state of a panel that has been up for
+    // a month, not an error to show somebody. Renew and try once more; a
+    // second 401 is a real refusal and falls through.
+    if (res.status === 401 && !path.startsWith('/auth/') && (await this.refresh())) {
+      return this.request<T>(method, path, body);
+    }
 
     if (!res.ok) {
       // Core answers `{"error": "..."}`; anything else is a proxy in the way,

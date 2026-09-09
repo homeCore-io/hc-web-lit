@@ -127,3 +127,107 @@ describe('relative base urls', () => {
     expect(client.streamUrl()).toBe('wss://house.example/api/v1/events/stream?token=t');
   });
 });
+
+describe('a session that outlives its token', () => {
+  const session = (over: Record<string, unknown> = {}) => ({
+    token: 'first',
+    token_type: 'Bearer',
+    expires_in: 3600,
+    refresh_token: 'r1',
+    refresh_expires_in: 86400,
+    user: { id: 'u', username: 'admin', role: 'admin', created_at: '' },
+    ...over,
+  });
+
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+
+  it('renews once and retries, so an expired panel keeps working', async () => {
+    // The ordinary state of a wall panel that has been up for a month, not an
+    // error to show somebody.
+    const calls: string[] = [];
+    let expired = true;
+    const api = new HcApi({
+      baseUrl: '/api/v1',
+      fetch: ((url: string, init?: RequestInit) => {
+        const path = String(url);
+        calls.push(`${init?.method ?? 'GET'} ${path}`);
+        if (path.endsWith('/auth/login')) return Promise.resolve(json(session()));
+        if (path.endsWith('/auth/refresh')) {
+          expired = false;
+          return Promise.resolve(json(session({ token: 'second', refresh_token: 'r2' })));
+        }
+        return Promise.resolve(expired ? json({ error: 'expired' }, 401) : json([]));
+      }) as unknown as typeof globalThis.fetch,
+    });
+
+    await api.login('admin', 'password');
+    await api.listDevices();
+
+    expect(calls).toEqual([
+      'POST /api/v1/auth/login',
+      'GET /api/v1/devices',
+      'POST /api/v1/auth/refresh',
+      'GET /api/v1/devices',
+    ]);
+    expect(api.bearer()).toBe('second');
+  });
+
+  it('refreshes once for many requests that expire together', async () => {
+    // Core: "presenting an already-used token is treated as theft and revokes
+    // the entire token chain." Two concurrent refreshes would not lose a
+    // request — they would log the house out.
+    let refreshes = 0;
+    let expired = true;
+    const api = new HcApi({
+      baseUrl: '/api/v1',
+      fetch: ((url: string) => {
+        const path = String(url);
+        if (path.endsWith('/auth/login')) return Promise.resolve(json(session()));
+        if (path.endsWith('/auth/refresh')) {
+          refreshes += 1;
+          expired = false;
+          return Promise.resolve(json(session({ token: 'second', refresh_token: 'r2' })));
+        }
+        return Promise.resolve(expired ? json({ error: 'expired' }, 401) : json([]));
+      }) as unknown as typeof globalThis.fetch,
+    });
+
+    await api.login('admin', 'password');
+    await Promise.all([api.listDevices(), api.listDashboards(), api.listEvents({ limit: 1 })]);
+    expect(refreshes).toBe(1);
+  });
+
+  it('gives up rather than presenting a credential core has revoked', async () => {
+    // A client that keeps offering a dead refresh token looks to core exactly
+    // like the theft the rotation exists to detect.
+    const api = new HcApi({
+      baseUrl: '/api/v1',
+      fetch: ((url: string) => {
+        const path = String(url);
+        if (path.endsWith('/auth/login')) return Promise.resolve(json(session()));
+        if (path.endsWith('/auth/refresh')) return Promise.resolve(json({ error: 'no' }, 401));
+        return Promise.resolve(json({ error: 'expired' }, 401));
+      }) as unknown as typeof globalThis.fetch,
+    });
+
+    await api.login('admin', 'password');
+    await expect(api.listDevices()).rejects.toThrow();
+    expect(api.bearer()).toBeUndefined();
+  });
+
+  it('does not try to renew the login itself', async () => {
+    // A bad password is a refusal, not an expiry, and retrying it with a
+    // refresh token would be answering a question nobody asked.
+    const seen: string[] = [];
+    const api = new HcApi({
+      baseUrl: '/api/v1',
+      fetch: ((url: string) => {
+        seen.push(String(url));
+        return Promise.resolve(json({ error: 'bad credentials' }, 401));
+      }) as unknown as typeof globalThis.fetch,
+    });
+    await expect(api.login('admin', 'wrong')).rejects.toThrow();
+    expect(seen).toEqual(['/api/v1/auth/login']);
+  });
+});

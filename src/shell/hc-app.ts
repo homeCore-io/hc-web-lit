@@ -343,7 +343,9 @@ export class HcApp extends LitElement {
       this.current = this.docs[0];
 
       this.stream = new EventStream({
-        url: api.streamUrl({ type: ['device_state_changed', 'device_availability_changed'] }),
+        // Asked again on every reconnect, so a session renewed while the
+        // panel was offline is the one the next attempt uses.
+        url: () => api.streamUrl({ type: ['device_state_changed', 'device_availability_changed'] }),
         onEvent: (e) => {
           this.store.apply(e);
           this.lastHeard = Date.now();

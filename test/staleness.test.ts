@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { EventStream } from '../src/core/events.js';
 import { sinceHeard } from '../src/shell/hc-app.js';
 
 // Read from a path, not an `import.meta.url` URL: under jsdom the document's
@@ -60,5 +61,59 @@ describe('the shell caches itself but never the house', () => {
     // the symptom is an edit that appears to do nothing.
     const main = read('src', 'main.ts');
     expect(main).toMatch(/import\.meta\.env\.PROD/);
+  });
+});
+
+describe('a stream that outlives its token', () => {
+  it('asks for the url again on every attempt', async () => {
+    // The url carries the session in a query parameter, because a browser
+    // cannot set a header on a WebSocket upgrade. Capturing it once pins a
+    // credential for the life of a stream meant to outlive it — a panel
+    // reconnecting for a month with the token it was born with reconnects
+    // forever and is never again authorised.
+    const urls: string[] = [];
+    let n = 0;
+    const sockets: { onclose?: () => void; onopen?: () => void; close: () => void }[] = [];
+
+    const stream = new EventStream({
+      url: () => `ws://x/events?token=t${(n += 1)}`,
+      onEvent: () => undefined,
+      backoff: [1],
+      socketFactory: ((u: string) => {
+        urls.push(u);
+        const socket = { close: () => undefined } as unknown as WebSocket;
+        sockets.push(socket as never);
+        return socket;
+      }) as unknown as (u: string) => WebSocket,
+    });
+
+    stream.start();
+    // The socket drops, as a LAN blip does.
+    (sockets[0] as unknown as { onclose: () => void }).onclose();
+    await new Promise((r) => setTimeout(r, 20));
+    stream.stop();
+
+    expect(urls[0]).toContain('token=t1');
+    expect(urls[1]).toContain('token=t2');
+  });
+
+  it('keeps trying when there is no session to connect with yet', async () => {
+    // Mid-refresh, or logged out. This is a state that resolves, so it belongs
+    // on the backoff rather than ending the stream.
+    let asked = 0;
+    const stream = new EventStream({
+      url: () => {
+        asked += 1;
+        throw new Error('not authenticated');
+      },
+      onEvent: () => undefined,
+      backoff: [1],
+      socketFactory: (() => ({ close: () => undefined }) as unknown as WebSocket) as never,
+    });
+
+    stream.start();
+    await new Promise((r) => setTimeout(r, 30));
+    stream.stop();
+    expect(asked).toBeGreaterThan(1);
   });
 });
