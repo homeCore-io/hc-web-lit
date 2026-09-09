@@ -14,6 +14,17 @@ import { defineConfig } from 'vite';
  */
 const CORE = process.env['HC_CORE_URL'] ?? 'http://10.0.10.150:8080';
 
+/**
+ * Where this client's own storage is, in development.
+ *
+ * hc-web-lit serves itself in production — the same origin holds the app, the
+ * content API and the proxy to core — so in development the dev server plays
+ * that part. Run `npm run serve` alongside `npm run dev` and the app uses the
+ * real store; leave it off and the app falls back to the browser's, which is a
+ * supported way to run it and so worth exercising too.
+ */
+const CONTENT = process.env['HC_CONTENT_URL'] ?? 'http://127.0.0.1:8090';
+
 export default defineConfig({
   build: {
     // Chrome runs on the wall tablet, so this is not a compatibility floor —
@@ -30,6 +41,8 @@ export default defineConfig({
         // The event stream is a WebSocket upgrade on the same prefix.
         ws: true,
       },
+      '/api/content': { target: CONTENT, changeOrigin: true },
+      '/api/assets': { target: CONTENT, changeOrigin: true },
     },
   },
   test: {

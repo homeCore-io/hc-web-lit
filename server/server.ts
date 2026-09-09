@@ -18,12 +18,17 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve } from 'node:path';
-import { Auth, WRITE_SCOPE } from './auth.ts';
+import { Auth, READ_SCOPE, WRITE_SCOPE } from './auth.ts';
 import { Store } from './store.ts';
 
 const PORT = Number(process.env['HC_PORT'] ?? 8090);
 const HOST = process.env['HC_HOST'] ?? '0.0.0.0';
 const CONTENT_DIR = resolve(process.env['HC_CONTENT_DIR'] ?? './var');
+/**
+ * Where core is — the same variable the dev server proxies with, so one
+ * setting points both halves of a development machine at the same house.
+ */
+const CORE_URL = process.env['HC_CORE_URL'] ?? 'http://10.0.10.150:8080';
 const WEB_DIR = resolve(process.env['HC_WEB_DIR'] ?? './dist');
 
 /**
@@ -33,7 +38,7 @@ const WEB_DIR = resolve(process.env['HC_WEB_DIR'] ?? './dist');
  * second one here would be a second place to disagree about who somebody is.
  * The browser holds a bearer from core; this asks core what it is worth.
  */
-const auth = new Auth();
+const auth = new Auth({ base: CORE_URL });
 
 const store = new Store(CONTENT_DIR, {
   maxBytes: Number(process.env['HC_MAX_BYTES'] ?? 16 * 1024 * 1024),
@@ -112,10 +117,12 @@ export const handler = async (req: IncomingMessage, res: ServerResponse): Promis
         res.writeHead(401, { 'www-authenticate': 'Bearer' });
         return void res.end(JSON.stringify({ error: 'no valid bearer' }));
       }
-      // Reading is any role core recognises; writing is the scope core says
-      // dashboard-shaped work needs. The roles are core's, not a second set.
-      if (method !== 'GET' && !caller.scopes.includes(WRITE_SCOPE)) {
-        return send(res, 403, { error: `${caller.role} may not write here` });
+      // Both directions use core's own scopes rather than a second rule: every
+      // role core ships can read dashboards, and three of the seven cannot
+      // write them, which is the line this content wants drawn too.
+      const needed = method === 'GET' ? READ_SCOPE : WRITE_SCOPE;
+      if (!caller.scopes.includes(needed)) {
+        return send(res, 403, { error: `${caller.role} lacks ${needed}` });
       }
     }
 
@@ -171,6 +178,8 @@ export const handler = async (req: IncomingMessage, res: ServerResponse): Promis
 // Started only when run directly, so a test can drive the handler.
 if (process.argv[1]?.endsWith('server.ts') === true) {
   createServer((req, res) => void handler(req, res)).listen(PORT, HOST, () => {
-    process.stdout.write(`hc-web-lit on ${HOST}:${PORT}, content in ${CONTENT_DIR}\n`);
+    process.stdout.write(
+      `hc-web-lit on ${HOST}:${PORT}, content in ${CONTENT_DIR}, asking ${CORE_URL} who is calling\n`,
+    );
   });
 }

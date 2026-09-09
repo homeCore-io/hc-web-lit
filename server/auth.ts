@@ -20,7 +20,19 @@ export interface Caller {
   scopes: string[];
 }
 
-/** What a write to authored content needs. It is dashboard-shaped work. */
+/**
+ * The scopes authored content sits under.
+ *
+ * Core defines eighteen, and none of them is about a client: the closest true
+ * statement is that templates and icon rules are dashboard-shaped work, so
+ * they take the dashboard scopes. Every role core ships can read dashboards;
+ * `read_only`, `observer` and `device_operator` cannot write them, which is
+ * exactly the line this content wants drawn.
+ *
+ * If core ever grows a scope for a client's own content, these two constants
+ * are the whole change here.
+ */
+export const READ_SCOPE = 'dashboards:read';
 export const WRITE_SCOPE = 'dashboards:write';
 
 interface Cached<T> {
@@ -36,7 +48,7 @@ export class Auth {
   private roles: Cached<Map<string, string[]>> | undefined;
 
   constructor(opts: { base?: string; fetch?: typeof globalThis.fetch; ttlMs?: number } = {}) {
-    this.base = opts.base ?? process.env['HC_CORE_URL'] ?? 'http://127.0.0.1:8080';
+    this.base = opts.base ?? process.env['HC_CORE_URL'] ?? 'http://10.0.10.150:8080';
     this.doFetch = opts.fetch ?? globalThis.fetch.bind(globalThis);
     // Short: long enough that a page load is one round trip, short enough that
     // revoking somebody takes effect while they are still looking at it.
