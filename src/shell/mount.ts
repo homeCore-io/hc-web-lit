@@ -80,34 +80,66 @@ export function specFor(w: WidgetSpec, env: MountEnv): WidgetSpec {
   return got.spec;
 }
 
+/**
+ * Set a property, unless the widget computes it.
+ *
+ * The host hands a widget its capabilities by assignment, which is fine for a
+ * widget that declares them as reactive properties and wrong as an assumption
+ * about every widget that will ever exist. An SDK widget takes `config` and
+ * `ctx` and quite reasonably *derives* the rest — `hc-button` has
+ * `get device() { … }` reading `config.device_id`, which is exactly what §4.2
+ * intends — and assigning over a getter throws `TypeError` in a module.
+ *
+ * That throw happened inside `hc-page`'s render, so it did not break one
+ * widget: it aborted the whole page and left the previous frame's DOM on
+ * screen, with the new document already installed. The symptom was a page
+ * that had silently stopped updating. Found by loading the acceptance-gate
+ * extension for real (§7.4), which is what that gate is for.
+ *
+ * So: a widget that computes a value keeps its own, and is not overwritten by
+ * a host that assumed it would not.
+ */
+function give<K extends keyof MountTarget>(el: MountTarget, key: K, value: MountTarget[K]): void {
+  for (let o: object | null = el; o !== null; o = Object.getPrototypeOf(o) as object | null) {
+    const d = Object.getOwnPropertyDescriptor(o, key);
+    if (d === undefined) continue;
+    // An accessor with no setter is a deliberate computation, not a slot.
+    if (d.get !== undefined && d.set === undefined) return;
+    break;
+  }
+  el[key] = value;
+}
+
 export function mountWidget(el: MountTarget, w: WidgetSpec, env: MountEnv): void {
   // Live values in, at the seam — `bindings` and `count` (§14.1). A widget gets
   // a config with the house already in it and never learns the mechanism,
   // exactly as it never learns what `@room` means.
-  el.config = resolveConfig(w.config ?? {}, env.store?.list() ?? [], env.context);
+  give(el, 'config', resolveConfig(w.config ?? {}, env.store?.list() ?? [], env.context));
 
   // A widget that names one device gets it resolved; one that selects a set
   // gets the whole store and does its own selecting, because the selection is
   // live — a device appearing in a room has to appear in the list.
   const deviceId = w.config?.['device_id'];
   if (typeof deviceId === 'string') {
-    el.device = env.store?.get(
-      deviceId === '@picked' ? (env.context.picked ?? deviceId) : deviceId,
+    give(
+      el,
+      'device',
+      env.store?.get(deviceId === '@picked' ? (env.context.picked ?? deviceId) : deviceId),
     );
   }
-  if (env.store !== undefined) el.devices = env.store.list();
+  if (env.store !== undefined) give(el, 'devices', env.store.list());
 
-  el.context = env.context;
-  if (env.onPick !== undefined) el.onPick = env.onPick;
-  if (env.onOpenRoom !== undefined) el.onOpenRoom = env.onOpenRoom;
-  if (env.onDetails !== undefined) el.onDetails = env.onDetails;
-  if (env.onCommand !== undefined) el.onCommand = env.onCommand;
-  if (env.onFetch !== undefined) el.onFetch = env.onFetch;
-  if (env.onEvents !== undefined) el.onEvents = env.onEvents;
-  if (env.onArt !== undefined) el.onArt = env.onArt;
+  give(el, 'context', env.context);
+  if (env.onPick !== undefined) give(el, 'onPick', env.onPick);
+  if (env.onOpenRoom !== undefined) give(el, 'onOpenRoom', env.onOpenRoom);
+  if (env.onDetails !== undefined) give(el, 'onDetails', env.onDetails);
+  if (env.onCommand !== undefined) give(el, 'onCommand', env.onCommand);
+  if (env.onFetch !== undefined) give(el, 'onFetch', env.onFetch);
+  if (env.onEvents !== undefined) give(el, 'onEvents', env.onEvents);
+  if (env.onArt !== undefined) give(el, 'onArt', env.onArt);
 
   // A container mounts its own children and needs what the page had.
-  el.env = env;
+  give(el, 'env', env);
   el.ctx = contextFor(env, w);
 
   attachActions(el, w, env);

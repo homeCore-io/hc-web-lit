@@ -327,7 +327,23 @@ export class HcPage extends LitElement {
 
     // One wiring, shared with the overlay (§5.6): a widget that works on a
     // page works in a sheet, because it is given the same things in both.
-    mountWidget(el, spec, this.env());
+    //
+    // **Caught, because a widget is somebody else's code** (§8.1). A throw
+    // here used to propagate out of `render`, which aborts the *page* — Lit
+    // leaves the previous frame's DOM in place, so the symptom is a dashboard
+    // that has quietly stopped updating while the new document is already
+    // installed. One extension with a bad config is not allowed to do that;
+    // the widget that failed says so where it sits and the rest draw.
+    try {
+      mountWidget(el, spec, this.env());
+    } catch (e) {
+      // Dropped from the cache: a half-mounted element would be reused on the
+      // next render and fail the same way with its state already wrong.
+      this.elements.delete(key);
+      return html`<div class="unknown" part="unknown">
+        ${spec.type}: ${e instanceof Error ? e.message : String(e)}
+      </div>`;
+    }
     el.style.height = '100%';
     return el;
   }

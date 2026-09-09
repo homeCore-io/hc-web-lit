@@ -2,7 +2,10 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist', 'coverage'] },
+  // Build output, all three kinds: the app's, an extension's, and an
+  // extension's again after it has been installed into the store. Linting
+  // generated JS reports the minifier's choices as the author's mistakes.
+  { ignores: ['dist', 'coverage', 'extensions/*/*.js', 'var'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

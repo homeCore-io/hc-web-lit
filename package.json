@@ -12,15 +12,17 @@
     "build": "vite build",
     "check": "./tool/check.sh",
     "dev": "vite",
+    "ext:build": "vite build --config extensions/vite.config.ts",
+    "ext:install": "npm run ext:build && tool/install-extension.sh extensions/hc-button",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "preview": "vite preview",
+    "serve": "node server/server.ts",
+    "start": "npm run build && npm run serve",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit",
-    "serve": "node server/server.ts",
-    "start": "npm run build && npm run serve"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "lit": "^3.2.1"

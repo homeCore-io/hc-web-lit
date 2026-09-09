@@ -20,6 +20,7 @@ import { DeviceStore } from '../core/store.js';
 import { Authored } from '../core/authored.js';
 import { BrowserContent, ServerContent } from '../core/content.js';
 import { PanelCredential } from '../core/panel.js';
+import { ExtensionSource, type InstalledExtensions } from '../ext/install.js';
 import type { CommandRequest } from '../core/widget.js';
 import { effectiveName, isOn } from '../core/present.js';
 import type { ActionConfig } from '../core/actions.js';
@@ -232,6 +233,17 @@ export class HcApp extends LitElement {
    * Undefined against a core older than v0.1.68, which did not report it.
    */
   @state() private panelScopes: string[] | undefined;
+
+  /**
+   * What a third party shipped, and what would not load.
+   *
+   * The failures are held rather than logged. An extension that does not
+   * appear is the hardest thing in this design to diagnose from the outside —
+   * the symptom is a placement that draws as unknown, which looks exactly like
+   * a typo in the dashboard — so the reason belongs on screen, next to the
+   * person who can act on it.
+   */
+  @state() private extensions: InstalledExtensions = { loaded: [], failed: [] };
 
   /** Re-renders the age while nothing is arriving, so it counts up visibly. */
   private ageTimer: ReturnType<typeof setInterval> | undefined;
@@ -455,6 +467,14 @@ export class HcApp extends LitElement {
       // Before the first paint, so a mark drawn from a rule is drawn from it
       // the first time rather than after a flicker.
       this.authored.apply();
+      // Before the dashboard, and the page waits for it. A widget type that
+      // resolved a moment *after* the first paint would draw as unknown and
+      // then quietly become something else, which is worse than never
+      // resolving: an author cannot tell that from a config mistake (§8.1).
+      this.extensions = await new ExtensionSource({
+        token: () => this.api?.bearer(),
+      }).installAll();
+
       this.store.reset(await api.listDevices({ includeSchema: true }));
       this.docs = (await api.listDashboards()) as DashboardDefinition[];
       this.current = this.docs[0];
@@ -734,6 +754,17 @@ export class HcApp extends LitElement {
 
     return html`
       ${this.message !== '' ? html`<div class="note error">${this.message}</div>` : nothing}
+      ${
+        // Not a toast: this is a standing condition, not an event, and it is
+        // still true tomorrow. An admin who installed something and cannot see
+        // it needs the reason to still be there when they go looking (§4.3 —
+        // the host "says so in the UI rather than failing silently").
+        this.extensions.failed.length > 0 && !this.kiosk
+          ? html`<div class="note error" part="extension-errors">
+              ${this.extensions.failed.map((f) => html`<div>${f.id}: ${f.error}</div>`)}
+            </div>`
+          : nothing
+      }
       <hc-page
         @hc-open-room=${(e: CustomEvent<{ room: string; page?: string }>) => this.openRoom(e)}
         .doc=${this.current}

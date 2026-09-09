@@ -25,13 +25,63 @@ const CORE = process.env['HC_CORE_URL'] ?? 'http://10.0.10.150:8080';
  */
 const CONTENT = process.env['HC_CONTENT_URL'] ?? 'http://127.0.0.1:8090';
 
-export default defineConfig({
+/**
+ * The bare specifier an extension imports, and where it resolves to.
+ *
+ * §4.5 has an extension author writing
+ * `import { HcWidgetBase, registerWidget } from "@homecore/widget-sdk"`, and a
+ * browser cannot resolve that on its own — so the host declares an import map
+ * and serves the module. This is what lets an extension be built once by its
+ * author and loaded by any deployment: it names the SDK, not a file path
+ * inside somebody else's dist directory.
+ *
+ * **The SDK is a second entry, not a copy.** It is built alongside the app, so
+ * lit, the widget registry and the presentation primitives land in chunks both
+ * of them import — one lit, and more importantly *one registry*, which is what
+ * makes an extension's `registerWidget` visible to the host that looks the tag
+ * up. Two copies would load without error and draw nothing, which is the worst
+ * shape a bug can take.
+ */
+const SDK_SPECIFIER = '@homecore/widget-sdk';
+
+const importMap = (dev: boolean) => ({
+  tag: 'script',
+  attrs: { type: 'importmap' },
+  // In development vite serves the TypeScript directly and transforms it on
+  // request; in a build it is an emitted chunk at a fixed name, because an
+  // import map cannot chase a content hash.
+  children: JSON.stringify({
+    imports: { [SDK_SPECIFIER]: dev ? '/src/sdk/index.ts' : '/sdk.js' },
+  }),
+  injectTo: 'head-prepend' as const,
+});
+
+export default defineConfig(({ command }) => ({
+  plugins: [
+    {
+      name: 'hc-sdk-import-map',
+      transformIndexHtml: () => [importMap(command === 'serve')],
+    },
+  ],
   build: {
     // Chrome runs on the wall tablet, so this is not a compatibility floor —
     // it is just "the Chrome that is installed there" (§16). Read the version
     // off the device and pin it; guessing low costs bundle size for nothing.
     target: 'chrome120',
     sourcemap: true,
+    rollupOptions: {
+      input: { index: 'index.html', sdk: 'src/sdk/index.ts' },
+      // Vite's app build defaults this to `false`, which strips an entry's
+      // exports — correct for a page, fatal for a module other code imports.
+      // Without it `sdk.js` builds, loads, and exports nothing, and every
+      // extension fails on its first named import.
+      preserveEntrySignatures: 'strict',
+      output: {
+        // Only the SDK gets a fixed name — it is the one file an import map
+        // has to be able to name. Everything else keeps its hash.
+        entryFileNames: (chunk) => (chunk.name === 'sdk' ? 'sdk.js' : 'assets/[name]-[hash].js'),
+      },
+    },
   },
   server: {
     proxy: {
@@ -43,11 +93,18 @@ export default defineConfig({
       },
       '/api/content': { target: CONTENT, changeOrigin: true },
       '/api/assets': { target: CONTENT, changeOrigin: true },
+      // Passed through untouched: an extension ships built JS, and having the
+      // dev server transform a third party's module would mean development
+      // exercised a different loading path from the one a deployment uses.
+      '/api/extensions': { target: CONTENT, changeOrigin: true },
     },
   },
   test: {
     globals: true,
+    // No import map in vitest: the alias is how the same bare specifier
+    // resolves under test that an import map resolves in the browser.
+    alias: { '@homecore/widget-sdk': new URL('./src/sdk/index.ts', import.meta.url).pathname },
     environment: 'jsdom',
     include: ['test/**/*.test.ts'],
   },
-});
+}));

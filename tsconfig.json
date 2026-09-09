@@ -6,6 +6,12 @@
     "moduleResolution": "bundler",
     "types": ["vitest/globals"],
 
+    // The specifier an extension author writes (§4.5). It is a real bare
+    // import resolved by an import map in the browser, so it has to resolve
+    // here too — otherwise `extensions/` typechecks against a path no
+    // published extension could ever use.
+    "paths": { "@homecore/widget-sdk": ["./src/sdk/index.ts"] },
+
     // Strict, and then the four `tsc` leaves off even under `strict`. The ABI
     // types are the contract (§13) — a contract with implicit `any` in it is
     // not one.
@@ -30,5 +36,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "test", "server", "*.config.ts"]
+  "include": ["src", "test", "server", "extensions", "*.config.ts"]
 }

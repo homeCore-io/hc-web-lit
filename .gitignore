@@ -7,3 +7,7 @@ coverage
 # What a household authored, when this client is run from a checkout. It is
 # somebody's content, not source — a container mounts a volume here instead.
 var/
+
+# An extension ships built JS; the source beside it is what is in the repo.
+extensions/*/*.js
+extensions/*/*.js.map

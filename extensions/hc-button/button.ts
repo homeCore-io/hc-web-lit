@@ -36,7 +36,7 @@ import {
   registerWidget,
   type DeviceState,
   type HcContext,
-} from '../../src/sdk/index.js';
+} from '@homecore/widget-sdk';
 
 /** One conditional style block: when this holds, paint that. */
 interface StyleWhen {

@@ -19,6 +19,7 @@ import { stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve } from 'node:path';
 import { Auth, mayRead, mayWrite } from './auth.ts';
+import { Extensions } from './extensions.ts';
 import { Store } from './store.ts';
 
 const PORT = Number(process.env['HC_PORT'] ?? 8090);
@@ -39,6 +40,15 @@ const WEB_DIR = resolve(process.env['HC_WEB_DIR'] ?? './dist');
  * The browser holds a bearer from core; this asks core what it is worth.
  */
 const auth = new Auth({ base: CORE_URL });
+
+/**
+ * What a third party shipped, served so a browser can import it.
+ *
+ * Beside the content store rather than inside it: content is JSON somebody
+ * typed and this is code somebody installed, and the two have different
+ * lifecycles, different sizes and different answers to "may I delete this".
+ */
+const extensions = new Extensions(CONTENT_DIR);
 
 const store = new Store(CONTENT_DIR, {
   maxBytes: Number(process.env['HC_MAX_BYTES'] ?? 16 * 1024 * 1024),
@@ -111,7 +121,14 @@ export const handler = async (req: IncomingMessage, res: ServerResponse): Promis
     // screen before it has anything to log in with. Nor is an asset: a browser
     // sends no Authorization header for an `<img>`, and the id is the sha256
     // of the bytes, which is core's own reasoning for the same route.
-    if (url.startsWith('/api/') && !/^\/api\/assets\/[0-9a-f]{64}$/.test(url)) {
+    //
+    // An extension's *files* are the same case one step further: a dynamic
+    // `import()` carries no header either, and a module the browser refuses to
+    // fetch is a widget that silently never appears. Reading the **list** is
+    // not — that is the app asking what is installed, and it has a bearer.
+    const openExtFile = /^\/api\/extensions\/[^/]+\/.+$/.test(url);
+
+    if (url.startsWith('/api/') && !/^\/api\/assets\/[0-9a-f]{64}$/.test(url) && !openExtFile) {
       const caller = await auth.caller(Auth.bearer(req.headers.authorization));
       if (caller === undefined) {
         res.writeHead(401, { 'www-authenticate': 'Bearer' });
@@ -150,6 +167,28 @@ export const handler = async (req: IncomingMessage, res: ServerResponse): Promis
         await store.removeContent(key);
         return send(res, 204, null);
       }
+    }
+
+    if (url === '/api/extensions' && method === 'GET') {
+      return send(res, 200, await extensions.list());
+    }
+
+    const extFile = /^\/api\/extensions\/([^/?]+)\/([^?]+)(?:\?.*)?$/.exec(url);
+    if (extFile !== null && method === 'GET') {
+      const file = await extensions.file(
+        decodeURIComponent(extFile[1]!),
+        decodeURIComponent(extFile[2]!),
+      );
+      if (file === undefined) return send(res, 404, { error: 'no such extension file' });
+      res.writeHead(200, {
+        'content-type': file.type,
+        // The `?v=` cache-buster on the import URL is keyed to the manifest
+        // version (§8.1), so an update takes effect on reload without any
+        // service-worker gymnastics — and that only works if the response is
+        // cacheable in the first place.
+        'cache-control': 'public, max-age=31536000, immutable',
+      });
+      return void res.end(file.bytes);
     }
 
     if (url === '/api/assets' && method === 'POST') {
