@@ -41,6 +41,8 @@ export interface MountEnv {
   templates?: TemplateStore;
   /** Open a sheet on a widget spec (§5.6). */
   onSheet?: (content: WidgetSpec) => void;
+  /** Album or channel art, fetched by the host because it needs the bearer. */
+  onArt?: (deviceId: string) => Promise<string | undefined>;
   /** Resolved design tokens, so a widget restyles with the house (§15). */
   tokens?: Tokens;
   /** Editing or viewing (§14.2). */
@@ -93,6 +95,10 @@ export function contextFor(env: MountEnv, spec: WidgetSpec): HcContext {
 
     async history(deviceId, opts) {
       return (await env.onFetch?.(deviceId, opts)) ?? [];
+    },
+
+    async art(deviceId) {
+      return env.onArt?.(deviceId);
     },
 
     sheet(content) {

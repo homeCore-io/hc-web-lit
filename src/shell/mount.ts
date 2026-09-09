@@ -35,6 +35,8 @@ export type MountTarget = HTMLElement & {
   onPick?: (deviceId: string) => void;
   onOpenRoom?: (room: string, page: string | undefined) => void;
   onDetails?: (deviceId: string) => void;
+  /** Album or channel art, fetched by the host because it needs the bearer. */
+  onArt?: (deviceId: string) => Promise<string | undefined>;
   /**
    * Everything the host gives a widget, handed over whole.
    *
@@ -102,6 +104,7 @@ export function mountWidget(el: MountTarget, w: WidgetSpec, env: MountEnv): void
   if (env.onCommand !== undefined) el.onCommand = env.onCommand;
   if (env.onFetch !== undefined) el.onFetch = env.onFetch;
   if (env.onEvents !== undefined) el.onEvents = env.onEvents;
+  if (env.onArt !== undefined) el.onArt = env.onArt;
 
   // A container mounts its own children and needs what the page had.
   el.env = env;

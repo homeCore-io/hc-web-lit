@@ -360,6 +360,33 @@ export class HcApi {
     return `${absolute.replace(/^http/, 'ws')}/events/stream?${q.toString()}`;
   }
 
+  /**
+   * Album or channel art, as bytes this page can show.
+   *
+   * Core proxies it deliberately — "so a browser can render it without
+   * reaching the device directly, and without the device's own URL leaking
+   * into a page" — and it needs the bearer, which a widget must never hold
+   * (§19.4). So the host fetches it and hands over an object URL: the token
+   * stays here and the widget gets a string it can put in a `src`.
+   *
+   * Undefined for a device with no art, which is most of them most of the
+   * time — a television showing its home screen has nothing to show.
+   */
+  async mediaArt(deviceId: string): Promise<string | undefined> {
+    const headers: Record<string, string> = {};
+    if (this.token !== undefined) headers['Authorization'] = `Bearer ${this.token}`;
+
+    try {
+      const res = await this.doFetch(`${this.baseUrl}/devices/${deviceId}/media/art`, { headers });
+      if (!res.ok) return undefined;
+      const blob = await res.blob();
+      // An empty body is a 200 with nothing in it, which some proxies do.
+      return blob.size === 0 ? undefined : URL.createObjectURL(blob);
+    } catch {
+      return undefined;
+    }
+  }
+
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const headers: Record<string, string> = {};
     if (this.token !== undefined) headers['Authorization'] = `Bearer ${this.token}`;

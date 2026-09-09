@@ -65,6 +65,10 @@ export class HcDeviceGrid extends LitElement {
   /** Hold to inspect, without acting on it (§5.10). */
   @property({ attribute: false }) onDetails: ((deviceId: string) => void) | undefined;
 
+  /** Album art, for a set that happens to contain a media player (§19.4). */
+  @property({ attribute: false }) onArt:
+    ((deviceId: string) => Promise<string | undefined>) | undefined;
+
   /**
    * The type-specific elements, kept.
    *
@@ -151,6 +155,7 @@ export class HcDeviceGrid extends LitElement {
     const el = (cached ?? document.createElement(tag)) as HTMLElement & {
       device?: DeviceState;
       onCommand?: (r: CommandRequest) => void;
+      onArt?: (deviceId: string) => Promise<string | undefined>;
     };
     if (cached === undefined) {
       this.cells.set(d.device_id, el);
@@ -161,6 +166,10 @@ export class HcDeviceGrid extends LitElement {
     }
     el.device = d;
     if (this.onCommand !== undefined) el.onCommand = this.onCommand;
+    // A type-specific card gets what the host gave the set. The media card
+    // needs the art callback, and a set that kept it drew a player with no
+    // cover for no reason a person could see.
+    if (this.onArt !== undefined) el.onArt = this.onArt;
     return el;
   }
 }

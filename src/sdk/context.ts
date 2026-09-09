@@ -68,6 +68,14 @@ export interface HcContext {
   /** P8 — history, already downsampled (§5.9). */
   history(deviceId: string, opts: { from: Date; to: Date; limit: number }): Promise<HistoryEntry[]>;
 
+  /**
+   * Album or channel art for a media device, as a URL this page can show.
+   *
+   * The host fetches it, because core proxies it behind the bearer and a
+   * widget must never hold one (§19.4).
+   */
+  art(deviceId: string): Promise<string | undefined>;
+
   /** P5 — a sheet the host owns, from a widget spec that could be stored (§5.6). */
   sheet(content: WidgetSpec): void;
 

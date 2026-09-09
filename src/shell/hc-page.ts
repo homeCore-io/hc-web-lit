@@ -109,6 +109,10 @@ export class HcPage extends LitElement {
   /** Where widget templates come from (§5.4). */
   @property({ attribute: false }) templates: TemplateStore | undefined;
 
+  /** Album or channel art, fetched by the host (§19.4). */
+  @property({ attribute: false }) onArt:
+    ((deviceId: string) => Promise<string | undefined>) | undefined;
+
   /**
    * What `@room` and `@picked` mean on this page.
    *
@@ -289,6 +293,7 @@ export class HcPage extends LitElement {
       ...(this.onEvents !== undefined ? { onEvents: this.onEvents } : {}),
       ...(this.onDetails !== undefined ? { onDetails: this.onDetails } : {}),
       ...(this.onAction !== undefined ? { onAction: this.onAction } : {}),
+      ...(this.onArt !== undefined ? { onArt: this.onArt } : {}),
     };
   }
 

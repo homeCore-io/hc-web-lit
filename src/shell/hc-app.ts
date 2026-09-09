@@ -174,6 +174,10 @@ export class HcApp extends LitElement {
    * opens is a config value — which is what makes "hold opens a room sheet
    * instead" a setting later rather than a change here (§5.6).
    */
+  /** Album or channel art, fetched with the credential the widget lacks. */
+  private readonly art = async (deviceId: string): Promise<string | undefined> =>
+    this.api?.mediaArt(deviceId);
+
   private readonly details = (deviceId: string): void => {
     // No title: the sheet's content leads with the device's name, and the
     // chrome saying it again is the same thing said twice.
@@ -191,6 +195,7 @@ export class HcApp extends LitElement {
       onEvents: this.events,
       onDetails: this.details,
       onAction: this.runAction,
+      onArt: this.art,
     };
   }
 
@@ -495,6 +500,7 @@ export class HcApp extends LitElement {
         .onFetch=${this.history}
         .onEvents=${this.events}
         .onDetails=${this.details}
+        .onArt=${this.art}
         .onAction=${this.runAction}
         .context=${this.roomContext}
         breakpoint=${this.breakpoint}
