@@ -32,7 +32,7 @@ import {
   type Point,
   type Series,
 } from '../core/history.js';
-import { registerWidget } from './registry.js';
+import { registerWidget } from '../core/registry.js';
 import { humanise, words } from '../core/text.js';
 
 export type HistoryFetch = (

@@ -23,8 +23,8 @@ import type { ExprScope } from '../core/expr.js';
 import type { HistoryEntry } from '../core/api.js';
 import type { ActionConfig } from '../core/actions.js';
 import type { Tokens } from '../design/tokens.js';
-import type { CommandRequest } from '../widgets/hc-controls.js';
-import type { WidgetSpec } from '../shell/mount.js';
+import type { CommandRequest } from '../core/widget.js';
+import type { WidgetSpec } from '../core/widget.js';
 
 export type Unsubscribe = () => void;
 

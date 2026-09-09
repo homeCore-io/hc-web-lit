@@ -72,6 +72,20 @@ describe('the capability boundary', () => {
     expect(/\btoken\b/i.test(s), `${file} holds a token`).toBe(false);
   });
 
+  it('lets the SDK depend downward only', () => {
+    // A package cannot depend on the application that contains it. Nothing
+    // external imports this yet, so the boundary costs nothing to keep and
+    // everything to discover late — the tidy-up would land exactly when it is
+    // most expensive, under the deadline of publishing.
+    const sdk = join(here, '..', 'src', 'sdk');
+    for (const file of readdirSync(sdk)) {
+      const s = readFileSync(join(sdk, file), 'utf8');
+      for (const m of s.matchAll(/from '\.\.\/([a-z]+)\//g)) {
+        expect(['core', 'design'], `${file} imports from ${m[1]}/`).toContain(m[1]);
+      }
+    }
+  });
+
   it('lets the host do all of it, so the rule is possible to keep', () => {
     // The shell is where these belong, and if none of it were here the rule
     // above would be passing because nobody does anything.

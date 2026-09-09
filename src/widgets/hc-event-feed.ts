@@ -12,7 +12,7 @@ import { LitElement, css, html } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { activityFrom, type Activity, type LogEntry } from '../core/activity.js';
 import type { DeviceState } from '../core/device.js';
-import { registerWidget } from './registry.js';
+import { registerWidget } from '../core/registry.js';
 
 export type EventFetch = (opts: { limit: number }) => Promise<LogEntry[]>;
 

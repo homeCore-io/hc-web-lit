@@ -13,7 +13,7 @@ import { LitElement, css, html } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { noticesFor, type Notice } from '../core/attention.js';
 import type { DeviceState } from '../core/device.js';
-import { registerWidget } from './registry.js';
+import { registerWidget } from '../core/registry.js';
 import { humanise } from '../core/text.js';
 import { icon } from '../design/icons.js';
 

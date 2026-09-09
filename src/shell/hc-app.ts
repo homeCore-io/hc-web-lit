@@ -17,7 +17,7 @@ import type { DashboardBreakpoint, DashboardDefinition } from '../core/dashboard
 import { EventStream } from '../core/events.js';
 import { check, checkAction } from '../core/safety.js';
 import { DeviceStore } from '../core/store.js';
-import type { CommandRequest } from '../widgets/hc-controls.js';
+import type { CommandRequest } from '../core/widget.js';
 import { effectiveName, isOn } from '../core/present.js';
 import type { ActionConfig } from '../core/actions.js';
 import type { MountEnv } from './mount.js';

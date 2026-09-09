@@ -8,7 +8,7 @@
  */
 import { LitElement, css, html } from 'lit';
 import { customElement } from 'lit/decorators.js';
-import { registerWidget } from './registry.js';
+import { registerWidget } from '../core/registry.js';
 
 @customElement('hc-spacer')
 export class HcSpacer extends LitElement {

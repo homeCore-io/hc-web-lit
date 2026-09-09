@@ -15,7 +15,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import type { DeviceState } from '../core/device.js';
 import { effectiveArea, isOn, normalizeAreaName } from '../core/present.js';
 import { squarify } from '../core/treemap.js';
-import { registerWidget } from './registry.js';
+import { registerWidget } from '../core/registry.js';
 import { humanise } from '../core/text.js';
 
 interface Room {

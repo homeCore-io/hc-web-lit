@@ -14,9 +14,9 @@ import type { DeviceState } from '../core/device.js';
 import { effectiveName, isOn } from '../core/present.js';
 import { noStatusReason } from '../core/present.js';
 import { scenesInScope, sceneKind } from '../core/scenes.js';
-import type { CommandRequest } from './hc-controls.js';
+import type { CommandRequest } from '../core/widget.js';
 import { icon } from '../design/icons.js';
-import { registerWidget } from './registry.js';
+import { registerWidget } from '../core/registry.js';
 
 @customElement('hc-scene-row')
 export class HcSceneRow extends LitElement {

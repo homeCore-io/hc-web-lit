@@ -17,9 +17,9 @@ import { customElement, property } from 'lit/decorators.js';
 import type { DeviceState } from '../core/device.js';
 import { effectiveName } from '../core/present.js';
 import { selectDevices, type SelectionContext } from '../core/selection.js';
-import type { CommandRequest } from './hc-controls.js';
+import type { CommandRequest } from '../core/widget.js';
 import { icon, iconFor } from '../design/icons.js';
-import { registerForDevice, registerWidget } from './registry.js';
+import { registerForDevice, registerWidget } from '../core/registry.js';
 import { humanise } from '../core/text.js';
 
 /**

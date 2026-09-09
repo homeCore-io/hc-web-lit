@@ -16,8 +16,8 @@ import { LitElement, css, html, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import type { DeviceState } from '../core/device.js';
 import { effectiveName, isOn } from '../core/present.js';
-import type { CommandRequest } from './hc-controls.js';
-import { registerWidget } from './registry.js';
+import type { CommandRequest } from '../core/widget.js';
+import { registerWidget } from '../core/registry.js';
 
 /**
  * The mode provider's id, **both spellings**.

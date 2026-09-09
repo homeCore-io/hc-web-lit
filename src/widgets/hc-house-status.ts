@@ -17,7 +17,7 @@ import { customElement, property } from 'lit/decorators.js';
 import { noticesFor } from '../core/attention.js';
 import { houseTally } from '../core/bindings.js';
 import type { DeviceState } from '../core/device.js';
-import { registerWidget } from './registry.js';
+import { registerWidget } from '../core/registry.js';
 
 @customElement('hc-house-status')
 export class HcHouseStatus extends LitElement {

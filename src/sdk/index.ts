@@ -28,13 +28,13 @@ export type { TemplateResult } from 'lit';
 
 export type { HcContext, QueryResult, Unsubscribe } from './context.js';
 export { HcWidgetBase } from './base.js';
-export { registerWidget, tagFor } from '../widgets/registry.js';
+export { registerWidget, tagFor } from '../core/registry.js';
 
 // The primitives, as an extension sees them.
 export type { DeviceState } from '../core/device.js';
 export type { DeviceQuery } from '../core/query.js';
 export type { ActionConfig } from '../core/actions.js';
-export type { WidgetSpec } from '../shell/mount.js';
+export type { CommandRequest, WidgetSpec } from '../core/widget.js';
 export type { Tokens } from '../design/tokens.js';
 
 // Presentation is the one thing a widget must never re-derive (§1.1).

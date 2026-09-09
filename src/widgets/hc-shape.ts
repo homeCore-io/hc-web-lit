@@ -10,7 +10,7 @@
 import { LitElement, css, html } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { roleColor } from '../design/roles.js';
-import { registerWidget } from './registry.js';
+import { registerWidget } from '../core/registry.js';
 
 /** Core's corner names are token sizes, not pixel values. */
 const CORNER: Record<string, string> = {

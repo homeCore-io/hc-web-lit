@@ -18,17 +18,9 @@ import { optionLabel } from '../core/api.js';
 import type { Control } from '../core/controls.js';
 import { optionsForParam } from '../core/controls.js';
 import type { DeviceState } from '../core/device.js';
+import type { CommandRequest } from '../core/widget.js';
 import './hc-slider.js';
 import './hc-colour-wheel.js';
-
-/** What the host is asked to do. Data, so it can be logged, queued or refused. */
-export interface CommandRequest {
-  deviceId: string;
-  /** An attribute write. */
-  patch?: Record<string, unknown>;
-  /** An action, with its declared parameters. */
-  action?: { id: string; params: Record<string, unknown> };
-}
 
 @customElement('hc-controls')
 export class HcControls extends LitElement {

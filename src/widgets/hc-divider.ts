@@ -8,7 +8,7 @@
 import { LitElement, css, html } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { roleColor } from '../design/roles.js';
-import { registerWidget } from './registry.js';
+import { registerWidget } from '../core/registry.js';
 
 @customElement('hc-divider')
 export class HcDivider extends LitElement {

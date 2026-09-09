@@ -8,7 +8,7 @@
  */
 import { LitElement, css, html } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
-import { registerWidget } from './registry.js';
+import { registerWidget } from '../core/registry.js';
 
 @customElement('hc-image')
 export class HcImage extends LitElement {

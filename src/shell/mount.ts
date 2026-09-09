@@ -8,50 +8,22 @@
  * list would drift, and the drift would be a widget that works on a page and
  * not in a sheet — which is the kind of bug nobody finds until a user does.
  */
-import type { CommandRequest } from '../widgets/hc-controls.js';
+import type { CommandRequest } from '../core/widget.js';
+import type { WidgetSpec } from '../core/widget.js';
+import type { MountEnv } from '../sdk/host.js';
 import type { HistoryFetch } from '../widgets/hc-history-chart.js';
 import type { EventFetch } from '../widgets/hc-event-feed.js';
 import { resolveConfig } from '../core/bindings.js';
 import type { SelectionContext } from '../core/selection.js';
-import type { DeviceStore } from '../core/store.js';
 import { actionsIn, type ActionConfig } from '../core/actions.js';
-import { resolveInstance, type TemplateStore } from '../core/templates.js';
-import { tagFor } from '../widgets/registry.js';
-import type { Tokens } from '../design/tokens.js';
+import { resolveInstance } from '../core/templates.js';
+import { tagFor } from '../core/registry.js';
 import type { HcContext } from '../sdk/context.js';
 import { contextFor } from '../sdk/host.js';
 
-/** A widget instance as the document stores it. */
-export interface WidgetSpec {
-  type: string;
-  config?: Record<string, unknown>;
-}
-
-/** Everything a widget is given that it cannot reach for itself. */
-export interface MountEnv {
-  store: DeviceStore | undefined;
-  context: SelectionContext;
-  onCommand?: (r: CommandRequest) => void;
-  onFetch?: HistoryFetch;
-  onEvents?: EventFetch;
-  /** A widget saying what was touched; the host owns what `@picked` means. */
-  onPick?: (deviceId: string) => void;
-  onOpenRoom?: (room: string, page: string | undefined) => void;
-  /** The non-actuating way to inspect a device (§5.10) — hold, everywhere. */
-  onDetails?: (deviceId: string) => void;
-  /** What a placement's `on_tap` does. The host dispatches it (§5.10). */
-  onAction?: (a: ActionConfig) => void;
-  /** Where widget templates come from (§5.4). Absent means none are defined. */
-  templates?: TemplateStore;
-  /** Open a sheet on a widget spec (§5.6). */
-  onSheet?: (content: WidgetSpec) => void;
-  /** Resolved design tokens, so a widget restyles with the house (§15). */
-  tokens?: Tokens;
-  /** Editing or viewing (§14.2). */
-  mode?: 'view' | 'edit';
-}
-
 /** The properties a mounted widget may be given. */
+export type { MountEnv, WidgetSpec };
+
 export type MountTarget = HTMLElement & {
   config?: Record<string, unknown>;
   device?: unknown;

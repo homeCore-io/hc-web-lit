@@ -13,7 +13,7 @@ import type { DeviceState } from '../core/device.js';
 import { isOn } from '../core/present.js';
 import { icon, iconFor } from '../design/icons.js';
 import { roleColor } from '../design/roles.js';
-import { registerWidget } from './registry.js';
+import { registerWidget } from '../core/registry.js';
 
 @customElement('hc-icon')
 export class HcIcon extends LitElement {

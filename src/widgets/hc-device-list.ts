@@ -6,7 +6,7 @@
  */
 import { customElement } from 'lit/decorators.js';
 import { HcDeviceGrid } from './hc-device-grid.js';
-import { registerWidget } from './registry.js';
+import { registerWidget } from '../core/registry.js';
 
 @customElement('hc-device-list')
 export class HcDeviceList extends HcDeviceGrid {

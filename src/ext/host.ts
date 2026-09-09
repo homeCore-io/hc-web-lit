@@ -16,7 +16,7 @@
  * installing things.
  */
 import { readManifest, type ExtensionManifest, type WidgetDeclaration } from './manifest.js';
-import { registerWidget, tagFor } from '../widgets/registry.js';
+import { registerWidget, tagFor } from '../core/registry.js';
 
 export interface LoadedExtension {
   manifest: ExtensionManifest;

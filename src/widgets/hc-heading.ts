@@ -8,7 +8,7 @@
  */
 import { LitElement, css, html } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
-import { registerWidget } from './registry.js';
+import { registerWidget } from '../core/registry.js';
 
 const SIZE: Record<string, string> = {
   '1': 'var(--hc-text-display-size, 30px)',

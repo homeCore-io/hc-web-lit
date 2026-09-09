@@ -11,7 +11,7 @@ import { customElement, property } from 'lit/decorators.js';
 import type { DeviceState } from '../core/device.js';
 import { formatReading, readingOf } from '../core/facet.js';
 import { humanise } from '../core/text.js';
-import { registerWidget } from './registry.js';
+import { registerWidget } from '../core/registry.js';
 
 @customElement('hc-device-reading')
 export class HcDeviceReading extends LitElement {

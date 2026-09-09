@@ -10,7 +10,7 @@ import { LitElement, css, html } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { childrenOf, gapOf } from '../core/compose.js';
 import { mountChild, type MountEnv } from '../shell/mount.js';
-import { registerWidget } from './registry.js';
+import { registerWidget } from '../core/registry.js';
 
 @customElement('hc-grid')
 export class HcGrid extends LitElement {

@@ -13,8 +13,8 @@
 import { LitElement, css, html } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { DeviceState } from '../core/device.js';
-import type { CommandRequest } from './hc-controls.js';
-import { registerWidget } from './registry.js';
+import type { CommandRequest } from '../core/widget.js';
+import { registerWidget } from '../core/registry.js';
 
 @customElement('hc-warmth')
 export class HcWarmth extends LitElement {

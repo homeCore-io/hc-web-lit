@@ -20,7 +20,7 @@
  */
 import { LitElement, css, html, nothing, type TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
-import { tagFor } from '../widgets/registry.js';
+import { tagFor } from '../core/registry.js';
 import { mountWidget, type MountEnv, type MountTarget, type WidgetSpec } from './mount.js';
 
 /** What an overlay shows. A spec is storable; a template is host chrome. */

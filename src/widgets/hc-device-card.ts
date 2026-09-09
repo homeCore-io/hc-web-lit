@@ -20,11 +20,11 @@ import { formatReading, hasPowerState, readingOf } from '../core/facet.js';
 import { effectiveName, isOn, levelOf, sceneKind } from '../core/present.js';
 import { wantsChrome } from '../core/compose.js';
 import { withoutRoom } from '../core/text.js';
-import type { CommandRequest } from './hc-controls.js';
+import type { CommandRequest } from '../core/widget.js';
 import './hc-controls.js';
 import { icon, iconFor, metricVar } from '../design/icons.js';
 import { inspect } from './hold.js';
-import { registerWidget } from './registry.js';
+import { registerWidget } from '../core/registry.js';
 
 @customElement('hc-device-card')
 export class HcDeviceCard extends LitElement {

@@ -15,12 +15,12 @@ import { customElement, property } from 'lit/decorators.js';
 import type { DeviceState } from '../core/device.js';
 import type { SelectionContext } from '../core/selection.js';
 import { selectDevices } from '../core/selection.js';
-import type { CommandRequest } from './hc-controls.js';
+import type { CommandRequest } from '../core/widget.js';
 import './hc-device-card.js';
 import './hc-device-pill.js';
 import './hc-media-card.js';
 import { attachInspect } from './hold.js';
-import { registerWidget, tagForDevice } from './registry.js';
+import { registerWidget, tagForDevice } from '../core/registry.js';
 
 @customElement('hc-device-grid')
 export class HcDeviceGrid extends LitElement {
