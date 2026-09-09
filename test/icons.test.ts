@@ -6,8 +6,15 @@
  * degrades the right way: an unknown type gets a mark that says "a device",
  * never a bulb.
  */
-import { describe, expect, it } from 'vitest';
-import { iconFor, mappedWords, markNames, metricVar } from '../src/design/icons.js';
+import { afterEach, describe, expect, it } from 'vitest';
+import {
+  iconFor,
+  iconRules,
+  mappedWords,
+  markNames,
+  metricVar,
+  setIconRules,
+} from '../src/design/icons.js';
 
 describe('the icon table', () => {
   it('has a mark for every word it maps', () => {
@@ -36,5 +43,57 @@ describe('the icon table', () => {
     expect(metricVar('temperature')).toBe('--hc-metric-temperature');
     expect(metricVar('water')).toBe('--hc-metric-humidity');
     expect(metricVar('light')).toBeUndefined();
+  });
+});
+
+describe('a user’s own icon rules', () => {
+  afterEach(() => setIconRules([]));
+
+  const dev = (name: string, over: Record<string, unknown> = {}) => ({ name, ...over });
+
+  it('wins over the derived answer, because it is the most specific thing said', () => {
+    // The household knows which switch is a string of lights; the bridge does
+    // not, and calls it a switch (§11.2).
+    setIconRules([{ match: 'holiday', icon: 'scene' }]);
+    expect(iconFor(dev('Holiday Lights 1', { device_type: 'switch' }))).toBe('scene');
+    expect(iconFor(dev('Kitchen Overhead', { device_type: 'switch' }))).toBe('switch');
+  });
+
+  it('takes the first rule that matches, in order', () => {
+    setIconRules([
+      { match: 'fan', icon: 'fan' },
+      { match: 'ceiling', icon: 'light' },
+    ]);
+    expect(iconFor(dev('Ceiling Fan'))).toBe('fan');
+  });
+
+  it('matches the name by default, and other fields when asked', () => {
+    setIconRules([{ match: 'garage', icon: 'garage', on: 'area' }]);
+    expect(iconFor(dev('Overhead', { area: 'garage', device_type: 'light' }))).toBe('garage');
+    // No match, so the derived answer stands.
+    expect(iconFor(dev('Overhead', { area: 'kitchen', device_type: 'light' }))).toBe('light');
+  });
+
+  it('ignores a rule naming a mark that does not exist', () => {
+    // A typo falls through to the derived answer rather than drawing nothing.
+    setIconRules([{ match: '.', icon: 'unicorn' }]);
+    expect(iconFor(dev('Desk Lamp', { device_type: 'light' }))).toBe('light');
+  });
+
+  it('survives a half-typed pattern', () => {
+    // These are typed into a live field, so a regex is malformed for as long
+    // as somebody is in the middle of writing it. It must not take the page
+    // down between keystrokes.
+    setIconRules([
+      { match: 'Holiday (', icon: 'scene' },
+      { match: 'lamp', icon: 'light' },
+    ]);
+    expect(() => iconFor(dev('Desk Lamp'))).not.toThrow();
+    expect(iconFor(dev('Desk Lamp'))).toBe('light');
+  });
+
+  it('is nothing at all until somebody writes one', () => {
+    expect(iconRules()).toEqual([]);
+    expect(iconFor(dev('Desk Lamp', { device_type: 'light' }))).toBe('light');
   });
 });

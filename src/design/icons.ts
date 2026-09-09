@@ -134,8 +134,87 @@ const BY_WORD: Record<string, string> = {
   hub: 'hub',
 };
 
-/** The mark for a device, from `ui_hint` first and `device_type` after. */
-export function iconFor(d: { ui_hint?: string; device_type?: string } | undefined): string {
+/**
+ * A user's own rule: this name gets that mark (§11.2).
+ *
+ * Ordered, first match wins, and matched against the device's *name* by
+ * default because that is what a person recognises — "Holiday Lights" is a
+ * switch to the bridge and a string of lights to the household.
+ */
+export interface IconRule {
+  /** A regular expression, as the user typed it. */
+  match: string;
+  /** A mark name. An unknown one falls through to the derived answer. */
+  icon: string;
+  /** What to match against. The name, unless said otherwise. */
+  on?: 'name' | 'area' | 'type';
+}
+
+/**
+ * The rules in force.
+ *
+ * Module state, deliberately, and it is the one place this client keeps any.
+ * The alternative is threading a resolver through every widget that draws a
+ * mark, and the cost of that is not the plumbing — it is that a third-party
+ * widget calling `iconFor` would silently ignore the user's rules unless its
+ * author remembered to ask for them. A house has one set of icon rules the way
+ * it has one skin.
+ */
+let rules: IconRule[] = [];
+
+/** Set by the host, from wherever it keeps user content. */
+export function setIconRules(next: readonly IconRule[]): void {
+  rules = [...next];
+}
+
+export function iconRules(): IconRule[] {
+  return [...rules];
+}
+
+/** What a rule looks at on a device. */
+function subject(
+  d: { name?: string; ui_hint?: string; device_type?: string; area?: string | null } | undefined,
+  on: IconRule['on'],
+): string {
+  if (on === 'area') return d?.area ?? '';
+  if (on === 'type') return d?.ui_hint ?? d?.device_type ?? '';
+  return d?.name ?? '';
+}
+
+/**
+ * The first rule that matches, if any.
+ *
+ * A malformed pattern matches nothing rather than throwing: these are typed by
+ * a person into a text field, and a half-finished regex must not take the page
+ * down between keystrokes.
+ */
+export function ruleFor(
+  d: { name?: string; ui_hint?: string; device_type?: string; area?: string | null } | undefined,
+  list: readonly IconRule[] = rules,
+): IconRule | undefined {
+  for (const rule of list) {
+    if (typeof rule?.match !== 'string' || rule.match === '') continue;
+    try {
+      if (new RegExp(rule.match, 'i').test(subject(d, rule.on))) return rule;
+    } catch {
+      // Not a pattern yet. The next one might be.
+    }
+  }
+  return undefined;
+}
+
+/**
+ * The mark for a device: the user's rule, then `ui_hint`, then `device_type`.
+ *
+ * §11.2's order. A rule wins because it is the most specific thing anybody
+ * said — the household knows which switch is a fan and the bridge does not.
+ */
+export function iconFor(
+  d: { name?: string; ui_hint?: string; device_type?: string; area?: string | null } | undefined,
+): string {
+  const named = ruleFor(d)?.icon;
+  if (named !== undefined && named in MARKS) return named;
+
   const hint = d?.ui_hint;
   const type = d?.device_type;
   return (
