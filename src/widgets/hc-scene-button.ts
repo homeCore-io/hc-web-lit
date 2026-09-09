@@ -20,7 +20,7 @@ import type { CommandRequest } from '../core/widget.js';
 import { activation, sceneKind } from '../core/scenes.js';
 import { noStatusReason } from '../core/present.js';
 import { effectiveName, isOn } from '../core/present.js';
-import { registerWidget } from '../core/registry.js';
+import { registerForDevice, registerWidget } from '../core/registry.js';
 import { icon } from '../design/icons.js';
 import { HcLayoutShell } from '../sdk/shell.js';
 
@@ -159,6 +159,11 @@ export class HcSceneButton extends HcLayoutShell {
 }
 
 registerWidget('scene_button', 'hc-scene-button');
+
+// A set of scenes draws these rather than generic cards: a scene is activated
+// rather than switched, and a card offering a toggle would be offering to turn
+// off something that does not turn off (§7.3).
+registerForDevice('scene', 'hc-scene-button');
 
 declare global {
   interface HTMLElementTagNameMap {

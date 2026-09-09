@@ -4,6 +4,7 @@ import { controlsFor } from '../src/core/controls.js';
 import type { DeviceState } from '../src/core/device.js';
 import '../src/widgets/hc-controls.js';
 import '../src/widgets/hc-device-card.js';
+import '../src/widgets/hc-keypad.js';
 import type { HcControls } from '../src/widgets/hc-controls.js';
 
 const light = (attrs: Record<string, unknown>): DeviceState => ({
@@ -222,5 +223,94 @@ describe('a list row that can act', () => {
   it('is inert with no host to send to, and looks it', async () => {
     const el = await mountRow(light({ on: false }));
     expect((el.shadowRoot?.querySelector('.switch') as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe('a keypad and a remote, from one widget', () => {
+  const mountKeypad = async (device: DeviceState, onCommand?: (r: unknown) => void) => {
+    const el = document.createElement('hc-keypad');
+    el.device = device;
+    if (onCommand !== undefined) el.onCommand = onCommand as HcControls['onCommand'];
+    document.body.append(el);
+    await el.updateComplete;
+    return el;
+  };
+
+  const keypad = (): DeviceState => ({
+    device_id: 'lutron_36',
+    name: 'Entry Keypad',
+    plugin_id: 'lutron',
+    available: true,
+    device_type: 'vcrx',
+    last_seen: '2026-09-09T00:00:00Z',
+    attributes: {
+      available_buttons: [
+        { name: 'OH Door 1', number: 1 },
+        { name: 'Lights', number: 3 },
+      ],
+      led_1: 0,
+      led_3: 1,
+    },
+    schema: {
+      actions: [
+        {
+          id: 'press_button',
+          label: 'Press a button',
+          params: [
+            {
+              name: 'button',
+              kind: 'int',
+              options_from: {
+                attribute: {
+                  attribute: 'available_buttons',
+                  label_key: 'name',
+                  value_key: 'number',
+                },
+              },
+            },
+          ],
+        },
+      ],
+    },
+  });
+
+  const pico = (): DeviceState => ({
+    device_id: 'caseta_6',
+    name: 'Pico',
+    plugin_id: 'caseta',
+    available: true,
+    device_type: 'pico_remote',
+    last_seen: '2026-09-09T00:00:00Z',
+    attributes: { available_buttons: [2, 3, 4] },
+    schema: { actions: [] },
+  });
+
+  it('presses the button the bridge engraved', async () => {
+    const sent = vi.fn();
+    const el = await mountKeypad(keypad(), sent);
+
+    const buttons = [...(el.shadowRoot?.querySelectorAll('button.key') ?? [])] as HTMLElement[];
+    expect(buttons.map((b) => b.textContent?.trim())).toEqual(['OH Door 1', 'Lights']);
+
+    buttons[1]?.click();
+    expect(sent).toHaveBeenCalledWith({
+      deviceId: 'lutron_36',
+      action: { id: 'press_button', params: { button: '3' } },
+    });
+  });
+
+  it('shows which LED the device reports lit', async () => {
+    const el = await mountKeypad(keypad(), vi.fn());
+    const leds = [...(el.shadowRoot?.querySelectorAll('.led') ?? [])];
+    expect(leds.map((l) => l.hasAttribute('data-lit'))).toEqual([false, true]);
+  });
+
+  it('lists a remote’s buttons without offering to press them', async () => {
+    // A Pico transmits and declares no action. Same widget, opposite answer,
+    // and the plugin said so — no type table involved (§7.3).
+    const el = await mountKeypad(pico(), vi.fn());
+    expect(el.shadowRoot?.querySelectorAll('button.key')).toHaveLength(0);
+    expect(el.shadowRoot?.querySelectorAll('.key')).toHaveLength(3);
+    expect(el.shadowRoot?.textContent).toContain('Sends only');
   });
 });
