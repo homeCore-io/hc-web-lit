@@ -13,6 +13,19 @@
  * the SDK, because a surface invented ahead of its callers is the thing the
  * sequencing exists to prevent.
  */
+/**
+ * The rendering runtime, from the host rather than from the extension.
+ *
+ * Found by building `hc-button`: it had to `import ... from 'lit'` itself,
+ * which means an installed extension ships a second copy of Lit, registers a
+ * second set of reactive-element definitions and loses every shared style.
+ * §10.3 makes exactly this argument about the Rive runtime — bundle once in
+ * the shell, expose it, never let an extension carry its own — and it is the
+ * same argument here. The acceptance gate is what surfaced it (§7.4).
+ */
+export { LitElement, css, html, nothing, svg } from 'lit';
+export type { TemplateResult } from 'lit';
+
 export type { HcContext, QueryResult, Unsubscribe } from './context.js';
 export { HcWidgetBase } from './base.js';
 export { registerWidget, tagFor } from '../widgets/registry.js';

@@ -1,0 +1,20 @@
+{
+  "id": "io.homecore.button",
+  "name": "Button",
+  "version": "1.0.0",
+  "hcApiVersion": "1",
+  "entry": "./button.js",
+  "author": "homeCore",
+  "provides": {
+    "widgets": [
+      {
+        "tag": "hc-button",
+        "widget_id": "button",
+        "name": "Button",
+        "description": "The wide-open one: every field an expression, every state a style.",
+        "categories": ["control"],
+        "kind": "instrument"
+      }
+    ]
+  }
+}
