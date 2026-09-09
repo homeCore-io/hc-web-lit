@@ -7,6 +7,7 @@
  * implements that.
  */
 import type { DeviceState } from './device.js';
+import type { CommandRequest } from './widget.js';
 import { effectiveArea, normalizeAreaName, sceneKind } from './present.js';
 
 export interface SceneRowConfig {
@@ -103,3 +104,21 @@ export function scenesInScope(
 
 /** Re-exported so a widget asks one module about scenes. */
 export { sceneKind };
+
+/**
+ * How to apply a scene: **the action it declares.**
+ *
+ * Every scene in the reference house now declares `activate`, which is the
+ * model — applying a scene is a thing you do, and a scene does not
+ * meaningfully turn off. The `on: true` write is kept only for a plugin that
+ * has not restarted since the upgrade and still declares nothing.
+ */
+export function activation(scene: DeviceState): CommandRequest {
+  const declared = (scene.schema?.actions ?? []).find((a) => a.id === 'activate');
+  if (declared !== undefined) {
+    return { deviceId: scene.device_id, action: { id: declared.id, params: {} } };
+  }
+  return typeof scene.attributes['on'] === 'boolean'
+    ? { deviceId: scene.device_id, patch: { on: true } }
+    : { deviceId: scene.device_id, action: { id: 'activate', params: {} } };
+}

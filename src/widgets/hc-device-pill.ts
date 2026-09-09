@@ -33,6 +33,10 @@ export class HcDevicePill extends HcLayoutShell {
          difference, which is the shell earning its place — a different
          silhouette rather than a different structure. */
       .shell {
+        /* Safe here, and only here: a pill is laid out in a grid of explicit
+           columns, so its width comes from its container rather than from its
+           content, and containment costs it nothing (see the shell). */
+        container-type: inline-size;
         border-radius: var(--hc-radius-md, 14px);
         padding: 0 calc(var(--hc-space-unit, 8px));
         gap: 0.5rem;

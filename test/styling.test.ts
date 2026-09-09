@@ -52,3 +52,32 @@ describe('the styling contract', () => {
     }
   });
 });
+
+describe('the stylesheets themselves', () => {
+  it('closes every css template where it means to', () => {
+    // Third time: a backtick in a CSS comment closes the `css` tag early and
+    // the file stops being TypeScript. The typecheck catches it, so it never
+    // ships — but it costs a debugging pass each time, and the fix is to stop
+    // writing them rather than to keep spotting them.
+    //
+    // A template ends at its first backtick, by definition. So the test is
+    // whether that backtick is where a template *should* end: followed by a
+    // separator. Anything else means it closed inside the CSS.
+    const all = [...files.map((f) => join(dir, f)), join(dir, '..', 'sdk', 'shell.ts')];
+    for (const path of all) {
+      const text = readFileSync(path, 'utf8');
+      for (const start of [...text.matchAll(/css`/g)].map((m) => m.index! + 4)) {
+        const end = text.indexOf('`', start);
+        expect(end, `${path}: unterminated css template`).toBeGreaterThan(-1);
+        const after = text.slice(end + 1).replace(/^\s+/, '')[0];
+        expect(
+          [';', ',', ']'],
+          `${path}: css template closes early, at "…${text
+            .slice(Math.max(0, end - 40), end + 1)
+            .split('\n')
+            .pop()}"`,
+        ).toContain(after);
+      }
+    }
+  });
+});

@@ -39,12 +39,18 @@ export abstract class HcLayoutShell extends LitElement {
     :host {
       display: block;
       height: 100%;
-      container-type: inline-size;
       /* How lit the tile is, and in what. A widget sets these; the structure
          never decides what a state looks like. */
       --hc-shell-tint: 0%;
       --hc-shell-colour: var(--hc-ink-muted, #8b95a4);
     }
+    /* **No containment here, at either level.** Inline-size containment
+       removes an element's content-based intrinsic width, so a shell widget
+       whose container sizes it *from its content* — a chip in a flex row —
+       collapses to its padding. It was on the host first and every scene chip
+       drew on top of the next one; moving it inward only moved the collapse
+       inward with it. A widget that is always placed at a known width may
+       declare a container on this box itself, which is what the pill does. */
     .shell {
       display: grid;
       grid-template-rows: auto auto;
@@ -78,7 +84,7 @@ export abstract class HcLayoutShell extends LitElement {
       align-items: center;
       gap: 0.75rem;
       min-width: 0;
-      flex: 1;
+      flex: 1 1 auto;
     }
     .tile {
       flex: none;
@@ -113,7 +119,11 @@ export abstract class HcLayoutShell extends LitElement {
       min-width: 0;
       display: grid;
       gap: 0.125rem;
-      flex: 1;
+      /* Basis auto, not zero. The one-value shorthand means a basis of zero,
+         which contributes nothing to the container's intrinsic width — so a
+         shell sized by its content came out as wide as its tile, and a row of
+         scene chips was six circles with the labels overlapping. */
+      flex: 1 1 auto;
     }
     .primary {
       font-weight: 600;
