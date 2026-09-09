@@ -49,6 +49,8 @@ import '../widgets/hc-grid.js';
 import '../widgets/hc-heading.js';
 import '../widgets/hc-icon.js';
 import '../widgets/hc-keypad.js';
+import '../widgets/hc-lock.js';
+import '../widgets/hc-timer.js';
 import '../widgets/hc-image.js';
 import '../widgets/hc-spacer.js';
 import '../widgets/hc-stack.js';
