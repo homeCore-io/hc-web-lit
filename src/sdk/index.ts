@@ -28,6 +28,7 @@ export type { TemplateResult } from 'lit';
 
 export type { HcContext, QueryResult, Unsubscribe } from './context.js';
 export { HcWidgetBase } from './base.js';
+export { HcLayoutShell } from './shell.js';
 export { registerWidget, tagFor } from '../core/registry.js';
 
 // The primitives, as an extension sees them.

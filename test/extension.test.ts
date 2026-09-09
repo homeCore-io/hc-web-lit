@@ -125,10 +125,17 @@ describe('what the gate proved', () => {
     // the extension reading attributes (§1.1).
     expect(el.shadowRoot?.textContent).toContain('Desk Lamp');
     expect(el.shadowRoot?.textContent).toContain('40%');
-    // The state-matching style block evaluated through P1.
-    expect((el.shadowRoot?.querySelector('button') as HTMLElement).style.cssText).toContain(
-      '--ink',
-    );
+    // The state-matching style block, evaluated through P1 and expressed in
+    // the shell's two custom properties. The widget says what state it is in;
+    // the shell owns what a state looks like.
+    expect(el.style.getPropertyValue('--hc-shell-colour')).toContain('accent-active');
+    expect(el.style.getPropertyValue('--hc-shell-tint')).toBe('22%');
+
+    // And it is not a <button>: pressing is the seam's job, which attaches
+    // role, tabindex and the keyboard when a placement declares `on_tap`
+    // (§5.10). A widget that built its own would be a second way to be
+    // pressed, with its own idea of what a hold means.
+    expect(el.shadowRoot?.querySelector('button')).toBeNull();
   });
 
   it('takes its label from an expression', async () => {

@@ -42,6 +42,10 @@ export const SHARED_PARTS = [
   'controls',
   /** An explanation the widget offers when it cannot show the usual thing. */
   'note',
+  /** The shell's top region: mark, names and badge (§7.2). */
+  'head',
+  /** The number at the far edge: a level, a count, a reading. */
+  'trailing',
 ] as const;
 
 /** Names that belong to one widget family and mean nothing outside it. */
@@ -54,7 +58,6 @@ export const OWN_PARTS = [
   'spacer',
   // Sets of devices.
   'pill',
-  'trailing',
   'group',
   'mark',
   'rest',

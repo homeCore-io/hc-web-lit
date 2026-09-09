@@ -26,9 +26,7 @@
  *   wrong the way every widget that tried did.
  */
 import {
-  HcWidgetBase,
-  css,
-  html,
+  HcLayoutShell,
   nothing,
   icon,
   iconFor,
@@ -37,6 +35,7 @@ import {
   effectiveName,
   registerWidget,
   type DeviceState,
+  type HcContext,
 } from '../../src/sdk/index.js';
 
 /** One conditional style block: when this holds, paint that. */
@@ -48,71 +47,9 @@ interface StyleWhen {
   icon?: string;
 }
 
-export class HcButton extends HcWidgetBase {
-  static override styles = css`
-    :host {
-      display: block;
-      height: 100%;
-    }
-    button {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      width: 100%;
-      height: 100%;
-      box-sizing: border-box;
-      padding: var(--hc-density-card-padding, 14px);
-      border: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
-      border-radius: var(--hc-radius-md, 14px);
-      background: var(--fill, var(--hc-surface-raised, #141922));
-      color: var(--ink, var(--hc-ink, #e9edf2));
-      font: inherit;
-      font-family: var(--hc-font-body, system-ui, sans-serif);
-      text-align: left;
-      cursor: pointer;
-      transition: background var(--hc-motion-base, 220ms) var(--hc-motion-curve, ease-out);
-    }
-    button:focus-visible {
-      outline: 2px solid var(--hc-stroke-focus, #7cc4ff);
-      outline-offset: 2px;
-    }
-    .tile {
-      flex: none;
-      display: grid;
-      place-items: center;
-      width: 2.25rem;
-      height: 2.25rem;
-      border-radius: var(--hc-radius-sm, 8px);
-      background: color-mix(in srgb, currentColor 16%, transparent);
-    }
-    svg {
-      width: 1.25rem;
-      height: 1.25rem;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 1.6;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-    .lines {
-      min-width: 0;
-      display: grid;
-      gap: 0.1rem;
-    }
-    .label {
-      font-weight: 600;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .secondary {
-      font-size: var(--hc-text-body-small-size, 12.5px);
-      opacity: 0.7;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-  `;
+export class HcButton extends HcLayoutShell {
+  /** The capability object. Set by the host before the first render. */
+  ctx: HcContext | undefined;
 
   /** The device this is about, when it is about one. */
   private get device(): DeviceState | undefined {
@@ -145,36 +82,39 @@ export class HcButton extends HcWidgetBase {
     );
   }
 
-  override render() {
+  override updated(): void {
+    super.updated();
     const d = this.device;
     const block = this.styleBlock();
-
-    // Presentation from the primitive, never re-derived here (§1.1).
-    const lit = d === undefined ? undefined : isOn(d);
-    const level = d === undefined ? undefined : levelOf(d);
-
-    const label = this.value('label', d === undefined ? '' : effectiveName(d));
-    const secondary = this.value(
-      'secondary',
-      level !== undefined && lit === true ? `${Math.round(level)}%` : '',
+    // The shell owns the structure; a widget says only what state it is in.
+    // Two custom properties is the entire vocabulary for that.
+    const lit = d !== undefined && isOn(d) === true;
+    this.style.setProperty(
+      '--hc-shell-colour',
+      block?.ink ?? (lit ? 'var(--hc-accent-active, #ffb661)' : 'var(--hc-ink-muted, #8b95a4)'),
     );
+    this.style.setProperty('--hc-shell-tint', lit ? '22%' : '0%');
+  }
 
-    const mark = block?.icon ?? this.value('icon', iconFor(d));
-    const ink = block?.ink ?? (lit === true ? 'var(--hc-accent-active, #ffb661)' : undefined);
-    const fill = block?.fill;
+  protected override renderIcon() {
+    const block = this.styleBlock();
+    return icon(block?.icon ?? this.value('icon', iconFor(this.device)));
+  }
 
-    return html`<button
-      part="card"
-      style=${[ink !== undefined ? `--ink:${ink}` : '', fill !== undefined ? `--fill:${fill}` : '']
-        .filter(Boolean)
-        .join(';')}
-    >
-      <span class="tile" part="indicator">${icon(mark)}</span>
-      <span class="lines">
-        <span class="label" part="name">${label}</span>
-        ${secondary === '' ? nothing : html`<span class="secondary" part="state">${secondary}</span>`}
-      </span>
-    </button>`;
+  protected override renderPrimary(): unknown {
+    const d = this.device;
+    return this.value('label', d === undefined ? '' : effectiveName(d));
+  }
+
+  protected override renderSecondary(): unknown {
+    return this.value('secondary');
+  }
+
+  protected override renderBadge(): unknown {
+    const d = this.device;
+    if (d === undefined || isOn(d) !== true) return nothing;
+    const level = levelOf(d);
+    return level === undefined ? nothing : `${Math.round(level)}%`;
   }
 }
 
