@@ -3,3 +3,7 @@
 node_modules
 dist
 coverage
+
+# What a household authored, when this client is run from a checkout. It is
+# somebody's content, not source — a container mounts a volume here instead.
+var/
