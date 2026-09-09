@@ -90,6 +90,9 @@ export const OWN_PARTS = [
   'player',
   'players',
   'now',
+  // A code element's sandboxed viewport (§8.1). Named because a theme has to
+  // be able to size and frame it; nothing inside it is reachable, by design.
+  'frame',
   // Notices and activity.
   'notice',
   'notices',

@@ -32,6 +32,7 @@ import '../widgets/hc-device-grid.js';
 import '../widgets/hc-event-feed.js';
 import '../widgets/hc-device-list.js';
 import '../widgets/hc-history-chart.js';
+import '../widgets/hc-code.js';
 import '../widgets/hc-colour-wheel.js';
 import '../widgets/hc-device-breakdown.js';
 import '../widgets/hc-house-status.js';
@@ -760,7 +761,7 @@ export class HcApp extends LitElement {
         // it needs the reason to still be there when they go looking (§4.3 —
         // the host "says so in the UI rather than failing silently").
         this.extensions.failed.length > 0 && !this.kiosk
-          ? html`<div class="note error" part="extension-errors">
+          ? html`<div class="note error" part="note">
               ${this.extensions.failed.map((f) => html`<div>${f.id}: ${f.error}</div>`)}
             </div>`
           : nothing
