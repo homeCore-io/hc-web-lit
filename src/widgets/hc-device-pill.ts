@@ -10,158 +10,164 @@
  * sliders beside it at whichever light you touched — so the pill reports the
  * pick rather than commanding anything.
  */
-import { LitElement, css, html } from 'lit';
+import { css, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import type { DeviceState } from '../core/device.js';
 import { effectiveName, isOn, levelOf } from '../core/present.js';
+import { HcLayoutShell } from '../sdk/shell.js';
+import { attachInspect } from './hold.js';
 import { withoutRoom } from '../core/text.js';
 import { icon, iconFor } from '../design/icons.js';
-import { inspect } from './hold.js';
+import { registerWidget } from '../core/registry.js';
 
 @customElement('hc-device-pill')
-export class HcDevicePill extends LitElement {
-  static override styles = css`
-    :host {
-      display: inline-block;
-      min-width: 0;
-      container-type: inline-size;
-      /* How lit the chip is, from the light's own level (set per instance). */
-      --tint: 0%;
-      --tint-colour: var(--hc-ink-muted, #8b95a4);
-    }
-    :host([data-lit]) {
-      --tint-colour: var(--hc-accent-active, #ffb661);
-    }
-    button {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      width: 100%;
-      min-width: 0;
-      box-sizing: border-box;
-      padding: 0 calc(var(--hc-space-unit, 8px));
-      height: 100%;
-      min-height: 0;
-      border: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
-      border-radius: var(--hc-radius-md, 14px);
-      background: color-mix(
-        in srgb,
-        var(--tint-colour) calc(var(--tint) / 2),
-        var(--hc-surface-raised, #141922)
-      );
-      color: var(--hc-ink, #e9edf2);
-      font: inherit;
-      cursor: pointer;
-      text-align: left;
-      transition:
-        background var(--hc-motion-base, 220ms) var(--hc-motion-curve, ease-out),
-        border-color var(--hc-motion-fast, 140ms) var(--hc-motion-curve, ease-out);
-    }
-    button:hover {
-      border-color: color-mix(in srgb, var(--tint-colour) 40%, var(--hc-stroke-hairline, #262d38));
-    }
-    /* Picked is what the sliders below are aimed at, so it is a stronger
-       statement than lit — a ring rather than a wash. */
-    button[data-picked] {
-      border-color: var(--hc-accent-active, #ffb661);
-      box-shadow: 0 0 0 1px var(--hc-accent-active, #ffb661);
-    }
-    button:focus-visible {
-      outline: 2px solid var(--hc-stroke-focus, #7cc4ff);
-      outline-offset: 2px;
-    }
-    .tile {
-      flex: none;
-      display: grid;
-      place-items: center;
-      width: 1.5rem;
-      height: 1.5rem;
-      border-radius: var(--hc-radius-xs, 6px);
-      background: color-mix(
-        in srgb,
-        var(--tint-colour) var(--tint),
-        var(--hc-surface-sunken, #0d1116)
-      );
-      /* Toward the skin's own ink, which helps in both directions: on a dark
-         skin the ink is light and the mark lifts off its tile, on a light one
-         the ink is dark and the mark deepens. Measured at 3.01 against a lit
-         tile in soft_home before this, which passes and is one rounding away
-         from not. */
-      color: color-mix(in srgb, var(--tint-colour) 85%, var(--hc-ink, #e9edf2));
-      transition: inherit;
-    }
-    .tile svg {
-      width: 1rem;
-      height: 1rem;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 1.7;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-    .name {
-      flex: 1;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      font-weight: 500;
-    }
-    .level {
-      margin-left: auto;
-      flex: none;
-      font-size: var(--hc-text-caption-size, 11px);
-      color: var(--hc-ink-muted, #8b95a4);
-      font-variant-numeric: tabular-nums;
-    }
-    :host([data-lit]) .level {
-      color: var(--hc-ink, #e9edf2);
-    }
-    /* Four lights share one 44px row, so a narrow chip spends its width on the
-       name. The level is not lost — the chip's own tint is carrying it. */
-    @container (max-width: 11rem) {
-      .level {
-        display: none;
+export class HcDevicePill extends HcLayoutShell {
+  static override styles = [
+    HcLayoutShell.styles,
+    css`
+      :host {
+        display: inline-block;
+        min-width: 0;
       }
-    }
-  `;
+      /* A chip, not a card: the pill radius and a tighter tile are the whole
+         difference, which is the shell earning its place — a different
+         silhouette rather than a different structure. */
+      .shell {
+        border-radius: var(--hc-radius-md, 14px);
+        padding: 0 calc(var(--hc-space-unit, 8px));
+        gap: 0.5rem;
+        cursor: pointer;
+        background: color-mix(
+          in srgb,
+          var(--hc-shell-colour) calc(var(--hc-shell-tint) / 2),
+          var(--hc-surface-raised, #141922)
+        );
+        transition:
+          background var(--hc-motion-base, 220ms) var(--hc-motion-curve, ease-out),
+          border-color var(--hc-motion-fast, 140ms) var(--hc-motion-curve, ease-out);
+      }
+      .shell:hover {
+        border-color: color-mix(in srgb, var(--hc-shell-colour) 40%, transparent);
+      }
+      /* Picked is what the sliders below are aimed at, so it is a stronger
+         statement than lit — a ring rather than a wash. */
+      :host([data-picked]) .shell {
+        border-color: var(--hc-accent-active, #ffb661);
+        box-shadow: 0 0 0 1px var(--hc-accent-active, #ffb661);
+      }
+      :host(:focus-visible) {
+        outline: 2px solid var(--hc-stroke-focus, #7cc4ff);
+        outline-offset: 2px;
+      }
+      .tile {
+        width: 1.5rem;
+        height: 1.5rem;
+        border-radius: var(--hc-radius-xs, 6px);
+      }
+      .tile svg {
+        width: 1rem;
+        height: 1rem;
+      }
+      .primary {
+        font-weight: 500;
+      }
+      /* A chip is tighter than a card: the shell's card spacing costs about
+         twelve pixels here, which is a whole word at this width. */
+      .head {
+        gap: 0.5rem;
+      }
+      .badge {
+        margin-left: 0.375rem;
+      }
+      .badge {
+        font-size: var(--hc-text-caption-size, 11px);
+      }
+      :host([data-lit]) .badge {
+        color: var(--hc-ink, #e9edf2);
+      }
+      /* Four lights share one 44px row, so a narrow chip spends its width on
+         the name. The level is not lost — the chip's own tint carries it. */
+      @container (max-width: 11rem) {
+        .badge {
+          display: none;
+        }
+      }
+    `,
+  ];
 
   @property({ attribute: false }) device: DeviceState | undefined;
   @property({ type: Boolean }) picked = false;
-  /** The room this pill is shown in, if the page is scoped to one. */
-  @property({ attribute: false }) room: string | undefined;
   @property({ attribute: false }) onPick: ((deviceId: string) => void) | undefined;
   /** Hold to inspect, without acting on it (§5.10). */
   @property({ attribute: false }) onDetails: ((deviceId: string) => void) | undefined;
+  /** The room this pill is shown in, if the page is scoped to one. */
+  @property({ attribute: false }) room: string | undefined;
 
-  override render() {
+  override firstUpdated(): void {
+    // A chip reports what was touched, so it behaves like a button — but the
+    // shell owns the markup, so the role goes on the host.
+    this.setAttribute('role', 'button');
+    this.tabIndex = 0;
+    this.addEventListener('click', () => {
+      const id = this.device?.device_id;
+      if (id !== undefined) this.onPick?.(id);
+    });
+    this.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      const id = this.device?.device_id;
+      if (id !== undefined) this.onPick?.(id);
+    });
+    attachInspect(this, () => {
+      const id = this.device?.device_id;
+      if (id !== undefined) this.onDetails?.(id);
+    });
+  }
+
+  override willUpdate(): void {
+    // Always a row: a chip is one line by definition.
+    this.row = true;
+  }
+
+  override updated(): void {
+    super.updated();
     const d = this.device;
-    if (d === undefined) return html``;
+    const lit = d !== undefined && isOn(d) === true;
+    const level = d === undefined ? undefined : levelOf(d);
 
-    const on = isOn(d);
-    const level = on === true ? levelOf(d) : undefined;
-
+    this.toggleAttribute('data-lit', lit);
+    this.toggleAttribute('data-picked', this.picked);
     // The chip carries the light's own level: 14% at the bottom of the dimmer,
     // 32% at the top. A row of these reads as a room at a glance, which a row
     // of identical rectangles with a dot on them never did.
-    this.toggleAttribute('data-lit', on === true);
     this.style.setProperty(
-      '--tint',
-      on === true ? `${14 + Math.round((Math.min(level ?? 100, 100) / 100) * 18)}%` : '0%',
+      '--hc-shell-colour',
+      lit ? 'var(--hc-accent-active, #ffb661)' : 'var(--hc-ink-muted, #8b95a4)',
     );
+    this.style.setProperty(
+      '--hc-shell-tint',
+      lit ? `${14 + Math.round((Math.min(level ?? 100, 100) / 100) * 18)}%` : '0%',
+    );
+  }
 
-    return html`<button
-      ${inspect(() => this.onDetails?.(d.device_id))}
-      part="pill"
-      ?data-picked=${this.picked}
-      @click=${() => this.onPick?.(d.device_id)}
-    >
-      <span class="tile" part="indicator">${icon(iconFor(d))}</span>
-      <span class="name">${withoutRoom(effectiveName(d), this.room)}</span>
-      ${level !== undefined ? html`<span class="level">${Math.round(level)}%</span>` : ''}
-    </button>`;
+  protected override renderIcon() {
+    return icon(iconFor(this.device));
+  }
+
+  protected override renderPrimary(): unknown {
+    const d = this.device;
+    return d === undefined ? '' : withoutRoom(effectiveName(d), this.room);
+  }
+
+  protected override renderBadge(): unknown {
+    const d = this.device;
+    if (d === undefined || isOn(d) !== true) return nothing;
+    const level = levelOf(d);
+    return level === undefined ? nothing : `${Math.round(level)}%`;
   }
 }
+
+registerWidget('device_pill', 'hc-device-pill');
 
 declare global {
   interface HTMLElementTagNameMap {
