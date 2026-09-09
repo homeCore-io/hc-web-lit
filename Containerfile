@@ -21,6 +21,10 @@ COPY --from=build /app/server ./server
 ENV HC_CONTENT_DIR=/var/lib/hc-web-lit
 ENV HC_WEB_DIR=/app/dist
 ENV HC_PORT=8090
+# Where core is. This server keeps no users of its own: it asks core who a
+# bearer belongs to and what that role may do, because the household already
+# has one identity system and two would eventually disagree.
+ENV HC_CORE_URL=http://homecore:8080
 VOLUME /var/lib/hc-web-lit
 EXPOSE 8090
 

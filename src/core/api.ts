@@ -209,6 +209,18 @@ export class HcApi {
     return this.token !== undefined;
   }
 
+  /**
+   * The bearer, for the one other thing that needs it.
+   *
+   * hc-web-lit's own server checks this token with core rather than keeping a
+   * second set of users, so the content store has to send it. Nothing else
+   * asks, and §19.4 still holds: a widget cannot reach this, because a widget
+   * cannot reach the client.
+   */
+  bearer(): string | undefined {
+    return this.token;
+  }
+
   setToken(token: string | undefined): void {
     this.token = token;
   }

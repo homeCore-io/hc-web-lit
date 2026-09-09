@@ -10,6 +10,7 @@ import { mkdtemp, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { Auth, WRITE_SCOPE } from '../server/auth.ts';
 import { Store } from '../server/store.ts';
 import { ServerContent } from '../src/core/content.js';
 
@@ -122,5 +123,96 @@ describe('the client adapter', () => {
     // reload, not the edit.
     expect(c.read('icon-rules')).toEqual([1]);
     expect(seen).toEqual(['PUT /api/content/icon-rules']);
+  });
+});
+
+describe('who may read and write', () => {
+  const coreSaying = (me: unknown, roles: unknown) =>
+    ((url: string) => {
+      const s = String(url);
+      if (s.endsWith('/auth/me')) {
+        return Promise.resolve(
+          me === undefined
+            ? new Response(null, { status: 401 })
+            : new Response(JSON.stringify(me), { status: 200 }),
+        );
+      }
+      if (s.endsWith('/auth/roles')) {
+        return Promise.resolve(new Response(JSON.stringify(roles), { status: 200 }));
+      }
+      return Promise.resolve(new Response(null, { status: 404 }));
+    }) as unknown as typeof globalThis.fetch;
+
+  const admin = { id: 'u', username: 'admin', role: 'admin' };
+  const roles = [
+    { role: 'admin', scopes: ['dashboards:read', 'dashboards:write'] },
+    { role: 'viewer', scopes: ['dashboards:read'] },
+  ];
+
+  it('finds the bearer, and only a bearer', () => {
+    expect(Auth.bearer('Bearer abc')).toBe('abc');
+    expect(Auth.bearer('bearer abc')).toBe('abc');
+    expect(Auth.bearer('Basic abc')).toBeUndefined();
+    expect(Auth.bearer(undefined)).toBeUndefined();
+  });
+
+  it('takes core’s word for who somebody is, and what they may do', () => {
+    // Verifying the token here would mean sharing core's signing key or
+    // inventing a second set of users. Asking is the whole design.
+    const auth = new Auth({ fetch: coreSaying(admin, roles) });
+    return auth.caller('good').then((caller) => {
+      expect(caller?.role).toBe('admin');
+      expect(caller?.scopes).toContain(WRITE_SCOPE);
+    });
+  });
+
+  it('gives a reader no write scope', async () => {
+    const auth = new Auth({ fetch: coreSaying({ ...admin, role: 'viewer' }, roles) });
+    expect((await auth.caller('good'))?.scopes).not.toContain(WRITE_SCOPE);
+  });
+
+  it('refuses a token core refuses', async () => {
+    const auth = new Auth({ fetch: coreSaying(undefined, roles) });
+    expect(await auth.caller('stale')).toBeUndefined();
+  });
+
+  it('authorises nobody when core cannot be reached', async () => {
+    // An unreachable core is not an authorisation, and failing closed is the
+    // only safe direction.
+    const auth = new Auth({
+      fetch: (() => Promise.reject(new Error('down'))) as unknown as typeof globalThis.fetch,
+    });
+    expect(await auth.caller('anything')).toBeUndefined();
+  });
+
+  it('asks once per token, not once per key', async () => {
+    // A page load reads several keys, and a round trip to core for each would
+    // make this server slower than the thing it stores for.
+    let asked = 0;
+    const auth = new Auth({
+      fetch: ((url: string) => {
+        if (String(url).endsWith('/auth/me')) asked += 1;
+        return coreSaying(admin, roles)(url as unknown as RequestInfo);
+      }) as unknown as typeof globalThis.fetch,
+    });
+    await auth.caller('t');
+    await auth.caller('t');
+    await auth.caller('t');
+    expect(asked).toBe(1);
+  });
+
+  it('caches a rejection too', async () => {
+    // Otherwise a client retrying with a stale token turns this server into a
+    // way to hammer core.
+    let asked = 0;
+    const auth = new Auth({
+      fetch: ((url: string) => {
+        if (String(url).endsWith('/auth/me')) asked += 1;
+        return Promise.resolve(new Response(null, { status: 401 }));
+      }) as unknown as typeof globalThis.fetch,
+    });
+    await auth.caller('stale');
+    await auth.caller('stale');
+    expect(asked).toBe(1);
   });
 });

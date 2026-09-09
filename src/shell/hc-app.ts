@@ -300,7 +300,7 @@ export class HcApp extends LitElement {
       // is not. A static deployment is a supported way to run this, and it
       // should keep a household's rules on the machine they were typed on
       // rather than forget them.
-      const shared = new ServerContent();
+      const shared = new ServerContent({ token: () => this.api?.bearer() });
       if (await shared.load()) this.authored = new Authored(shared);
 
       // Before the first paint, so a mark drawn from a rule is drawn from it

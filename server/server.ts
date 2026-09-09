@@ -18,12 +18,22 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve } from 'node:path';
+import { Auth, WRITE_SCOPE } from './auth.ts';
 import { Store } from './store.ts';
 
 const PORT = Number(process.env['HC_PORT'] ?? 8090);
 const HOST = process.env['HC_HOST'] ?? '0.0.0.0';
 const CONTENT_DIR = resolve(process.env['HC_CONTENT_DIR'] ?? './var');
 const WEB_DIR = resolve(process.env['HC_WEB_DIR'] ?? './dist');
+
+/**
+ * Who may read and write, decided by core.
+ *
+ * The household already has an identity system with roles and scopes, and a
+ * second one here would be a second place to disagree about who somebody is.
+ * The browser holds a bearer from core; this asks core what it is worth.
+ */
+const auth = new Auth();
 
 const store = new Store(CONTENT_DIR, {
   maxBytes: Number(process.env['HC_MAX_BYTES'] ?? 16 * 1024 * 1024),
@@ -91,6 +101,23 @@ export const handler = async (req: IncomingMessage, res: ServerResponse): Promis
 
   try {
     if (url === '/api/health') return send(res, 200, { ok: true, content: CONTENT_DIR });
+
+    // The app itself is not behind the door — a browser has to load the login
+    // screen before it has anything to log in with. Nor is an asset: a browser
+    // sends no Authorization header for an `<img>`, and the id is the sha256
+    // of the bytes, which is core's own reasoning for the same route.
+    if (url.startsWith('/api/') && !/^\/api\/assets\/[0-9a-f]{64}$/.test(url)) {
+      const caller = await auth.caller(Auth.bearer(req.headers.authorization));
+      if (caller === undefined) {
+        res.writeHead(401, { 'www-authenticate': 'Bearer' });
+        return void res.end(JSON.stringify({ error: 'no valid bearer' }));
+      }
+      // Reading is any role core recognises; writing is the scope core says
+      // dashboard-shaped work needs. The roles are core's, not a second set.
+      if (method !== 'GET' && !caller.scopes.includes(WRITE_SCOPE)) {
+        return send(res, 403, { error: `${caller.role} may not write here` });
+      }
+    }
 
     if (url === '/api/content' && method === 'GET') {
       return send(res, 200, { keys: await store.keys() });

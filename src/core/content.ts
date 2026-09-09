@@ -121,10 +121,25 @@ export class ServerContent implements ContentStore {
   private readonly cache = new Map<string, unknown>();
   private readonly base: string;
   private readonly doFetch: typeof globalThis.fetch;
+  private readonly token: () => string | undefined;
 
-  constructor(opts: { base?: string; fetch?: typeof globalThis.fetch } = {}) {
+  constructor(
+    opts: {
+      base?: string;
+      fetch?: typeof globalThis.fetch;
+      /** Core's bearer, which this server checks with core (§8.2). */
+      token?: () => string | undefined;
+    } = {},
+  ) {
     this.base = opts.base ?? '/api/content';
     this.doFetch = opts.fetch ?? globalThis.fetch.bind(globalThis);
+    this.token = opts.token ?? (() => undefined);
+  }
+
+  /** The credential, read at call time: a session can be renewed under us. */
+  private headers(extra: Record<string, string> = {}): Record<string, string> {
+    const token = this.token();
+    return token === undefined ? extra : { ...extra, authorization: `Bearer ${token}` };
   }
 
   /**
@@ -136,11 +151,11 @@ export class ServerContent implements ContentStore {
    */
   async load(): Promise<boolean> {
     try {
-      const res = await this.doFetch(this.base);
+      const res = await this.doFetch(this.base, { headers: this.headers() });
       if (!res.ok) return false;
       const { keys } = (await res.json()) as { keys?: string[] };
       for (const key of keys ?? []) {
-        const one = await this.doFetch(`${this.base}/${key}`);
+        const one = await this.doFetch(`${this.base}/${key}`, { headers: this.headers() });
         if (one.ok) this.cache.set(key, await one.json());
       }
       return true;
@@ -160,14 +175,17 @@ export class ServerContent implements ContentStore {
     this.cache.set(key, value);
     void this.doFetch(`${this.base}/${key}`, {
       method: 'PUT',
-      headers: { 'content-type': 'application/json' },
+      headers: this.headers({ 'content-type': 'application/json' }),
       body: JSON.stringify(value),
     }).catch(() => undefined);
   }
 
   remove(key: string): void {
     this.cache.delete(key);
-    void this.doFetch(`${this.base}/${key}`, { method: 'DELETE' }).catch(() => undefined);
+    void this.doFetch(`${this.base}/${key}`, {
+      method: 'DELETE',
+      headers: this.headers(),
+    }).catch(() => undefined);
   }
 
   keys(): string[] {
