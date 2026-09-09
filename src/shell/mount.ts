@@ -17,6 +17,9 @@ import type { DeviceStore } from '../core/store.js';
 import { actionsIn, type ActionConfig } from '../core/actions.js';
 import { resolveInstance, type TemplateStore } from '../core/templates.js';
 import { tagFor } from '../widgets/registry.js';
+import type { Tokens } from '../design/tokens.js';
+import type { HcContext } from '../sdk/context.js';
+import { contextFor } from '../sdk/host.js';
 
 /** A widget instance as the document stores it. */
 export interface WidgetSpec {
@@ -40,6 +43,12 @@ export interface MountEnv {
   onAction?: (a: ActionConfig) => void;
   /** Where widget templates come from (§5.4). Absent means none are defined. */
   templates?: TemplateStore;
+  /** Open a sheet on a widget spec (§5.6). */
+  onSheet?: (content: WidgetSpec) => void;
+  /** Resolved design tokens, so a widget restyles with the house (§15). */
+  tokens?: Tokens;
+  /** Editing or viewing (§14.2). */
+  mode?: 'view' | 'edit';
 }
 
 /** The properties a mounted widget may be given. */
@@ -65,6 +74,15 @@ export type MountTarget = HTMLElement & {
   env?: MountEnv;
   /** Set on a child: it is inside something, so it draws no chrome (§5.5). */
   nested?: boolean;
+  /**
+   * The capability object (§4.2).
+   *
+   * Set on every widget alongside the individual properties, which are the
+   * same capabilities handed over one at a time. The properties came first and
+   * are what the shape was learned from; this is that shape named, and what a
+   * widget written against the SDK will use.
+   */
+  ctx?: HcContext;
 };
 
 /** Elements already carrying a tap, so a re-render does not stack listeners. */
@@ -115,6 +133,7 @@ export function mountWidget(el: MountTarget, w: WidgetSpec, env: MountEnv): void
 
   // A container mounts its own children and needs what the page had.
   el.env = env;
+  el.ctx = contextFor(env, w);
 
   attachActions(el, w, env);
 }
