@@ -333,3 +333,44 @@ describe('a device_tile that names its device the plural way', () => {
     expect(text(el)).toContain('No device');
   });
 });
+
+describe('a type-specific widget inside a device set', () => {
+  it('is told it is a row, so it draws like its neighbours', async () => {
+    // A fan drew a full 123px card, with its own chrome, in a column of 52px
+    // rows: the right content, visibly not part of the list. The generic card
+    // was already handed `compact` for the same fact.
+    const el = await mount<HcFan>('hc-fan', { device: fan(), row: true });
+    expect(el.hasAttribute('data-row')).toBe(true);
+  });
+
+  it('keeps its surface, because a set is not a container', async () => {
+    // §5.5 suppresses chrome for a widget nested in a *container*, so borders
+    // do not stack. A device set draws a column of rows, and the row's own
+    // surface is what makes it read as one.
+    const el = await mount<HcFan>('hc-fan', { device: fan(), row: true });
+    expect(el.hasAttribute('data-bare')).toBe(false);
+  });
+
+  it('shows its state at the far edge when it has no badge of its own', async () => {
+    // The row form hides `.secondary` because a column of rows reads down the
+    // left and across to the right. That erased the state of every widget
+    // without a badge: presence in a device list showed "Office Motion" and
+    // nothing else.
+    const sensor = base({
+      device_id: 'occ',
+      name: 'Office Occupancy',
+      device_type: 'occupancy_sensor',
+      attributes: { occupied: true },
+    } as Partial<DeviceState>);
+
+    const el = await mount<HcPresence>('hc-presence', { device: sensor, row: true });
+    const trailing = el.shadowRoot?.querySelector('.badge');
+    expect(trailing?.textContent?.trim()).toBe('Occupied');
+  });
+
+  it('leaves a widget that has a badge alone', async () => {
+    // A fan's badge is its percentage; the fallback must not replace it.
+    const el = await mount<HcFan>('hc-fan', { device: fan(), row: true });
+    expect(el.shadowRoot?.querySelector('.badge')?.textContent?.trim()).toBe('51%');
+  });
+});

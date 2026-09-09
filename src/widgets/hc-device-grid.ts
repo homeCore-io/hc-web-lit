@@ -156,6 +156,8 @@ export class HcDeviceGrid extends LitElement {
       device?: DeviceState;
       onCommand?: (r: CommandRequest) => void;
       onArt?: (deviceId: string) => Promise<string | undefined>;
+      row?: boolean;
+      nested?: boolean;
     };
     if (cached === undefined) {
       this.cells.set(d.device_id, el);
@@ -165,6 +167,26 @@ export class HcDeviceGrid extends LitElement {
       attachInspect(el, () => this.onDetails?.(d.device_id));
     }
     el.device = d;
+
+    // **It is in a set, and has to be told.** The generic card is handed
+    // `compact` a few lines up; a type-specific one built on `HcLayoutShell`
+    // takes `row` for the same fact. Without it a fan drew a full 123px card
+    // in a column of 52px rows: the right content, visibly not part of the
+    // list.
+    //
+    // Set on every widget rather than only on shell-derived ones. A widget
+    // that does not know the name ignores it, which is the contract `compact`
+    // already relies on, and an extension that *does* honour it then fits a
+    // set without having been told this rule exists.
+    //
+    // **`nested` is deliberately not set.** §5.5 suppresses chrome for a
+    // widget inside a *container*, so two borders do not stack. A device set
+    // is not that: it draws a column of rows, and the row's own surface is
+    // what makes it read as one. Setting it left the presence rows
+    // transparent between two rows that were not — the same "widgets escaping
+    // their placement" look that gave the card a surface in the first place.
+    el.row = this.mode === 'list';
+
     if (this.onCommand !== undefined) el.onCommand = this.onCommand;
     // A type-specific card gets what the host gave the set. The media card
     // needs the art callback, and a set that kept it drew a player with no

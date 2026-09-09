@@ -203,6 +203,22 @@ export abstract class HcLayoutShell extends LitElement {
   }
 
   override render() {
+    const badge = this.renderBadge();
+
+    // **In a row, the far edge is where the state goes.** The row form hides
+    // `.secondary` because a column of rows reads down the left and across to
+    // the right, and a state tucked under the name breaks both. That is right
+    // for a widget with a badge — a level, a count, a reading — and it silently
+    // erased the state of every widget without one: `hc-presence` in a device
+    // list showed "Office Motion" and nothing else, having been told it was in
+    // a set and having put its only state in the secondary.
+    //
+    // So the badge falls back to the secondary rather than the widget having to
+    // know this rule. A widget that has both keeps both; one that has neither
+    // shows neither. Here rather than in each widget, for the same reason the
+    // shell exists at all: an extension gets it without being told (§7.2).
+    const trailing = this.row && badge === nothing ? this.renderSecondary() : badge;
+
     return html`<div class="shell ${this.offline ? 'offline' : ''}" part="card">
       <div class="head" part="head">
         <span class="tile" part="indicator">${this.renderIcon()}</span>
@@ -210,7 +226,7 @@ export abstract class HcLayoutShell extends LitElement {
           <span class="primary" part="name">${this.renderPrimary()}</span>
           <span class="secondary" part="state">${this.renderSecondary()}</span>
         </span>
-        <span class="badge" part="trailing">${this.renderBadge()}</span>
+        <span class="badge" part="trailing">${trailing}</span>
       </div>
       <div class="controls" part="controls">${this.renderControls()}</div>
     </div>`;
