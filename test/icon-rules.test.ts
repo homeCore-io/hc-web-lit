@@ -217,3 +217,27 @@ describe('removing every rule', () => {
     expect(el.shadowRoot?.querySelectorAll('.rule')).toHaveLength(1);
   });
 });
+
+describe('showing which icon a rule uses', () => {
+  it('marks the stored one, not the first in the list', async () => {
+    // Setting `.value` on the select renders before its options exist, so the
+    // browser falls back to the first — every rule displayed "battery", the
+    // alphabetically first mark, while the stored icons were correct.
+    const el = await editor([
+      { match: 'door sensor', icon: 'door', on: 'name' },
+      { match: 'garage door', icon: 'garage', on: 'name' },
+    ]);
+    const selected = [...(el.shadowRoot?.querySelectorAll('select[aria-label="Icon"]') ?? [])].map(
+      (s) => (s as HTMLSelectElement).value,
+    );
+    expect(selected).toEqual(['door', 'garage']);
+  });
+
+  it('marks what a rule matches against', async () => {
+    const el = await editor([{ match: 'garage', icon: 'garage', on: 'area' }]);
+    const on = el.shadowRoot?.querySelector(
+      'select[aria-label="Match against"]',
+    ) as HTMLSelectElement;
+    expect(on.value).toBe('area');
+  });
+});

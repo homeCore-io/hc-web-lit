@@ -228,6 +228,35 @@ export class HcIconRules extends LitElement {
     this.commit(next);
   }
 
+  /**
+   * Point each select at the value its rule actually holds.
+   *
+   * **After render, because a select cannot be told before its options
+   * exist.** Binding `.value` on the element renders ahead of its `<option>`
+   * children, so the browser falls back to the first one — every rule in this
+   * editor displayed "battery", the alphabetically first mark, while the
+   * stored icons were correct all along. Marking the option with `?selected`
+   * fails the same way: Lit appends the children and resolves the binding
+   * after the select has already settled on a value.
+   *
+   * Nothing was ever corrupted by it. An edit rebuilds a rule from its own
+   * record rather than from the DOM, so the display lied and the data did not
+   * — which is exactly why it survived a screenshot and a passing test suite
+   * and was caught only by reading a value back off a live page.
+   */
+  override updated(): void {
+    const rules = this.rules;
+    this.shadowRoot?.querySelectorAll('.rule').forEach((row, i) => {
+      const rule = rules[i];
+      if (rule === undefined) return;
+      const icon = row.querySelector<HTMLSelectElement>('select[aria-label="Icon"]');
+      if (icon !== null && icon.value !== rule.icon) icon.value = rule.icon;
+      const on = row.querySelector<HTMLSelectElement>('select[aria-label="Match against"]');
+      const want = rule.on ?? 'name';
+      if (on !== null && on.value !== want) on.value = want;
+    });
+  }
+
   private renderRule(rule: IconRule, index: number) {
     const ok = this.valid(rule.match);
     const { matched, shadowed } = ok ? this.taken(index) : { matched: [], shadowed: 0 };
@@ -248,7 +277,6 @@ export class HcIconRules extends LitElement {
       <select
         part="select"
         aria-label="Match against"
-        .value=${rule.on ?? 'name'}
         @change=${(e: Event) =>
           this.edit(index, {
             on: (e.target as HTMLSelectElement).value as NonNullable<IconRule['on']>,
@@ -260,7 +288,6 @@ export class HcIconRules extends LitElement {
       <select
         part="select"
         aria-label="Icon"
-        .value=${rule.icon}
         @change=${(e: Event) => this.edit(index, { icon: (e.target as HTMLSelectElement).value })}
       >
         ${[...markNames()].sort().map((m) => html`<option value=${m}>${humanise(m)}</option>`)}
