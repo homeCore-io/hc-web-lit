@@ -62,7 +62,18 @@ const FACETS: Record<string, (d: DeviceState) => boolean> = {
   doors_windows: (d) =>
     ['door', 'window', 'garage', 'gate'].includes(d.ui_hint ?? '') ||
     d.device_type === 'contact_sensor',
-  power: (d) => 'power' in d.attributes || 'energy' in d.attributes || 'watts' in d.attributes,
+  // **From the declared unit, not the attribute's name.** This asked for
+  // `power`, `energy` or `watts` and matched **nothing** on the reference
+  // house, which publishes `power_w`, `energy_kwh`, `current_a` and `voltage`
+  // — so a facet the real dashboards reference silently selected zero devices,
+  // with nothing anywhere to say so (homeCore#30's second failure mode). The
+  // schema declares `unit: "W"`, `"kWh"`, `"A"`, `"V"`, which is the fact
+  // rather than a guess at spelling, and it correctly leaves out `power_mode`
+  // — a string with no unit that any name-prefix match would have swept in.
+  power: (d) =>
+    Object.values(d.schema?.attributes ?? {}).some((a) =>
+      ['W', 'kW', 'kWh', 'Wh', 'A', 'V'].includes(a.unit ?? ''),
+    ),
 };
 
 const hint = (d: DeviceState): string => d.ui_hint ?? d.device_type ?? '';

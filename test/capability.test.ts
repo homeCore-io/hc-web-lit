@@ -199,3 +199,40 @@ describe('the safety policy', () => {
     expect(checkAction(pico, 'identify')).toEqual({ allow: true });
   });
 });
+
+describe('the power facet', () => {
+  it('reads the declared unit, not the attribute’s spelling', async () => {
+    const { selectDevices } = await import('../src/core/selection.js');
+    // The house publishes `power_w`, `energy_kwh`, `current_a`, `voltage` —
+    // none of which are the words the old test asked for, so a facet the real
+    // dashboards reference selected nothing at all (homeCore#30).
+    const meter = device({
+      device_id: 'plug',
+      device_type: 'switch',
+      attributes: { power_w: 12.4 },
+      schema: {
+        attributes: { power_w: { kind: 'float', unit: 'W' }, on: { kind: 'bool', writable: true } },
+        actions: [],
+      },
+    });
+    const plain = device({
+      device_id: 'lamp',
+      device_type: 'switch',
+      schema: { attributes: { on: { kind: 'bool', writable: true } }, actions: [] },
+    });
+
+    const got = selectDevices({ selection_mode: 'facet', facet: ['power'] }, [meter, plain], {});
+    expect(got.map((d) => d.device_id)).toEqual(['plug']);
+  });
+
+  it('leaves out a power-ish name that declares no unit', async () => {
+    const { selectDevices } = await import('../src/core/selection.js');
+    // `power_mode` is a string with no unit. Any name-prefix match sweeps it
+    // in; the declaration says plainly that it is not a measurement.
+    const roku = device({
+      device_id: 'roku',
+      schema: { attributes: { power_mode: { kind: 'string' } }, actions: [] },
+    });
+    expect(selectDevices({ selection_mode: 'facet', facet: ['power'] }, [roku], {})).toEqual([]);
+  });
+});
