@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { HistoryEntry } from '../src/core/api.js';
+import { setPreferences } from '../src/core/i18n.js';
 import {
   attributesIn,
   clockLabel,
@@ -152,10 +153,29 @@ describe('niceScale', () => {
 });
 
 describe('clockLabel', () => {
+  // Built from local parts rather than parsed from UTC, so the assertion is
+  // about the format and not about where the machine running it sits.
+  const at = new Date(2026, 8, 8, 17, 5).getTime();
+  afterEach(() => setPreferences({}));
+
   it('is a time over hours and a date over days', () => {
-    const at = Date.parse('2026-09-08T17:05:00Z');
-    expect(clockLabel(at, 6 * 3600_000)).toMatch(/^\d{2}:\d{2}$/);
-    expect(clockLabel(at, 7 * 24 * 3600_000)).toMatch(/^\d+\/\d+$/);
+    setPreferences({ locale: 'en-GB' });
+    expect(clockLabel(at, 6 * 3600_000)).toBe('17:05');
+    expect(clockLabel(at, 7 * 24 * 3600_000)).toBe('8 Sept');
+  });
+
+  it('is the locale2019s, on both halves', () => {
+    // 3/9 is the third of September in most of the world and the ninth of
+    // March in the United States. An axis nobody thinks to question is a bad
+    // place to be wrong about that.
+    setPreferences({ locale: 'en-US' });
+    expect(clockLabel(at, 6 * 3600_000)).toBe('5:05 PM');
+    expect(clockLabel(at, 7 * 24 * 3600_000)).toBe('Sep 8');
+  });
+
+  it('takes a household2019s clock over its locale2019s', () => {
+    setPreferences({ locale: 'en-US', clock: '24' });
+    expect(clockLabel(at, 6 * 3600_000)).toBe('17:05');
   });
 });
 

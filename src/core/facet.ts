@@ -21,6 +21,7 @@
 import type { BoolStates } from './api.js';
 import type { DeviceState } from './device.js';
 import { humanise, lowerFirst } from './text.js';
+import { quantity } from './i18n.js';
 
 /**
  * `commandable` — writable attributes or actions; the device takes orders.
@@ -292,10 +293,9 @@ export function formatReading(r: Reading): string {
 
     return r.value ? r.label : `Not ${lowerFirst(r.label)}`;
   }
-  if (typeof r.value === 'number') {
-    const rounded = Math.abs(r.value) >= 100 ? Math.round(r.value) : Math.round(r.value * 10) / 10;
-    const unit = r.unit === undefined ? '' : r.unit === '%' ? '%' : ` ${r.unit}`;
-    return `${rounded}${unit}`;
-  }
+  // A number, in the household's units and this locale's separators. The
+  // rounding rule is unchanged and lives there now: how much precision a
+  // glance can use is not a locale question, but the decimal mark is.
+  if (typeof r.value === 'number') return quantity(r.value, r.unit);
   return String(r.value);
 }

@@ -117,6 +117,25 @@ export interface HcContext {
   /** Resolved design tokens, so a widget restyles with the house (§15). */
   tokens?: Tokens;
 
+  /**
+   * The locale in force, as a BCP 47 tag (§4.2).
+   *
+   * Declared here since §4.2 was written and supplied by nothing until the
+   * i18n scaffolding landed. A widget that formats a number or a time should
+   * hand it to `core/i18n.ts` rather than reach for this, but a widget that
+   * ships its own words needs to know which ones to use.
+   */
+  locale: string;
+
+  /**
+   * What a person asked to see readings in (§4.2).
+   *
+   * Absent members mean "as the plugin published it", which is the default
+   * and the honest one: converting a reading nobody asked to have converted
+   * is how a client invents a fact.
+   */
+  units: { temperature?: 'C' | 'F'; length?: 'cm' | 'in' };
+
   /** Editing or viewing. Advisory to the widget; enforced by the host (§14.2). */
   mode: 'view' | 'edit';
 }

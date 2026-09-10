@@ -12,8 +12,8 @@
  * backed up by copying, and survives this program being replaced. A database
  * would be a dependency bought with nothing.
  */
-import { createHash } from 'node:crypto';
-import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, extname, join, resolve } from 'node:path';
 import { sanitiseSvg, sniff } from './assets.ts';
 
@@ -67,20 +67,59 @@ export class Store {
     }
   }
 
+  /**
+   * One write at a time, per key.
+   *
+   * Two writes to the same key in flight together is not a hypothetical: a
+   * settings widget that clears two fields in the same gesture sends two, and
+   * this store held `{}temperature":"C"}` afterwards — the shorter body
+   * written over the front of the longer one. A household's icon rules go
+   * through here too.
+   */
+  private readonly writing = new Map<string, Promise<void>>();
+
   async writeContent(key: string, value: unknown): Promise<void> {
     if (!SAFE_KEY.test(key)) throw new Error('bad key');
     const body = JSON.stringify(value);
     if (Buffer.byteLength(body) > this.limits.maxBytes) throw new Error('too large');
 
-    const file = this.path('content', `${key}.json`);
+    // Queued behind whatever is already writing this key, so the file holds
+    // one of the bodies rather than a blend of two. A failed write must not
+    // block the next one, hence the caught predecessor.
+    const after = (this.writing.get(key) ?? Promise.resolve()).catch(() => undefined);
+    const mine = after.then(() => this.replace(this.path('content', `${key}.json`), body));
+    this.writing.set(key, mine);
+    try {
+      await mine;
+    } finally {
+      if (this.writing.get(key) === mine) this.writing.delete(key);
+    }
+  }
+
+  /**
+   * Put these bytes there, or leave what was there alone.
+   *
+   * **Written beside and renamed**, which the previous version said it did
+   * and did not: it wrote a temporary file, deleted the target, wrote the
+   * target directly and deleted the temporary — so the window where the file
+   * did not exist, or held half a body, was real. `rename` over an existing
+   * file is atomic, so a reader sees the old content or the new one and never
+   * neither.
+   *
+   * The temporary name is unique per write as well as per process: a shared
+   * one is two concurrent writes using the same scratch file, which is the
+   * bug this pair of functions exists to close.
+   */
+  private async replace(file: string, body: string): Promise<void> {
     await mkdir(dirname(file), { recursive: true });
-    // Written beside and renamed, so a crash halfway through leaves the old
-    // content rather than half the new content.
-    const tmp = `${file}.${process.pid}.tmp`;
-    await writeFile(tmp, body);
-    await rm(file, { force: true });
-    await writeFile(file, body);
-    await rm(tmp, { force: true });
+    const tmp = `${file}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+      await writeFile(tmp, body);
+      await rename(tmp, file);
+    } catch (e) {
+      await rm(tmp, { force: true });
+      throw e;
+    }
   }
 
   async removeContent(key: string): Promise<void> {

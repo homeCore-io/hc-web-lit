@@ -9,8 +9,7 @@
 import { css, html, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import type { DeviceState } from '../core/device.js';
-import { formatReading, readingOf } from '../core/facet.js';
-import { humanise } from '../core/text.js';
+import { formatReading, readingAt, readingOf } from '../core/facet.js';
 import { registerWidget } from '../core/registry.js';
 import { HcLayoutShell } from '../sdk/shell.js';
 import { icon, iconFor, metricVar } from '../design/icons.js';
@@ -89,16 +88,14 @@ export class HcDeviceReading extends HcLayoutShell {
     const named = this.config['attribute'];
     if (typeof named !== 'string' || named === '') return readingOf(d);
 
-    const value = d.attributes[named];
-    if (value === undefined || value === null) return undefined;
-    const declared = d.schema?.attributes?.[named];
-    return {
-      key: named,
-      value,
-      label: declared?.display_name ?? humanise(named),
-      ...(declared?.unit !== undefined ? { unit: declared.unit } : {}),
-      ...(declared?.states !== undefined ? { states: declared.states } : {}),
-    };
+    // `readingAt`, not a reading built here. Resolving a unit is fiddlier than
+    // it looks: it may be declared on the schema *or* published beside the
+    // value as `<key>_unit`, and the published one wins (homeCore#40 — Hue
+    // declares degrees Celsius on an attribute it publishes in Fahrenheit).
+    // This built its own and read only the declared unit, so every Ecowitt
+    // sensor in the house drew "72.5" with no unit at all: those plugins
+    // publish the unit and declare nothing.
+    return readingAt(d, named);
   }
 }
 

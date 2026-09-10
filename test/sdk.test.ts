@@ -59,9 +59,21 @@ describe('the context a widget is given', () => {
     // §3 Rule 3: narrow enough that every call could be a message. A context
     // carrying the store would make isolating a widget a rewrite.
     const ctx = contextFor(env(), { type: 'text' }) as unknown as Record<string, unknown>;
+
+    // The members §4.2 declares as *values* rather than calls: what mode this
+    // is, the resolved tokens, and the locale and units a widget needs to draw
+    // its own words. The rule is about not handing over a host object, not
+    // about everything being a call — so these are checked for that rather
+    // than skipped.
+    const data = new Set(['mode', 'tokens', 'locale', 'units']);
+
     for (const [key, value] of Object.entries(ctx)) {
-      if (key === 'mode' || key === 'tokens') continue;
-      expect(typeof value, key).toBe('function');
+      if (!data.has(key)) {
+        expect(typeof value, key).toBe('function');
+        continue;
+      }
+      // Plain data all the way down: nothing to reach the host through.
+      expect(JSON.parse(JSON.stringify(value ?? null)), key).toEqual(value ?? null);
     }
   });
 

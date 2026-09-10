@@ -13,6 +13,7 @@
  * exactly the shape of these functions.
  */
 import type { HistoryEntry } from './api.js';
+import { clock, day } from './i18n.js';
 
 export interface Point {
   at: number;
@@ -184,16 +185,17 @@ export function niceScale(
   return { lo, hi, step, lines };
 }
 
-/** A time, as short as it can be and still unambiguous over the window. */
+/**
+ * A time, as short as it can be and still unambiguous over the window.
+ *
+ * Both halves are the locale's now: `3/9` is the third of September in most
+ * of the world and the ninth of March in the United States, which is not a
+ * detail to get wrong on an axis nobody thinks to question.
+ */
 export function clockLabel(at: number, spanMs: number): string {
   const d = new Date(at);
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mm = String(d.getMinutes()).padStart(2, '0');
   // Over a day or more the hour alone is not enough to place a point.
-  if (spanMs > 36 * 3600_000) {
-    return `${d.getDate()}/${d.getMonth() + 1}`;
-  }
-  return `${hh}:${mm}`;
+  return spanMs > 36 * 3600_000 ? day(d) : clock(d);
 }
 
 /** The point nearest an x position, for a hover readout. */

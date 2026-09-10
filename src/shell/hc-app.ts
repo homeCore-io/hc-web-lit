@@ -24,6 +24,7 @@ import type { IconRule } from '../design/icons.js';
 import { LastKnown, ageOf } from '../core/last-known.js';
 import type { CommandEvent } from '../core/plugins.js';
 import type { Vocabulary } from '../core/vocabulary.js';
+import { since, type Preferences } from '../core/i18n.js';
 import { ExtensionSource, type InstalledExtensions } from '../ext/install.js';
 import type { CommandRequest } from '../core/widget.js';
 import { effectiveName, isOn } from '../core/present.js';
@@ -72,24 +73,19 @@ import '../widgets/hc-swipe.js';
 import '../widgets/hc-tabs.js';
 import '../widgets/hc-accordion.js';
 import '../widgets/hc-property-panel.js';
+import '../widgets/hc-preferences.js';
 
 type Phase = 'idle' | 'connecting' | 'ready' | 'failed';
 
 /**
  * How long since the house said anything, in words rather than a timestamp.
  *
- * Rounded coarsely on purpose: nobody standing in front of a panel needs
- * seconds, and a number that ticks draws the eye to itself rather than to what
- * it is about.
+ * The rounding and the words moved to `core/i18n.ts` when the client learned
+ * about locales; kept as a name here because the shell and its tests have
+ * always called it this, and "since" alone says less at the call site.
  */
 export function sinceHeard(at: number): string {
-  if (at === 0) return 'not yet';
-  const secs = Math.max(0, Math.round((Date.now() - at) / 1000));
-  if (secs < 45) return 'just now';
-  const mins = Math.round(secs / 60);
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.round(mins / 60);
-  return hours < 24 ? `${hours}h ago` : `${Math.round(hours / 24)}d ago`;
+  return since(at);
 }
 
 @customElement('hc-app')
@@ -388,8 +384,40 @@ export class HcApp extends LitElement {
   private readonly saveIconRules = (rules: IconRule[]): void => {
     this.authored.saveIconRules(rules);
     this.authored.apply();
-    this.store.reset(this.store.list());
+    this.repaint();
+  };
+
+  /**
+   * Redraw everything that draws a device, after something that is not a
+   * device changed.
+   *
+   * **Fresh objects, not the ones already held.** A widget is handed its
+   * device by assignment and Lit compares by identity, so resetting the store
+   * with the very objects it contains notifies every subscriber and changes
+   * no property — and nothing re-renders. Icon rules and the household's
+   * units are both module state that no device carries, so there is no other
+   * signal to send.
+   *
+   * Found by switching temperature to Celsius on a live page and watching
+   * every reading stay in Fahrenheit while the settings widget beside them
+   * updated. 184 shallow copies once per settings change is not a cost worth
+   * optimising.
+   */
+  private repaint(): void {
+    this.store.reset(this.store.list().map((d) => ({ ...d })));
     this.requestUpdate();
+  }
+
+  /**
+   * Save the household's locale, units and clock, and redraw the house.
+   *
+   * The same signal the icon rules need and for the same reason: a preference
+   * is module state that nothing observes, so every card that already drew a
+   * number has to be told that the number now reads differently.
+   */
+  private readonly savePreferences = (next: Preferences): void => {
+    this.authored.savePreferences(next);
+    this.repaint();
   };
 
   private readonly plugins = {
@@ -441,6 +469,7 @@ export class HcApp extends LitElement {
       plugins: this.plugins,
       onUpdateDevice: this.updateDevice,
       onSaveIconRules: this.saveIconRules,
+      onSavePreferences: this.savePreferences,
       ...(this.vocabulary !== undefined ? { vocabulary: this.vocabulary } : {}),
       ...(this.panelScopes !== undefined ? { scopes: this.panelScopes } : {}),
       templates: this.authored.templates(),
@@ -1047,6 +1076,7 @@ export class HcApp extends LitElement {
         .plugins=${this.plugins}
         .onUpdateDevice=${this.updateDevice}
         .onSaveIconRules=${this.saveIconRules}
+        .onSavePreferences=${this.savePreferences}
         .vocabulary=${this.vocabulary}
         .scopes=${this.panelScopes}
         .templates=${this.authored.templates()}

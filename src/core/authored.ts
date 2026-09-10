@@ -13,8 +13,9 @@
 import type { ContentStore } from './content.js';
 import { Templates, type WidgetTemplate } from './templates.js';
 import { setIconRules, type IconRule } from '../design/icons.js';
+import { setPreferences, type Preferences } from './i18n.js';
 
-const KEYS = { templates: 'templates', icons: 'icon-rules' } as const;
+const KEYS = { templates: 'templates', icons: 'icon-rules', prefs: 'preferences' } as const;
 
 export class Authored {
   private readonly templateStore: Templates;
@@ -32,6 +33,7 @@ export class Authored {
    */
   apply(): void {
     setIconRules(this.iconRules());
+    setPreferences(this.preferences());
   }
 
   templates(): Templates {
@@ -54,6 +56,26 @@ export class Authored {
     // rather than as a save.
     this.store.write(KEYS.icons, [...rules]);
     setIconRules(rules);
+  }
+
+  /**
+   * Locale, units and clock — what a household reads its house in (§4.2).
+   *
+   * Authored content rather than a device setting: it is a property of the
+   * people, and it belongs beside the icon rules and the templates that are
+   * also theirs. Empty is the normal state and means "as it comes" — the
+   * browser's locale, and every reading in the unit its plugin published.
+   */
+  preferences(): Preferences {
+    const saved = this.store.read<Preferences>(KEYS.prefs);
+    return typeof saved === 'object' && saved !== null ? saved : {};
+  }
+
+  savePreferences(next: Preferences): void {
+    // Written and applied together, for the reason the icon rules are: a
+    // preference that was saved and is not in force reads as a bug.
+    this.store.write(KEYS.prefs, next);
+    setPreferences(next);
   }
 
   /** Everything authored, for an export or a look at what is stored. */

@@ -13,6 +13,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { activityFrom, type Activity, type LogEntry } from '../core/activity.js';
 import type { DeviceState } from '../core/device.js';
 import { registerWidget } from '../core/registry.js';
+import { clock as formatClock } from '../core/i18n.js';
 
 export type EventFetch = (opts: { limit: number }) => Promise<LogEntry[]>;
 
@@ -143,9 +144,7 @@ export class HcEventFeed extends LitElement {
 function clock(at: string | undefined): string {
   if (at === undefined) return '';
   const d = new Date(at);
-  return Number.isNaN(d.getTime())
-    ? ''
-    : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return Number.isNaN(d.getTime()) ? '' : formatClock(d);
 }
 
 registerWidget('event_feed', 'hc-event-feed');

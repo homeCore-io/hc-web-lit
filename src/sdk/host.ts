@@ -18,6 +18,7 @@ import type { PluginRunner } from '../core/plugins.js';
 import type { IconRule } from '../design/icons.js';
 import type { Tokens } from '../design/tokens.js';
 import type { Vocabulary } from '../core/vocabulary.js';
+import { locale, units, type Preferences } from '../core/i18n.js';
 
 /**
  * Everything a widget is given that it cannot reach for itself.
@@ -89,6 +90,14 @@ export interface MountEnv {
   /** Resolved design tokens, so a widget restyles with the house (§15). */
   tokens?: Tokens;
   /**
+   * Save the household's locale, units and clock, and put them into force.
+   *
+   * A capability rather than the store, exactly as the icon rules are: what a
+   * widget needs is the ability to *change* them, not a reference to where
+   * they live.
+   */
+  onSavePreferences?: (next: Preferences) => void;
+  /**
    * Core's dashboard vocabulary (§4.4), when this session has reached core.
    *
    * Read by the property panel to generate its controls. Optional and often
@@ -133,7 +142,15 @@ export function contextFor(env: MountEnv, spec: WidgetSpec): HcContext {
       const device = typeof named === 'string' ? store?.get(named) : undefined;
       const devices: Record<string, DeviceState> = {};
       for (const d of store?.list() ?? []) devices[d.device_id] = d;
-      return evaluate(source, { devices, ...(device !== undefined ? { device } : {}), ...scope });
+      // `user` is §6.4's named parameter for locale, units and theme — never
+      // identity. Declared in the scope since P1 and supplied by nothing
+      // until there were preferences to put in it.
+      return evaluate(source, {
+        devices,
+        user: { locale: locale(), units: units() },
+        ...(device !== undefined ? { device } : {}),
+        ...scope,
+      });
     },
 
     call(request) {
@@ -170,6 +187,15 @@ export function contextFor(env: MountEnv, spec: WidgetSpec): HcContext {
     },
 
     ...(env.tokens !== undefined ? { tokens: env.tokens } : {}),
+    // Read at build time rather than captured: a context outlives a
+    // preference change, and a widget asking for the locale wants the one in
+    // force now.
+    get locale() {
+      return locale();
+    },
+    get units() {
+      return units();
+    },
     mode: env.mode ?? 'view',
   };
 }

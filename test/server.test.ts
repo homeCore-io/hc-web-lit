@@ -55,6 +55,41 @@ describe('content on a disk', () => {
     expect(await store.keys()).toEqual([]);
     expect(await store.readContent('anything')).toBeUndefined();
   });
+
+  it('survives two writes to one key at the same time', async () => {
+    // Not hypothetical: a settings widget clearing two fields in one gesture
+    // sent two writes, and the file was left holding `{}temperature":"C"}` —
+    // the shorter body written over the front of the longer one, which is
+    // neither of the things anybody asked to store. The household's icon
+    // rules go through the same function.
+    await Promise.all([
+      store.writeContent('prefs', { temperature: 'C', locale: 'de-DE' }),
+      store.writeContent('prefs', {}),
+      store.writeContent('prefs', { locale: 'fr-FR' }),
+    ]);
+
+    // One of the three, whole. Which one is a race and not worth pinning;
+    // that it is one of them, and readable, is the property.
+    const got = await store.readContent('prefs');
+    expect([{ temperature: 'C', locale: 'de-DE' }, {}, { locale: 'fr-FR' }]).toContainEqual(got);
+  });
+
+  it('leaves no scratch files behind', async () => {
+    // A shared temporary name is two concurrent writes using one scratch
+    // file, which is half of how the corruption above happened.
+    await Promise.all([
+      store.writeContent('a', { n: 1 }),
+      store.writeContent('a', { n: 2 }),
+      store.writeContent('b', { n: 3 }),
+    ]);
+    expect((await readdir(join(root, 'content'))).filter((f) => f.endsWith('.tmp'))).toEqual([]);
+  });
+
+  it('leaves the old content alone when a write is refused', async () => {
+    await store.writeContent('keep', { good: true });
+    await expect(store.writeContent('keep', { x: 'y'.repeat(2000) })).rejects.toThrow();
+    expect(await store.readContent('keep')).toEqual({ good: true });
+  });
 });
 
 describe('assets', () => {
