@@ -15,6 +15,7 @@ import { builtInSeeds, defaultSkin } from '../design/seeds.js';
 import { deriveTokens } from '../design/tokens.js';
 import type { DashboardBreakpoint, DashboardDefinition } from '../core/dashboard.js';
 import { withWidgetConfig } from '../core/dashboard.js';
+import { duplicatePage, newPage } from '../core/pages.js';
 import { EventStream } from '../core/events.js';
 import { check, checkAction } from '../core/safety.js';
 import { DeviceStore } from '../core/store.js';
@@ -22,7 +23,7 @@ import { Authored } from '../core/authored.js';
 import { BrowserContent, ServerContent } from '../core/content.js';
 import { PanelCredential } from '../core/panel.js';
 import type { IconRule } from '../design/icons.js';
-import { LastKnown, ageOf } from '../core/last-known.js';
+import { pagesToShow, LastKnown, ageOf } from '../core/last-known.js';
 import type { CommandEvent } from '../core/plugins.js';
 import type { Vocabulary } from '../core/vocabulary.js';
 import { since, type Preferences } from '../core/i18n.js';
@@ -125,6 +126,24 @@ export class HcApp extends LitElement {
     }
     header select {
       max-width: 40vw;
+    }
+    header button {
+      min-height: var(--hc-density-min-tap, 44px);
+      padding: 0 0.625rem;
+      border: 1px solid var(--hc-stroke-hairline, #262d38);
+      border-radius: var(--hc-radius-sm, 8px);
+      background: var(--hc-surface-raised, #141922);
+      color: var(--hc-ink, #e9edf2);
+      font: inherit;
+      cursor: pointer;
+    }
+    header button:focus-visible {
+      outline: 2px solid var(--hc-stroke-focus, #7cc4ff);
+      outline-offset: 2px;
+    }
+    header button.danger {
+      border-color: color-mix(in srgb, var(--hc-accent-danger, #ff7b72) 55%, transparent);
+      color: var(--hc-accent-danger, #ff7b72);
     }
     /* Fixed rather than in the flow: a panel's layout should not move when the
        network drops, or every reconnect reflows the page somebody is reading. */
@@ -496,6 +515,51 @@ export class HcApp extends LitElement {
     // network is still the ordinary case (`ServerContent`), and a caller that
     // could not await this would have no way to report a failure.
     return Promise.resolve();
+  };
+
+  /**
+   * Whether "delete this page" has been asked once already.
+   *
+   * There is no undo and no bin. The icon rules editor learned this by having
+   * a session wipe a household's rules with one click, and the answer was the
+   * same then: ask in place, cheaply, rather than in a dialog somebody is
+   * trained to dismiss.
+   */
+  @state() private confirmingDelete = '';
+
+  /** A new page, and it opens on it — nobody makes a page to not look at it. */
+  private readonly addPage = (): void => {
+    const name = `Page ${this.docs.length + 1}`;
+    const page = newPage(
+      name,
+      this.docs.map((d) => d.id),
+      this.current?.owner_user_id ?? '',
+    );
+    this.docs = this.authored.saveDashboard(page);
+    this.current = page;
+  };
+
+  /**
+   * A copy of the page on screen.
+   *
+   * The authoring move a household actually has before Phase 10: take the page
+   * that nearly does what you want and change the copy.
+   */
+  private readonly copyPage = (): void => {
+    const doc = this.current;
+    if (doc === undefined) return;
+    const copy = duplicatePage(
+      doc,
+      this.docs.map((d) => d.id),
+    );
+    this.docs = this.authored.saveDashboard(copy);
+    this.current = copy;
+  };
+
+  private readonly removePage = (id: string): void => {
+    this.confirmingDelete = '';
+    this.docs = this.authored.deleteDashboard(id);
+    if (this.current?.id === id) this.current = this.docs[0];
   };
 
   /**
@@ -876,10 +940,22 @@ export class HcApp extends LitElement {
    */
   private showLastKnown(): boolean {
     const snapshot = this.lastKnown.load();
-    if (snapshot === undefined || snapshot.dashboards.length === 0) return false;
+    if (snapshot === undefined) return false;
+
+    // **The pages this client stores win over the snapshot's copy of them.**
+    // A snapshot is a photograph of the house taken every few minutes; a page
+    // is a document somebody edited, possibly since. Restoring the photograph
+    // over the document would quietly undo yesterday's edit on a panel that
+    // came back after a power cut — and the panel would look fine.
+    //
+    // The snapshot is still where the *devices* come from, and still where
+    // the pages come from when this client's own store cannot be reached
+    // either, which on a static deployment is the same outage.
+    const docs = pagesToShow(this.authored.dashboards(), snapshot.dashboards);
+    if (docs.length === 0) return false;
 
     this.store.reset(snapshot.devices);
-    this.docs = snapshot.dashboards;
+    this.docs = [...docs];
     this.current = this.docs.find((d) => d.id === this.current?.id) ?? this.docs[0];
     this.lastHeard = Date.now() - ageOf(snapshot);
     this.restored = true;
@@ -1056,6 +1132,7 @@ export class HcApp extends LitElement {
                       </option>`,
                   )}
                 </select>
+                ${this.pageControls()}
                 <select
                   @change=${(e: Event) => {
                     this.skin = (e.target as HTMLSelectElement).value;
@@ -1128,6 +1205,53 @@ export class HcApp extends LitElement {
           : nothing
       }
     `;
+  }
+
+  /**
+   * Make a page, copy one, forget one.
+   *
+   * In the chrome rather than on a page, because these are things you do *to*
+   * a page and a widget that could delete the page it is on is a widget that
+   * can delete itself mid-render. Hidden in kiosk with the rest of the header:
+   * a wall panel is for looking at.
+   *
+   * Absent entirely when this session cannot write content — §5.11's rule
+   * again, and the reason is sharper here than usual, because the failure
+   * would be a page somebody made that vanishes on reload.
+   */
+  private pageControls() {
+    if (!this.mayWriteDashboards()) return nothing;
+    const id = this.current?.id;
+
+    return html`<button title="Make a page" @click=${this.addPage}>+ Page</button> ${
+        id === undefined
+          ? nothing
+          : this.confirmingDelete === id
+            ? html`<button
+                  class="danger"
+                  @click=${() => {
+                    this.removePage(id);
+                  }}
+                >
+                  Delete “${this.current?.name}”?
+                </button>
+                <button
+                  @click=${() => {
+                    this.confirmingDelete = '';
+                  }}
+                >
+                  Keep it
+                </button>`
+            : html`<button title="Copy this page" @click=${this.copyPage}>Duplicate</button>
+                <button
+                  title="Delete this page"
+                  @click=${() => {
+                    this.confirmingDelete = id;
+                  }}
+                >
+                  Delete
+                </button>`
+      }`;
   }
 
   private body() {

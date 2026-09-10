@@ -8,7 +8,7 @@
  * these pin is that the restored view is *honest* — old, and saying so.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { LastKnown, ageOf, type Snapshot } from '../src/core/last-known.js';
+import { pagesToShow, LastKnown, ageOf, type Snapshot } from '../src/core/last-known.js';
 import type { DeviceState } from '../src/core/device.js';
 import type { DashboardDefinition } from '../src/core/dashboard.js';
 
@@ -165,5 +165,24 @@ describe('storage that will not cooperate', () => {
     } finally {
       Object.defineProperty(globalThis, 'localStorage', { value: real, configurable: true });
     }
+  });
+});
+
+describe('which pages a restored panel draws', () => {
+  it('prefers the stored document to the snapshot’s copy of it', () => {
+    // A snapshot is a photograph taken every few minutes; a page is a
+    // document somebody edited, possibly since. Restoring the photograph over
+    // the document would quietly undo yesterday's edit, and the panel would
+    // look fine while doing it.
+    expect(pagesToShow(['edited'], ['old'])).toEqual(['edited']);
+  });
+
+  it('falls back to the snapshot when this client’s store is unreachable too', () => {
+    // Which on a static deployment is the same outage.
+    expect(pagesToShow([], ['old'])).toEqual(['old']);
+  });
+
+  it('has nothing to draw when neither has anything', () => {
+    expect(pagesToShow([], [])).toEqual([]);
   });
 });

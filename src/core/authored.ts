@@ -91,6 +91,18 @@ export class Authored {
     return next;
   }
 
+  /**
+   * Forget a page.
+   *
+   * There is no undo and no bin, which is why the surface that calls this asks
+   * twice — the same lesson the icon rules editor learned the hard way.
+   */
+  deleteDashboard(id: string): DashboardDefinition[] {
+    const next = this.dashboards().filter((d) => d.id !== id);
+    this.store.write(KEYS.dashboards, next);
+    return next;
+  }
+
   /** Whether the one-time takeover from core has happened. */
   imported(): boolean {
     return this.store.read<boolean>(KEYS.imported) === true;

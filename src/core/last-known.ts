@@ -142,3 +142,20 @@ export class LastKnown {
 export function ageOf(snapshot: Snapshot, now = Date.now()): number {
   return Math.max(0, now - snapshot.at);
 }
+
+/**
+ * Which pages a restored panel should draw.
+ *
+ * **A document beats a photograph of one.** The snapshot is taken every few
+ * minutes to survive an outage; a page is a thing somebody edited, possibly
+ * since. Restoring the snapshot's copy over the stored one would quietly undo
+ * yesterday's edit on a panel that came back after a power cut, and the panel
+ * would look perfectly fine while doing it.
+ *
+ * The snapshot's copy still matters, for the case it was written for: this
+ * client's own store unreachable too, which on a static deployment is the same
+ * outage.
+ */
+export function pagesToShow<T>(stored: readonly T[], snapshot: readonly T[]): readonly T[] {
+  return stored.length > 0 ? stored : snapshot;
+}
