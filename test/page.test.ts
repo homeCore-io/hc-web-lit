@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { actionsIn, actuates, tapIn } from '../src/core/actions.js';
 import { resolveConfig } from '../src/core/bindings.js';
 import type { DashboardDefinition } from '../src/core/dashboard.js';
@@ -328,5 +328,193 @@ describe('a page being edited, rather than a page being left', () => {
 
     expect(drawn(el)).not.toBe(first);
     expect(says(el)).toContain('Back');
+  });
+});
+
+describe('a page being arranged rather than used', () => {
+  const tappable = (): DashboardDefinition =>
+    base({
+      widgets: [{ id: 't', type: 'text', config: { text: 'Hall', on_tap: { do: 'toggle' } } }],
+      layouts: [
+        {
+          breakpoint: 'desktop',
+          columns: 12,
+          row_height: 120,
+          gap: 12,
+          placements: [{ widget_id: 't', x: 0, y: 0, w: 6, h: 1 }],
+        },
+      ],
+    });
+
+  const press = (el: HcPage): void => {
+    const card = el.shadowRoot?.querySelector('hc-text') as HTMLElement | null;
+    card?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  };
+
+  it('does nothing when a placement is pressed', async () => {
+    // Arranging a page means pressing on the things on it, and the things on
+    // a page are a household's locks and lights.
+    const ran = vi.fn();
+    const el = document.createElement('hc-page');
+    el.doc = tappable();
+    el.store = new DeviceStore();
+    el.onAction = ran;
+    el.mode = 'edit';
+    document.body.append(el);
+    await el.updateComplete;
+
+    press(el);
+    expect(ran).not.toHaveBeenCalled();
+  });
+
+  it('acts again the moment it stops being edited', async () => {
+    // The listeners are attached once and the element is reused, so a mode
+    // read at attach time would leave the page inert for good.
+    const ran = vi.fn();
+    const el = document.createElement('hc-page');
+    el.doc = tappable();
+    el.store = new DeviceStore();
+    el.onAction = ran;
+    el.mode = 'edit';
+    document.body.append(el);
+    await el.updateComplete;
+    press(el);
+    expect(ran).not.toHaveBeenCalled();
+
+    el.mode = 'view';
+    await el.updateComplete;
+    press(el);
+    expect(ran).toHaveBeenCalledWith({ do: 'toggle' });
+  });
+});
+
+describe('dragging a widget on a page being arranged', () => {
+  /**
+   * jsdom has neither `PointerEvent` nor pointer capture.
+   *
+   * Shimmed rather than skipped: the arithmetic between a finger and a cell
+   * is the part worth pinning, and it does not need a real browser to be
+   * wrong. The gesture itself is checked in one.
+   */
+  class FakePointerEvent extends MouseEvent {
+    readonly pointerId: number;
+    constructor(type: string, init: MouseEventInit & { pointerId?: number } = {}) {
+      super(type, init);
+      this.pointerId = init.pointerId ?? 1;
+    }
+  }
+  beforeEach(() => {
+    (globalThis as unknown as { PointerEvent: unknown }).PointerEvent = FakePointerEvent;
+    Element.prototype.setPointerCapture = () => undefined;
+    Element.prototype.releasePointerCapture = () => undefined;
+  });
+
+  const page = (): DashboardDefinition =>
+    base({
+      widgets: [{ id: 't', type: 'text', config: { text: 'Hall' } }],
+      layouts: [
+        {
+          breakpoint: 'desktop',
+          columns: 12,
+          row_height: 100,
+          gap: 0,
+          placements: [{ widget_id: 't', x: 0, y: 0, w: 6, h: 2 }],
+        },
+      ],
+    });
+
+  const arranged = async (placed: (id: string, box: unknown) => Promise<void>): Promise<HcPage> => {
+    const el = document.createElement('hc-page');
+    el.doc = page();
+    el.store = new DeviceStore();
+    el.onPlaceWidget = placed;
+    el.mode = 'edit';
+    document.body.append(el);
+    await el.updateComplete;
+
+    // jsdom lays nothing out, so the grid has no width to measure — and a
+    // drag that cannot be measured moves nothing, deliberately. 1200px over
+    // 12 columns with no gap is 100px a cell, which is what the numbers below
+    // assume.
+    const grid = el.shadowRoot?.querySelector('.grid');
+    Object.defineProperty(grid as Element, 'clientWidth', { value: 1200, configurable: true });
+    return el;
+  };
+
+  /** The handle by name, so a missing one fails as a missing handle. */
+  const handleIn = (el: HcPage, which: 'grab' | 'grip'): Element => {
+    const found = el.shadowRoot?.querySelector(`.${which}`);
+    expect(found, `no .${which} handle`).not.toBeNull();
+    return found as Element;
+  };
+
+  const drag = (handle: Element, byX: number, byY: number): void => {
+    handle.dispatchEvent(
+      new FakePointerEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0, pointerId: 1 }),
+    );
+    handle.dispatchEvent(
+      new FakePointerEvent('pointermove', { clientX: byX, clientY: byY, pointerId: 1 }),
+    );
+    handle.dispatchEvent(
+      new FakePointerEvent('pointerup', { clientX: byX, clientY: byY, pointerId: 1 }),
+    );
+  };
+
+  it('offers no handles while the page is being used', async () => {
+    const el = document.createElement('hc-page');
+    el.doc = page();
+    el.store = new DeviceStore();
+    el.onPlaceWidget = async () => undefined;
+    document.body.append(el);
+    await el.updateComplete;
+    expect(el.shadowRoot?.querySelector('.grab')).toBeNull();
+  });
+
+  it('moves by whole cells, which is the magnet', async () => {
+    // §14.1's coarse magnet on a packed page is not a separate rule: a cell
+    // is the unit, so rounding the pixels to cells is the magnet.
+    const placed = vi.fn(async () => undefined);
+    const el = await arranged(placed);
+    drag(handleIn(el, 'grab'), 250, 200);
+    expect(placed).toHaveBeenCalledWith('t', { x: 3, y: 2, w: 6, h: 2 });
+  });
+
+  it('resizes from the other corner', async () => {
+    const placed = vi.fn(async () => undefined);
+    const el = await arranged(placed);
+    drag(handleIn(el, 'grip'), 200, 100);
+    expect(placed).toHaveBeenCalledWith('t', { x: 0, y: 0, w: 8, h: 3 });
+  });
+
+  it('does not write when nothing moved', async () => {
+    // A press that moved nothing is a press, and writing the numbers it
+    // already had would be a save nobody asked for.
+    const placed = vi.fn(async () => undefined);
+    const el = await arranged(placed);
+    drag(handleIn(el, 'grab'), 3, 2);
+    expect(placed).not.toHaveBeenCalled();
+  });
+
+  it('never moves a widget off the page', async () => {
+    // Dragged hard to the left and a little down: the left edge holds and the
+    // move down still happens.
+    const placed = vi.fn(async () => undefined);
+    const el = await arranged(placed);
+    drag(handleIn(el, 'grab'), -900, 200);
+    expect(placed).toHaveBeenCalledWith('t', { x: 0, y: 2, w: 6, h: 2 });
+  });
+
+  it('is not a move when the clamp puts it back where it was', async () => {
+    const placed = vi.fn(async () => undefined);
+    const el = await arranged(placed);
+    drag(handleIn(el, 'grab'), -900, -900);
+    expect(placed).not.toHaveBeenCalled();
+  });
+
+  it('keeps a widget grabbable, however small it is dragged', async () => {
+    const placed = vi.fn(async () => undefined);
+    const el = await arranged(placed);
+    drag(handleIn(el, 'grip'), -900, -900);
+    expect(placed).toHaveBeenCalledWith('t', { x: 0, y: 0, w: 1, h: 1 });
   });
 });

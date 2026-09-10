@@ -155,3 +155,28 @@ describe('the base class', () => {
     }).not.toThrow();
   });
 });
+
+describe('what the context refuses while a page is being arranged', () => {
+  it('performs neither a command nor an action', async () => {
+    // §14.2. "Widgets should check the mode" is a request, not a defence: a
+    // drag that started on a lock card and actuated it would be the worst bug
+    // this client could have.
+    const onCommand = vi.fn();
+    const onAction = vi.fn();
+    const ctx = contextFor({ ...env({ onCommand, onAction }), mode: 'edit' }, { type: 'text' });
+
+    ctx.call({ deviceId: 'hue_1', patch: { on: true } });
+    ctx.action({ do: 'toggle' });
+
+    expect(onCommand).not.toHaveBeenCalled();
+    expect(onAction).not.toHaveBeenCalled();
+    expect(ctx.mode).toBe('edit');
+  });
+
+  it('performs both when it is not', () => {
+    const onCommand = vi.fn();
+    const ctx = contextFor(env({ onCommand }), { type: 'text' });
+    ctx.call({ deviceId: 'hue_1', patch: { on: true } });
+    expect(onCommand).toHaveBeenCalled();
+  });
+});

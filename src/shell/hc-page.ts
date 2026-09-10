@@ -16,9 +16,11 @@ import { customElement, property, state } from 'lit/decorators.js';
 import type {
   DashboardBreakpoint,
   DashboardDefinition,
+  DashboardLayout,
   DashboardWidget,
 } from '../core/dashboard.js';
 import { gridItems, layoutToDraw } from '../core/dashboard.js';
+import type { Box } from '../core/pages.js';
 import { Engine, type GridItem } from '../core/layout.js';
 import type { SelectionContext } from '../core/selection.js';
 import { isVisible } from '../core/visibility.js';
@@ -66,6 +68,41 @@ export class HcPage extends LitElement {
     .cell {
       min-width: 0;
       overflow: hidden;
+    }
+    /* The handles, while the page is being arranged (§14.2). Over the widget
+       rather than around it: a page that reflowed when the handles appeared
+       would be a page you arrange in a shape it does not have. */
+    .cell,
+    .placed {
+      position: relative;
+    }
+    .grab,
+    .grip {
+      position: absolute;
+      z-index: 5;
+      background: var(--hc-accent-active, #ffc978);
+      border-radius: var(--hc-radius-sm, 8px);
+      opacity: 0.85;
+      touch-action: none;
+    }
+    .grab {
+      inset: 0 auto auto 0;
+      width: 1.5rem;
+      height: 1.5rem;
+      cursor: move;
+      clip-path: polygon(0 0, 100% 0, 0 100%);
+    }
+    .grip {
+      inset: auto 0 0 auto;
+      width: 1.25rem;
+      height: 1.25rem;
+      cursor: nwse-resize;
+      clip-path: polygon(100% 0, 100% 100%, 0 100%);
+    }
+    [data-dragging] {
+      outline: 2px dashed var(--hc-accent-active, #ffc978);
+      outline-offset: 2px;
+      opacity: 0.85;
     }
     .unknown {
       display: grid;
@@ -150,6 +187,15 @@ export class HcPage extends LitElement {
 
   /** Move or resize one, in the layout on screen. */
   @property({ attribute: false }) onPlaceWidget: MountEnv['onPlaceWidget'];
+
+  /**
+   * Viewing or arranging (§14.2).
+   *
+   * Advisory to a widget and enforced by the host: in `edit` nothing a
+   * placement is pressed on actuates, because arranging a page means pressing
+   * on a household's locks and lights.
+   */
+  @property() mode: 'view' | 'edit' = 'view';
 
   /**
    * What `@room` and `@picked` mean on this page.
@@ -276,17 +322,187 @@ export class HcPage extends LitElement {
           const r = item.rect;
           if (w === undefined || r == null) return nothing;
           const z = w.config?.['z'];
+          const at = this.previewOf(item.id, { x: r.x, y: r.y, w: r.w, h: r.h });
           return html`<div
             class="placed"
-            style="left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px;${
+            ?data-dragging=${this.dragging?.id === item.id}
+            style="left:${at.x}px;top:${at.y}px;width:${at.w}px;height:${at.h}px;${
               typeof z === 'number' ? `z-index:${z}` : ''
             }"
           >
-            ${this.draw(w)}
+            ${this.draw(w)} ${this.handles(item.id, { x: r.x, y: r.y, w: r.w, h: r.h })}
           </div>`;
         })}
       </div>
     `;
+  }
+
+  /**
+   * A drag in progress: what is being moved, from where, and by how much.
+   *
+   * Held rather than written on every pointer move, for two reasons. A write
+   * is a save to the household's store, and a drag across a page is a hundred
+   * of them; and a page that re-rendered per frame would re-render the thing
+   * under the finger, which is how a drag comes off its own handle.
+   */
+  @state() private dragging:
+    { id: string; grip: 'move' | 'size'; from: Box; dx: number; dy: number } | undefined;
+
+  /**
+   * Start a drag, and follow it to the end.
+   *
+   * Pointer capture, because §14.2 asks for it and because without it a drag
+   * that leaves the card — which every drag does — stops getting events.
+   */
+  private startDrag(e: PointerEvent, id: string, grip: 'move' | 'size', box: Box): void {
+    if (this.mode !== 'edit' || this.onPlaceWidget === undefined) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const target = e.currentTarget as HTMLElement;
+    try {
+      target.setPointerCapture(e.pointerId);
+    } catch {
+      // A pointer the browser no longer considers active — a synthetic event,
+      // or one whose device was lifted between the press and this line. The
+      // capture is what keeps a drag alive once it leaves the handle, and
+      // losing it is worth much less than losing the drag: without this the
+      // throw happened *before* the listeners were attached, so the handle
+      // did nothing at all and said nothing about why.
+    }
+    const startX = e.clientX;
+    const startY = e.clientY;
+    this.dragging = { id, grip, from: box, dx: 0, dy: 0 };
+
+    const move = (m: PointerEvent): void => {
+      if (this.dragging === undefined) return;
+      this.dragging = { ...this.dragging, dx: m.clientX - startX, dy: m.clientY - startY };
+    };
+
+    const end = (): void => {
+      target.removeEventListener('pointermove', move);
+      target.removeEventListener('pointerup', end);
+      target.removeEventListener('pointercancel', end);
+
+      const drag = this.dragging;
+      this.dragging = undefined;
+      if (drag === undefined) return;
+
+      const to = this.boxFrom(drag);
+      // A press that moved nothing is a press, not a drag, and writing the
+      // numbers it already had would be a save nobody asked for.
+      if (
+        to.x === drag.from.x &&
+        to.y === drag.from.y &&
+        to.w === drag.from.w &&
+        to.h === drag.from.h
+      ) {
+        return;
+      }
+      void this.onPlaceWidget?.(drag.id, to);
+    };
+
+    target.addEventListener('pointermove', move);
+    target.addEventListener('pointerup', end);
+    target.addEventListener('pointercancel', end);
+  }
+
+  /**
+   * Where a drag has got to, in the layout's own units.
+   *
+   * **The snap is the grid itself.** §14.1's "coarse magnet" on a packed page
+   * is not a separate rule: a cell is the unit, so rounding the pixels to
+   * cells *is* the magnet. A composed page has no cells and takes the pixels,
+   * divided by the scale the frame is drawn at — the page can be shown at two
+   * thirds, and a drag that ignored that would move things half again as far
+   * as the finger.
+   */
+  private boxFrom(drag: { grip: 'move' | 'size'; from: Box; dx: number; dy: number }): Box {
+    const layout =
+      this.doc === undefined ? undefined : layoutToDraw(this.doc, this.breakpoint)?.layout;
+    const free = layout?.flow === 'free';
+
+    let dx: number;
+    let dy: number;
+    if (free) {
+      const scale = this.frameScale();
+      dx = Math.round(drag.dx / scale);
+      dy = Math.round(drag.dy / scale);
+    } else {
+      const cell = this.cellSize(layout);
+      // Nowhere to measure a cell against — a page that has not been laid out
+      // yet. Moving by the raw pixels would send a widget three hundred cells
+      // to the right, so a drag that cannot be measured moves nothing.
+      if (cell === undefined) return drag.from;
+      dx = Math.round(drag.dx / cell.w);
+      dy = Math.round(drag.dy / cell.h);
+    }
+
+    if (drag.grip === 'move') {
+      return {
+        ...drag.from,
+        x: Math.max(0, drag.from.x + dx),
+        y: Math.max(0, drag.from.y + dy),
+      };
+    }
+    // A widget with no width is a widget that cannot be grabbed again.
+    const least = free ? 40 : 1;
+    return {
+      ...drag.from,
+      w: Math.max(least, drag.from.w + dx),
+      h: Math.max(least, drag.from.h + dy),
+    };
+  }
+
+  /** Where this widget should be drawn right now, drag included. */
+  private previewOf(id: string, box: Box): Box {
+    const drag = this.dragging;
+    return drag?.id === id ? this.boxFrom(drag) : box;
+  }
+
+  /** One cell, in pixels, including the gap that follows it. */
+  private cellSize(layout: DashboardLayout | undefined): { w: number; h: number } | undefined {
+    const columns = layout?.columns ?? 12;
+    const gap = layout?.gap ?? 12;
+    const width = this.shadowRoot?.querySelector('.grid')?.clientWidth ?? this.clientWidth;
+    if (width <= 0) return undefined;
+
+    return {
+      w: Math.max(1, (width - gap * (columns - 1)) / columns + gap),
+      h: Math.max(1, (layout?.row_height ?? 120) + gap),
+    };
+  }
+
+  /** What the composed frame is drawn at, so a drag matches the finger. */
+  private frameScale(): number {
+    const frame = this.shadowRoot?.querySelector<HTMLElement>('.frame');
+    const drawn = frame?.getBoundingClientRect().width ?? 0;
+    const natural = frame?.offsetWidth ?? 0;
+    return natural > 0 && drawn > 0 ? drawn / natural : 1;
+  }
+
+  /**
+   * The handles a placement gets while the page is being arranged.
+   *
+   * Over the widget rather than around it, so nothing about the page's own
+   * layout changes when the handles appear — a page that reflowed on entering
+   * edit mode would be a page you arrange in a shape it does not have.
+   */
+  private handles(id: string, box: Box) {
+    if (this.mode !== 'edit' || this.onPlaceWidget === undefined) return nothing;
+
+    return html`<div
+        class="grab"
+        part="action"
+        title="Move"
+        @pointerdown=${(e: PointerEvent) => this.startDrag(e, id, 'move', box)}
+      ></div>
+      <div
+        class="grip"
+        part="action"
+        title="Resize"
+        @pointerdown=${(e: PointerEvent) => this.startDrag(e, id, 'size', box)}
+      ></div>`;
   }
 
   private grid(
@@ -306,12 +522,17 @@ export class HcPage extends LitElement {
         ${items.map((item) => {
           const w = byId.get(item.id);
           if (w === undefined) return nothing;
+          // Where it is going, while a finger is on it. The document is not
+          // written until the drag ends, so this is the only thing that says
+          // where the drop will land.
+          const at = this.previewOf(item.id, { x: item.x, y: item.y, w: item.w, h: item.h });
           return html`<div
             class="cell"
-            style="grid-column:${item.x + 1}/span ${item.w};
-                   grid-row:${item.y + 1}/span ${item.h}"
+            ?data-dragging=${this.dragging?.id === item.id}
+            style="grid-column:${at.x + 1}/span ${at.w};
+                   grid-row:${at.y + 1}/span ${at.h}"
           >
-            ${this.draw(w)}
+            ${this.draw(w)} ${this.handles(item.id, { x: item.x, y: item.y, w: item.w, h: item.h })}
           </div>`;
         })}
       </div>
@@ -373,6 +594,7 @@ export class HcPage extends LitElement {
       pagePlacements:
         this.doc === undefined ? undefined : layoutToDraw(this.doc, this.breakpoint)?.layout,
       breakpoint: this.breakpoint,
+      mode: this.mode,
       // The page it is drawing, so a widget that edits one can offer the
       // choice. Taken from the document rather than passed in: this element
       // already has it, and a second source would be a second answer.

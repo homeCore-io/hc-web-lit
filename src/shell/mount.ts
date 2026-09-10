@@ -274,6 +274,14 @@ function attachActions(el: MountTarget, w: WidgetSpec, env: MountEnv): void {
   // Read at press time, so a re-render with a different target is honoured.
   const now = (): ReturnType<typeof actionsIn> => actionsIn(w.config);
   const run = (a: ActionConfig | undefined): void => {
+    // **Nothing happens while the page is being arranged** (§14.2).
+    //
+    // Read off the element rather than out of this closure: the listeners are
+    // attached once and the element is reused across renders, so the `env`
+    // captured here is the one from the *first* mount and its mode never
+    // changes. `mountWidget` sets `el.env` on every render, which is the one
+    // that knows whether the page is being edited now.
+    if ((el.env ?? env).mode === 'edit') return;
     if (a === undefined || a.do === 'none') return;
     env.onAction?.(a);
   };

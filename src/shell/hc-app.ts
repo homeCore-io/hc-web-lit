@@ -159,6 +159,10 @@ export class HcApp extends LitElement {
       font: inherit;
       max-width: 40vw;
     }
+    header button.armed {
+      border-color: var(--hc-accent-active, #ffc978);
+      color: var(--hc-accent-active, #ffc978);
+    }
     header button.danger {
       border-color: color-mix(in srgb, var(--hc-accent-danger, #ff7b72) 55%, transparent);
       color: var(--hc-accent-danger, #ff7b72);
@@ -621,6 +625,15 @@ export class HcApp extends LitElement {
   @state() private renaming = false;
 
   /**
+   * Arranging the page, rather than using it (§14.2).
+   *
+   * Not persisted and not in the URL: a panel that came back from a power cut
+   * in edit mode would be a wall panel that does nothing when pressed, and
+   * nobody would know why.
+   */
+  @state() private editing = false;
+
+  /**
    * Rename the page, and only that.
    *
    * **The id does not move.** It is an address — an `on_tap` targets one, a
@@ -712,6 +725,7 @@ export class HcApp extends LitElement {
       onSavePreferences: this.savePreferences,
       ...(this.vocabulary !== undefined ? { vocabulary: this.vocabulary } : {}),
       pages: this.pageList(),
+      mode: this.editing ? 'edit' : 'view',
       ...(this.mayWriteDashboards()
         ? {
             onSaveWidget: this.saveWidget,
@@ -1340,6 +1354,16 @@ export class HcApp extends LitElement {
     }
 
     return html`<button
+        class=${this.editing ? 'armed' : ''}
+        title="Arrange this page"
+        aria-pressed=${this.editing ? 'true' : 'false'}
+        @click=${() => {
+          this.editing = !this.editing;
+        }}
+      >
+        ${this.editing ? 'Done' : 'Arrange'}
+      </button>
+      <button
         title="Rename this page"
         @click=${() => {
           this.renaming = true;
@@ -1425,6 +1449,7 @@ export class HcApp extends LitElement {
         .onAddWidget=${this.mayWriteDashboards() ? this.addWidgetToPage : undefined}
         .onRemoveWidget=${this.mayWriteDashboards() ? this.removeWidgetFromPage : undefined}
         .onPlaceWidget=${this.mayWriteDashboards() ? this.placeWidgetOnPage : undefined}
+        mode=${this.editing ? 'edit' : 'view'}
         .scopes=${this.panelScopes}
         .templates=${this.authored.templates()}
         .onAction=${this.runAction}

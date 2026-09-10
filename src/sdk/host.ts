@@ -215,11 +215,23 @@ export function contextFor(env: MountEnv, spec: WidgetSpec): HcContext {
       });
     },
 
+    /**
+     * **Refused while the page is being edited** (§14.2).
+     *
+     * Arranging a page means pressing on the things on it, and the things on
+     * a page are a household's locks and lights. A drag that started on a
+     * lock card and actuated it would be the worst bug this client could
+     * have, and "widgets should check the mode" is not a defence — it is a
+     * request. So the host does not perform, and a widget cannot opt out of
+     * that by not knowing about it.
+     */
     call(request) {
+      if (env.mode === 'edit') return;
       env.onCommand?.(request);
     },
 
     action(action) {
+      if (env.mode === 'edit') return;
       env.onAction?.(action);
     },
 
