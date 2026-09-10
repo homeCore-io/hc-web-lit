@@ -92,6 +92,19 @@ export class Authored {
   }
 
   /**
+   * Put a whole list of pages in force.
+   *
+   * What undo needs: a step back is a state, not a diff, so restoring one
+   * means replacing the list rather than replaying the opposite of whatever
+   * happened (`core/undo.ts`).
+   */
+  saveDashboards(docs: readonly DashboardDefinition[]): DashboardDefinition[] {
+    const next = [...docs];
+    this.store.write(KEYS.dashboards, next);
+    return next;
+  }
+
+  /**
    * Forget a page.
    *
    * There is no undo and no bin, which is why the surface that calls this asks

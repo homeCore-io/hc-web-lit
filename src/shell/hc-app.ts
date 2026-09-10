@@ -28,6 +28,7 @@ import { EventStream } from '../core/events.js';
 import { check, checkAction } from '../core/safety.js';
 import { DeviceStore } from '../core/store.js';
 import { Authored } from '../core/authored.js';
+import { Undo } from '../core/undo.js';
 import { BrowserContent, ServerContent } from '../core/content.js';
 import { PanelCredential } from '../core/panel.js';
 import type { IconRule } from '../design/icons.js';
@@ -144,6 +145,10 @@ export class HcApp extends LitElement {
       color: var(--hc-ink, #e9edf2);
       font: inherit;
       cursor: pointer;
+    }
+    header button[disabled] {
+      opacity: 0.35;
+      cursor: default;
     }
     header button:focus-visible {
       outline: 2px solid var(--hc-stroke-focus, #7cc4ff);
@@ -521,6 +526,47 @@ export class HcApp extends LitElement {
    * round trip, no `updated_at` from somewhere else, and no other editor to
    * lose a race with — the page belongs to the thing that is drawing it.
    */
+  /**
+   * Steps back, over the whole list of pages (`core/undo.ts`).
+   *
+   * The list rather than the page: deleting one is an edit too, and a history
+   * of documents could not put it back.
+   */
+  private readonly undoStack = new Undo<DashboardDefinition[]>();
+
+  /**
+   * Write the pages, having first recorded what they were.
+   *
+   * **Every action that changes a page goes through here.** One place that
+   * remembers is the difference between an undo that covers everything it
+   * claims to and one that covers whatever somebody remembered to wire it
+   * into — and the second kind is worse than none, because it is trusted.
+   *
+   * What it does *not* cover, stated so nobody assumes otherwise: the icon
+   * rules and the household's preferences, which are authored content of a
+   * different shape and write through their own paths. The icon rules editor
+   * asks twice before discarding everything for that reason.
+   */
+  private writePages(next: readonly DashboardDefinition[], showing?: string): void {
+    this.undoStack.push(this.docs);
+    this.docs = this.authored.saveDashboards(next);
+    const want = showing ?? this.current?.id;
+    this.current = this.docs.find((d) => d.id === want) ?? this.docs[0];
+  }
+
+  /** Go back, or forward, over the household's pages. */
+  private readonly stepHistory = (way: 'undo' | 'redo'): void => {
+    const was = this.docs;
+    const next = way === 'undo' ? this.undoStack.undo(was) : this.undoStack.redo(was);
+    if (next === undefined) return;
+
+    this.docs = this.authored.saveDashboards(next);
+    // The page somebody was on, if it still exists — an undo that also moved
+    // them to another page would be two surprises for the price of one.
+    this.current = this.docs.find((d) => d.id === this.current?.id) ?? this.docs[0];
+    this.requestUpdate();
+  };
+
   private readonly saveWidget = async (
     widgetId: string,
     config: Record<string, unknown>,
@@ -531,8 +577,7 @@ export class HcApp extends LitElement {
     const next = withWidgetConfig(doc, widgetId, config);
     if (next === undefined) throw new Error(`This page has no widget "${widgetId}".`);
 
-    this.docs = this.authored.saveDashboard(next);
-    this.current = this.docs.find((d) => d.id === doc.id) ?? next;
+    this.writePages(this.replacing(next), next.id);
     // A promise because the capability is one: a store that writes over the
     // network is still the ordinary case (`ServerContent`), and a caller that
     // could not await this would have no way to report a failure.
@@ -549,8 +594,7 @@ export class HcApp extends LitElement {
     const doc = this.current;
     if (doc === undefined) throw new Error('No page to add to.');
     const { doc: next, id } = addWidget(doc, type);
-    this.docs = this.authored.saveDashboard(next);
-    this.current = next;
+    this.writePages(this.replacing(next), next.id);
     return Promise.resolve(id);
   };
 
@@ -568,17 +612,14 @@ export class HcApp extends LitElement {
     const next = placeWidget(doc, this.breakpoint, widgetId, box);
     if (next === undefined) throw new Error(`This layout has no widget "${widgetId}".`);
 
-    this.docs = this.authored.saveDashboard(next);
-    this.current = next;
+    this.writePages(this.replacing(next), next.id);
     return Promise.resolve();
   };
 
   private readonly removeWidgetFromPage = async (widgetId: string): Promise<void> => {
     const doc = this.current;
     if (doc === undefined) throw new Error('No page to remove from.');
-    const next = removeWidget(doc, widgetId);
-    this.docs = this.authored.saveDashboard(next);
-    this.current = next;
+    this.writePages(this.replacing(removeWidget(doc, widgetId)), doc.id);
     return Promise.resolve();
   };
 
@@ -600,8 +641,7 @@ export class HcApp extends LitElement {
       this.docs.map((d) => d.id),
       this.current?.owner_user_id ?? '',
     );
-    this.docs = this.authored.saveDashboard(page);
-    this.current = page;
+    this.writePages([...this.docs, page], page.id);
   };
 
   /**
@@ -617,8 +657,7 @@ export class HcApp extends LitElement {
       doc,
       this.docs.map((d) => d.id),
     );
-    this.docs = this.authored.saveDashboard(copy);
-    this.current = copy;
+    this.writePages([...this.docs, copy], copy.id);
   };
 
   /** Whether the page's name is being typed rather than shown. */
@@ -649,15 +688,18 @@ export class HcApp extends LitElement {
 
     const next = renamed(doc, name);
     if (next === undefined) return;
-    this.docs = this.authored.saveDashboard(next);
-    this.current = next;
+    this.writePages(this.replacing(next), next.id);
   };
 
   private readonly removePage = (id: string): void => {
     this.confirmingDelete = '';
-    this.docs = this.authored.deleteDashboard(id);
-    if (this.current?.id === id) this.current = this.docs[0];
+    this.writePages(this.docs.filter((d) => d.id !== id));
   };
+
+  /** The list with one page replaced, keeping the order somebody sees. */
+  private replacing(doc: DashboardDefinition): DashboardDefinition[] {
+    return this.docs.map((d) => (d.id === doc.id ? doc : d));
+  }
 
   /**
    * What the household's pages are called.
@@ -1354,6 +1396,20 @@ export class HcApp extends LitElement {
     }
 
     return html`<button
+        title="Undo the last change"
+        ?disabled=${!this.undoStack.canUndo}
+        @click=${() => this.stepHistory('undo')}
+      >
+        ↶
+      </button>
+      <button
+        title="Redo"
+        ?disabled=${!this.undoStack.canRedo}
+        @click=${() => this.stepHistory('redo')}
+      >
+        ↷
+      </button>
+      <button
         class=${this.editing ? 'armed' : ''}
         title="Arrange this page"
         aria-pressed=${this.editing ? 'true' : 'false'}
