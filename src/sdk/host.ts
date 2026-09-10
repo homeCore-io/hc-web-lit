@@ -18,7 +18,8 @@ import type { PluginRunner } from '../core/plugins.js';
 import type { IconRule } from '../design/icons.js';
 import type { Tokens } from '../design/tokens.js';
 import type { Vocabulary } from '../core/vocabulary.js';
-import type { DashboardWidget } from '../core/dashboard.js';
+import type { DashboardLayout, DashboardWidget } from '../core/dashboard.js';
+import type { Box } from '../core/pages.js';
 import { locale, units, type Preferences } from '../core/i18n.js';
 
 /**
@@ -132,6 +133,24 @@ export interface MountEnv {
   onAddWidget?: (type: string) => Promise<string>;
   /** Take one off the page, with its placements. */
   onRemoveWidget?: (widgetId: string) => Promise<void>;
+  /**
+   * Move or resize a widget, in the layout that is on screen.
+   *
+   * The units are the layout's own — cells on a packed page, pixels in the
+   * frame on a composed one — and the host decides which, because which
+   * layout is being drawn is the host's question (§5.7).
+   */
+  onPlaceWidget?: (widgetId: string, box: Box) => Promise<void>;
+  /** The placements of the layout being drawn, so a surface can show them. */
+  pagePlacements?: DashboardLayout | undefined;
+  /**
+   * The size being drawn.
+   *
+   * Which is not the same as the layout's own breakpoint: a page with only a
+   * desktop layout is drawn at every size by borrowing it (§5.7), and a
+   * surface that offers to move something has to be able to say so.
+   */
+  breakpoint?: string;
   /**
    * The pages this household has, for a widget that links to one (§5.10).
    *

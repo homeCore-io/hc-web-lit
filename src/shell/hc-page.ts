@@ -148,6 +148,9 @@ export class HcPage extends LitElement {
   @property({ attribute: false }) onAddWidget: MountEnv['onAddWidget'];
   @property({ attribute: false }) onRemoveWidget: MountEnv['onRemoveWidget'];
 
+  /** Move or resize one, in the layout on screen. */
+  @property({ attribute: false }) onPlaceWidget: MountEnv['onPlaceWidget'];
+
   /**
    * What `@room` and `@picked` mean on this page.
    *
@@ -363,6 +366,13 @@ export class HcPage extends LitElement {
       ...(this.onSaveWidget !== undefined ? { onSaveWidget: this.onSaveWidget } : {}),
       ...(this.onAddWidget !== undefined ? { onAddWidget: this.onAddWidget } : {}),
       ...(this.onRemoveWidget !== undefined ? { onRemoveWidget: this.onRemoveWidget } : {}),
+      ...(this.onPlaceWidget !== undefined ? { onPlaceWidget: this.onPlaceWidget } : {}),
+      // The layout actually on screen, which is not always the one for this
+      // size (§5.7). A surface that showed the numbers from a layout nobody is
+      // looking at would be showing the wrong arrangement.
+      pagePlacements:
+        this.doc === undefined ? undefined : layoutToDraw(this.doc, this.breakpoint)?.layout,
+      breakpoint: this.breakpoint,
       // The page it is drawing, so a widget that edits one can offer the
       // choice. Taken from the document rather than passed in: this element
       // already has it, and a second source would be a second answer.

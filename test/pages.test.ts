@@ -9,9 +9,11 @@ import { describe, expect, it } from 'vitest';
 import type { DashboardDefinition } from '../src/core/dashboard.js';
 import {
   addWidget,
+  boxOf,
   duplicatePage,
   newPage,
   pageId,
+  placeWidget,
   removeWidget,
   renamed,
 } from '../src/core/pages.js';
@@ -245,5 +247,69 @@ describe('renaming a page', () => {
     const next = renamed(page, 'Landing');
     expect(next?.widgets).toEqual(page.widgets);
     expect(next?.layouts).toEqual(page.layouts);
+  });
+});
+
+describe('moving a widget', () => {
+  const desktopOnly: DashboardDefinition = {
+    id: 'house',
+    name: 'House',
+    icon: 'home',
+    owner_user_id: 'u',
+    widgets: [{ id: 'w', type: 'text', config: {} }],
+    layouts: [
+      {
+        breakpoint: 'desktop',
+        columns: 12,
+        row_height: 120,
+        gap: 12,
+        placements: [{ widget_id: 'w', x: 0, y: 0, w: 6, h: 2 }],
+      },
+    ],
+  };
+
+  it('writes into the layout on screen, borrowed or not', () => {
+    // A phone borrows the desktop arrangement (§5.7). Writing the numbers
+    // into a new mobile layout would silently split one arrangement into two,
+    // and nobody asked for a per-breakpoint design by moving something on a
+    // phone.
+    const moved = placeWidget(desktopOnly, 'mobile', 'w', { x: 2, y: 3, w: 4, h: 1 });
+    expect(moved?.layouts).toHaveLength(1);
+    expect(moved?.layouts?.[0]?.breakpoint).toBe('desktop');
+    expect(moved?.layouts?.[0]?.placements?.[0]).toMatchObject({ x: 2, y: 3, w: 4, h: 1 });
+  });
+
+  it('writes a rect on a composed page, because it ignores the grid', () => {
+    const composed: DashboardDefinition = {
+      ...desktopOnly,
+      layouts: [
+        {
+          ...desktopOnly.layouts![0]!,
+          flow: 'free',
+          placements: [
+            { widget_id: 'w', x: 0, y: 0, w: 6, h: 2, rect: { x: 0, y: 0, w: 100, h: 50 } },
+          ],
+        },
+      ],
+    };
+    const moved = placeWidget(composed, 'desktop', 'w', { x: 20, y: 40, w: 300, h: 120 });
+    expect(moved?.layouts?.[0]?.placements?.[0]?.rect).toEqual({ x: 20, y: 40, w: 300, h: 120 });
+  });
+
+  it('is nothing to do for a widget that layout does not have', () => {
+    expect(placeWidget(desktopOnly, 'desktop', 'nope', { x: 0, y: 0, w: 1, h: 1 })).toBeUndefined();
+  });
+
+  it('leaves the page it was given alone', () => {
+    placeWidget(desktopOnly, 'desktop', 'w', { x: 9, y: 9, w: 1, h: 1 });
+    expect(desktopOnly.layouts?.[0]?.placements?.[0]?.x).toBe(0);
+  });
+
+  it('reads back the numbers in the units that layout uses', () => {
+    expect(boxOf(desktopOnly.layouts?.[0], 'w')).toEqual({
+      box: { x: 0, y: 0, w: 6, h: 2 },
+      units: 'cells',
+    });
+    expect(boxOf(desktopOnly.layouts?.[0], 'nope')).toBeUndefined();
   });
 });

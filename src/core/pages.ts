@@ -13,11 +13,13 @@
  * want, then edit it with the property panel.
  */
 import type {
+  DashboardBreakpoint,
   DashboardDefinition,
   DashboardLayout,
   DashboardWidget,
   DashboardWidgetPlacement,
 } from './dashboard.js';
+import { layoutToDraw } from './dashboard.js';
 
 /**
  * A page id from what somebody typed.
@@ -218,4 +220,78 @@ export function renamed(doc: DashboardDefinition, name: string): DashboardDefini
   const trimmed = name.trim();
   if (trimmed === '' || trimmed === doc.name) return undefined;
   return { ...doc, name: trimmed };
+}
+
+/** Where a widget sits, in whatever units its layout uses. */
+export interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * Move or resize a widget, in the layout that is actually on screen.
+ *
+ * **The layout being drawn, which is not always the one for this size.**
+ * Three of the four pages in the reference house carry a `desktop` layout and
+ * nothing else, and a phone borrows it (§5.7). Writing the numbers into a new
+ * `mobile` layout instead would silently split one arrangement into two — the
+ * page would stop following the desktop one, and nobody asked for a
+ * per-breakpoint design by dragging something on a phone. So an edit lands
+ * where the numbers came from, and the surface says which size that is.
+ *
+ * The units are the layout's own: cells on a packed page, pixels in the frame
+ * on a composed one. A composed page ignores the grid entirely, so writing
+ * cells there would move nothing and look broken.
+ *
+ * `undefined` when there is no such widget in that layout, so a caller can say
+ * so rather than writing a document that changed nothing.
+ */
+export function placeWidget(
+  doc: DashboardDefinition,
+  breakpoint: DashboardBreakpoint,
+  widgetId: string,
+  box: Box,
+): DashboardDefinition | undefined {
+  const drawn = layoutToDraw(doc, breakpoint);
+  if (drawn === undefined) return undefined;
+
+  const editing = drawn.borrowedFrom ?? breakpoint;
+  const layout = (doc.layouts ?? []).find((l) => l.breakpoint === editing);
+  if (layout === undefined) return undefined;
+  if (!(layout.placements ?? []).some((p) => p.widget_id === widgetId)) return undefined;
+
+  const move = (p: DashboardWidgetPlacement): DashboardWidgetPlacement =>
+    layout.flow === 'free'
+      ? { ...p, rect: { ...(p.rect ?? {}), ...box } }
+      : { ...p, x: box.x, y: box.y, w: box.w, h: box.h };
+
+  return {
+    ...doc,
+    layouts: (doc.layouts ?? []).map((l) =>
+      l.breakpoint === editing
+        ? {
+            ...l,
+            placements: (l.placements ?? []).map((p) => (p.widget_id === widgetId ? move(p) : p)),
+          }
+        : l,
+    ),
+  };
+}
+
+/** Where a widget sits now, and in what units, for a surface that shows it. */
+export function boxOf(
+  layout: DashboardLayout | undefined,
+  widgetId: string,
+): { box: Box; units: 'cells' | 'pixels' } | undefined {
+  const placement = (layout?.placements ?? []).find((p) => p.widget_id === widgetId);
+  if (placement === undefined || layout === undefined) return undefined;
+
+  if (layout.flow === 'free' && placement.rect != null) {
+    const r = placement.rect;
+    return { box: { x: r.x, y: r.y, w: r.w, h: r.h }, units: 'pixels' };
+  }
+  const { x, y, w, h } = placement;
+  return { box: { x, y, w, h }, units: 'cells' };
 }

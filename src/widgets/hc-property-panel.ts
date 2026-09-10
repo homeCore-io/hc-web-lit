@@ -45,7 +45,8 @@ import { humanise } from '../core/text.js';
 import { knownFacets } from '../core/selection.js';
 import { widgetSpec, type Vocabulary } from '../core/vocabulary.js';
 import type { WidgetSpec } from '../core/widget.js';
-import type { DashboardWidget } from '../core/dashboard.js';
+import type { DashboardLayout, DashboardWidget } from '../core/dashboard.js';
+import { boxOf, type Box } from '../core/pages.js';
 import { knownRoles } from '../design/roles.js';
 import { markNames } from '../design/icons.js';
 import { mountChildren, type MountEnv } from '../shell/mount.js';
@@ -171,6 +172,17 @@ export class HcPropertyPanel extends LitElement {
     .opaque {
       color: var(--hc-ink-muted, #8b95a4);
     }
+    .axis {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      color: var(--hc-ink-muted, #8b95a4);
+      font-size: var(--hc-text-caption-size, 11px);
+    }
+    .axis input {
+      width: 4.5rem;
+      flex: none;
+    }
     .listrow {
       display: flex;
       gap: 0.375rem;
@@ -228,6 +240,11 @@ export class HcPropertyPanel extends LitElement {
   /** Put a widget on the page, or take one off. Absent means read-only. */
   @property({ attribute: false }) onAddWidget: ((type: string) => Promise<string>) | undefined;
   @property({ attribute: false }) onRemoveWidget: ((widgetId: string) => Promise<void>) | undefined;
+  /** Move or resize the widget being edited, in the layout on screen. */
+  @property({ attribute: false }) onPlaceWidget:
+    ((widgetId: string, box: Box) => Promise<void>) | undefined;
+  /** The layout being drawn, so the numbers shown are the ones in force. */
+  @property({ attribute: false }) pagePlacements: DashboardLayout | undefined;
 
   /** The edit in progress. Undefined until somebody changes something. */
   @state() private draft: Record<string, unknown> | undefined;
@@ -725,6 +742,69 @@ export class HcPropertyPanel extends LitElement {
     </div>`;
   }
 
+  /**
+   * Where the widget sits, as four numbers.
+   *
+   * **Not the designer** (Phase 10): dragging a card on a canvas is that, and
+   * this is the model underneath made reachable. Until there is a canvas, a
+   * widget that cannot be moved at all is worse than one that moves by typing
+   * — a page where everything lands below everything else is not a page
+   * somebody arranged.
+   *
+   * The units are the layout's own, and the row says which: cells on a packed
+   * page, pixels in the frame on a composed one. It also says which size's
+   * arrangement is being edited, because three of the four pages in the
+   * reference house have only a desktop layout and every other size borrows
+   * it (§5.7) — so moving something on a phone moves it on the laptop too,
+   * and that should not be a surprise.
+   */
+  private renderPlacement() {
+    const layout = this.pagePlacements;
+    const target = this.target;
+    if (this.onPlaceWidget === undefined || layout === undefined || target === '') return nothing;
+
+    const where = boxOf(layout, target);
+    if (where === undefined) return nothing;
+
+    const set = (key: keyof Box, value: number): void => {
+      void this.onPlaceWidget?.(target, { ...where.box, [key]: value });
+    };
+
+    const number = (key: keyof Box, label: string) =>
+      html`<label class="axis"
+        >${label}
+        <input
+          part="select"
+          type="number"
+          aria-label=${label}
+          .value=${String(where.box[key])}
+          @change=${(e: Event) => {
+            const raw = Number((e.target as HTMLInputElement).value);
+            if (Number.isFinite(raw)) set(key, raw);
+          }}
+        />
+      </label>`;
+
+    return html`<div class="row" part="row">
+      <div class="name">Where</div>
+      <div class="field">
+        ${number('x', 'Left')} ${number('y', 'Top')} ${number('w', 'Width')}
+        ${number('h', 'Height')}
+        <span class="note" part="note">
+          ${where.units === 'cells' ? 'Grid cells' : 'Pixels in the frame'} · ${layout.breakpoint}
+          arrangement${
+            layout.breakpoint === this.currentBreakpoint ? '' : ', which this size is borrowing'
+          }
+        </span>
+      </div>
+    </div>`;
+  }
+
+  /** The size being drawn, for the note above. Absent outside a page. */
+  private get currentBreakpoint(): string | undefined {
+    return this.env?.breakpoint;
+  }
+
   private renderField(p: Property): TemplateResult | typeof nothing {
     switch (p.form) {
       case 'toggle':
@@ -897,7 +977,7 @@ export class HcPropertyPanel extends LitElement {
               }
             </div>`
       }
-      ${this.renderPicker()} ${this.renderCatalogue()}
+      ${this.renderPicker()} ${this.renderCatalogue()} ${this.renderPlacement()}
 
       <div class="subject" part="state">
         ${subject.type}${

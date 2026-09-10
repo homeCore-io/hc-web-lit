@@ -365,6 +365,79 @@ describe('adding and removing a widget', () => {
   });
 });
 
+describe('moving a widget', () => {
+  const layout = {
+    breakpoint: 'desktop' as const,
+    columns: 12,
+    row_height: 120,
+    gap: 12,
+    placements: [{ widget_id: 'h_001', x: 1, y: 2, w: 6, h: 2 }],
+  };
+
+  const placed = async (
+    over: { layout?: typeof layout; breakpoint?: string } = {},
+  ): Promise<{ el: HcPropertyPanel; moved: ReturnType<typeof vi.fn> }> => {
+    const moved = vi.fn(async () => undefined);
+    const el = document.createElement('hc-property-panel');
+    el.config = { preview: false, edits: 'h_001' };
+    el.vocabulary = vocabulary;
+    el.pageWidgets = [{ id: 'h_001', type: 'heading', config: { text: 'Hall' } }];
+    el.pagePlacements = over.layout ?? layout;
+    el.onPlaceWidget = moved;
+    el.env = { store: undefined, context: {}, breakpoint: over.breakpoint ?? 'desktop' };
+    document.body.append(el);
+    await el.updateComplete;
+    return { el, moved };
+  };
+
+  it('shows where the widget sits, in that layout’s units', async () => {
+    const { el } = await placed();
+    expect((field(el, 'Left') as HTMLInputElement).value).toBe('1');
+    expect((field(el, 'Width') as HTMLInputElement).value).toBe('6');
+    expect(el.shadowRoot?.textContent).toContain('Grid cells');
+  });
+
+  it('moves it, keeping the numbers it was not given', async () => {
+    const { el, moved } = await placed();
+    const top = field(el, 'Top') as HTMLInputElement;
+    top.value = '5';
+    top.dispatchEvent(new Event('change'));
+    expect(moved).toHaveBeenCalledWith('h_001', { x: 1, y: 5, w: 6, h: 2 });
+  });
+
+  it('says when the arrangement belongs to another size', async () => {
+    // Three of the four pages in the reference house have only a desktop
+    // layout, so moving something on a phone moves it on the laptop too.
+    const { el } = await placed({ breakpoint: 'mobile' });
+    expect(el.shadowRoot?.textContent).toContain('which this size is borrowing');
+  });
+
+  it('says pixels on a composed page', async () => {
+    const { el } = await placed({
+      layout: {
+        ...layout,
+        flow: 'free',
+        placements: [
+          { widget_id: 'h_001', x: 0, y: 0, w: 6, h: 2, rect: { x: 8, y: 9, w: 300, h: 40 } },
+        ],
+      } as unknown as typeof layout,
+    });
+    expect(el.shadowRoot?.textContent).toContain('Pixels in the frame');
+    expect((field(el, 'Left') as HTMLInputElement).value).toBe('8');
+  });
+
+  it('offers nothing to move without a host that can place', async () => {
+    const el = document.createElement('hc-property-panel');
+    el.config = { preview: false, edits: 'h_001' };
+    el.vocabulary = vocabulary;
+    el.pageWidgets = [{ id: 'h_001', type: 'heading', config: {} }];
+    el.pagePlacements = layout;
+    document.body.append(el);
+    await el.updateComplete;
+    expect(field(el, 'Left')).toBeNull();
+  });
+});
+
 describe('saving into the page', () => {
   const mount = async (
     config: Record<string, unknown>,

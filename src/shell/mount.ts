@@ -56,6 +56,9 @@ export type MountTarget = HTMLElement & {
   /** Put a widget on the page, or take one off (§14.1). */
   onAddWidget?: MountEnv['onAddWidget'];
   onRemoveWidget?: MountEnv['onRemoveWidget'];
+  /** Move or resize one, and the layout it is being placed in. */
+  onPlaceWidget?: MountEnv['onPlaceWidget'];
+  pagePlacements?: MountEnv['pagePlacements'];
   /** What this session may do, for a `requires_role` check before drawing. */
   scopes?: readonly string[];
   /**
@@ -168,6 +171,8 @@ export function mountWidget(el: MountTarget, w: WidgetSpec, env: MountEnv): void
   if (env.pageWidgets !== undefined) give(el, 'pageWidgets', env.pageWidgets);
   if (env.onAddWidget !== undefined) give(el, 'onAddWidget', env.onAddWidget);
   if (env.onRemoveWidget !== undefined) give(el, 'onRemoveWidget', env.onRemoveWidget);
+  if (env.onPlaceWidget !== undefined) give(el, 'onPlaceWidget', env.onPlaceWidget);
+  if (env.pagePlacements !== undefined) give(el, 'pagePlacements', env.pagePlacements);
   if (env.scopes !== undefined) give(el, 'scopes', env.scopes);
 
   // A container mounts its own children and needs what the page had.

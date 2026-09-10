@@ -15,7 +15,15 @@ import { builtInSeeds, defaultSkin } from '../design/seeds.js';
 import { deriveTokens } from '../design/tokens.js';
 import type { DashboardBreakpoint, DashboardDefinition } from '../core/dashboard.js';
 import { withWidgetConfig } from '../core/dashboard.js';
-import { addWidget, duplicatePage, newPage, removeWidget, renamed } from '../core/pages.js';
+import {
+  addWidget,
+  duplicatePage,
+  newPage,
+  placeWidget,
+  removeWidget,
+  renamed,
+  type Box,
+} from '../core/pages.js';
 import { EventStream } from '../core/events.js';
 import { check, checkAction } from '../core/safety.js';
 import { DeviceStore } from '../core/store.js';
@@ -542,6 +550,25 @@ export class HcApp extends LitElement {
     return Promise.resolve(id);
   };
 
+  /**
+   * Move or resize a widget on the page being shown.
+   *
+   * The breakpoint is this element's, because which layout is on screen is a
+   * question about the screen. `placeWidget` decides which layout that edit
+   * lands in — the one being drawn, borrowed or not.
+   */
+  private readonly placeWidgetOnPage = async (widgetId: string, box: Box): Promise<void> => {
+    const doc = this.current;
+    if (doc === undefined) throw new Error('No page to place on.');
+
+    const next = placeWidget(doc, this.breakpoint, widgetId, box);
+    if (next === undefined) throw new Error(`This layout has no widget "${widgetId}".`);
+
+    this.docs = this.authored.saveDashboard(next);
+    this.current = next;
+    return Promise.resolve();
+  };
+
   private readonly removeWidgetFromPage = async (widgetId: string): Promise<void> => {
     const doc = this.current;
     if (doc === undefined) throw new Error('No page to remove from.');
@@ -690,6 +717,7 @@ export class HcApp extends LitElement {
             onSaveWidget: this.saveWidget,
             onAddWidget: this.addWidgetToPage,
             onRemoveWidget: this.removeWidgetFromPage,
+            onPlaceWidget: this.placeWidgetOnPage,
           }
         : {}),
       ...(this.panelScopes !== undefined ? { scopes: this.panelScopes } : {}),
@@ -1396,6 +1424,7 @@ export class HcApp extends LitElement {
         .onSaveWidget=${this.mayWriteDashboards() ? this.saveWidget : undefined}
         .onAddWidget=${this.mayWriteDashboards() ? this.addWidgetToPage : undefined}
         .onRemoveWidget=${this.mayWriteDashboards() ? this.removeWidgetFromPage : undefined}
+        .onPlaceWidget=${this.mayWriteDashboards() ? this.placeWidgetOnPage : undefined}
         .scopes=${this.panelScopes}
         .templates=${this.authored.templates()}
         .onAction=${this.runAction}
