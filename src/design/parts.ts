@@ -93,6 +93,9 @@ export const OWN_PARTS = [
   // A code element's sandboxed viewport (§8.1). Named because a theme has to
   // be able to size and frame it; nothing inside it is reachable, by design.
   'frame',
+  // The property panel's live view of the widget it is editing (§4.4).
+  // Named because a designer surface has to be able to frame and size it.
+  'preview',
   // Notices and activity.
   'notice',
   'notices',

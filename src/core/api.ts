@@ -11,6 +11,7 @@
 import type { DeviceState } from './device.js';
 import { humanise } from './text.js';
 import { readStart, type CommandStart, type Plugin } from './plugins.js';
+import { readVocabulary, type Vocabulary } from './vocabulary.js';
 
 /** What core rejected, with enough to act on rather than just a stack trace. */
 export class HcApiError extends Error {
@@ -402,6 +403,22 @@ export class HcApi {
   /** `listDashboards`. */
   async listDashboards(): Promise<unknown[]> {
     return this.request<unknown[]>('GET', '/dashboards');
+  }
+
+  /**
+   * `dashboardVocabulary`. The table core validates every document against.
+   *
+   * Read once at startup and handed to the property panel, which generates
+   * its controls from it (§4.4). Undefined rather than an error when core
+   * does not serve it: an older core, or a credential without the scope, is a
+   * panel with fewer labels rather than a panel that will not start.
+   */
+  async dashboardVocabulary(): Promise<Vocabulary | undefined> {
+    try {
+      return readVocabulary(await this.request<unknown>('GET', '/dashboards/vocabulary'));
+    } catch {
+      return undefined;
+    }
   }
 
   /** `getDashboard`. */

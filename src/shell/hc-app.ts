@@ -23,6 +23,7 @@ import { PanelCredential } from '../core/panel.js';
 import type { IconRule } from '../design/icons.js';
 import { LastKnown, ageOf } from '../core/last-known.js';
 import type { CommandEvent } from '../core/plugins.js';
+import type { Vocabulary } from '../core/vocabulary.js';
 import { ExtensionSource, type InstalledExtensions } from '../ext/install.js';
 import type { CommandRequest } from '../core/widget.js';
 import { effectiveName, isOn } from '../core/present.js';
@@ -70,6 +71,7 @@ import '../widgets/hc-stack.js';
 import '../widgets/hc-swipe.js';
 import '../widgets/hc-tabs.js';
 import '../widgets/hc-accordion.js';
+import '../widgets/hc-property-panel.js';
 
 type Phase = 'idle' | 'connecting' | 'ready' | 'failed';
 
@@ -287,6 +289,14 @@ export class HcApp extends LitElement {
     if (this.live) this.lastKnown.saveNow(this.store.list(), this.docs);
   };
   @state() private docs: DashboardDefinition[] = [];
+  /**
+   * Core's table of what a widget config may hold (§4.4).
+   *
+   * Undefined until it has been read, and possibly for good: an older core
+   * does not serve it and a panel offline never asked. The property panel is
+   * built to work either way, so nothing waits on this.
+   */
+  @state() private vocabulary: Vocabulary | undefined;
   @state() private current: DashboardDefinition | undefined;
   @state() private breakpoint: DashboardBreakpoint = 'desktop';
   @state() private skin = defaultSkin;
@@ -431,6 +441,7 @@ export class HcApp extends LitElement {
       plugins: this.plugins,
       onUpdateDevice: this.updateDevice,
       onSaveIconRules: this.saveIconRules,
+      ...(this.vocabulary !== undefined ? { vocabulary: this.vocabulary } : {}),
       ...(this.panelScopes !== undefined ? { scopes: this.panelScopes } : {}),
       templates: this.authored.templates(),
     };
@@ -596,6 +607,11 @@ export class HcApp extends LitElement {
       }).installAll();
 
       this.store.reset(await api.listDevices({ includeSchema: true }));
+      // What core says a widget config may hold (§4.4). Not awaited alongside
+      // the devices because nothing on the first paint needs it — only the
+      // property panel does, and it works without it.
+      this.vocabulary = await api.dashboardVocabulary();
+
       this.docs = (await api.listDashboards()) as DashboardDefinition[];
       this.current = this.docs[0];
 
@@ -1031,6 +1047,7 @@ export class HcApp extends LitElement {
         .plugins=${this.plugins}
         .onUpdateDevice=${this.updateDevice}
         .onSaveIconRules=${this.saveIconRules}
+        .vocabulary=${this.vocabulary}
         .scopes=${this.panelScopes}
         .templates=${this.authored.templates()}
         .onAction=${this.runAction}

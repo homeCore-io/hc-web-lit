@@ -17,6 +17,7 @@ import type { TemplateStore } from '../core/templates.js';
 import type { PluginRunner } from '../core/plugins.js';
 import type { IconRule } from '../design/icons.js';
 import type { Tokens } from '../design/tokens.js';
+import type { Vocabulary } from '../core/vocabulary.js';
 
 /**
  * Everything a widget is given that it cannot reach for itself.
@@ -87,6 +88,14 @@ export interface MountEnv {
   scopes?: readonly string[];
   /** Resolved design tokens, so a widget restyles with the house (§15). */
   tokens?: Tokens;
+  /**
+   * Core's dashboard vocabulary (§4.4), when this session has reached core.
+   *
+   * Read by the property panel to generate its controls. Optional and often
+   * absent — a panel that is offline (§16) has a cached document and no
+   * vocabulary, and must still be able to edit it.
+   */
+  vocabulary?: Vocabulary;
   /** Editing or viewing (§14.2). */
   mode?: 'view' | 'edit';
 }

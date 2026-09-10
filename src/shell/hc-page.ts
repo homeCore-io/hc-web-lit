@@ -132,6 +132,9 @@ export class HcPage extends LitElement {
   /** Save the household's icon rules (§11.2). */
   @property({ attribute: false }) onSaveIconRules: MountEnv['onSaveIconRules'];
 
+  /** Core's table of what a widget config may hold (§4.4). */
+  @property({ attribute: false }) vocabulary: MountEnv['vocabulary'];
+
   /**
    * What `@room` and `@picked` mean on this page.
    *
@@ -317,6 +320,7 @@ export class HcPage extends LitElement {
       ...(this.scopes !== undefined ? { scopes: this.scopes } : {}),
       ...(this.onUpdateDevice !== undefined ? { onUpdateDevice: this.onUpdateDevice } : {}),
       ...(this.onSaveIconRules !== undefined ? { onSaveIconRules: this.onSaveIconRules } : {}),
+      ...(this.vocabulary !== undefined ? { vocabulary: this.vocabulary } : {}),
     };
   }
 

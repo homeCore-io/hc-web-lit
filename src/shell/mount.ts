@@ -43,6 +43,8 @@ export type MountTarget = HTMLElement & {
   onUpdateDevice?: MountEnv['onUpdateDevice'];
   /** Save the household's icon rules (§11.2). */
   onSaveIconRules?: MountEnv['onSaveIconRules'];
+  /** Core's table of what a widget config may hold (§4.4). */
+  vocabulary?: MountEnv['vocabulary'];
   /** What this session may do, for a `requires_role` check before drawing. */
   scopes?: readonly string[];
   /**
@@ -148,6 +150,7 @@ export function mountWidget(el: MountTarget, w: WidgetSpec, env: MountEnv): void
   if (env.plugins !== undefined) give(el, 'runner', env.plugins);
   if (env.onUpdateDevice !== undefined) give(el, 'onUpdateDevice', env.onUpdateDevice);
   if (env.onSaveIconRules !== undefined) give(el, 'onSaveIconRules', env.onSaveIconRules);
+  if (env.vocabulary !== undefined) give(el, 'vocabulary', env.vocabulary);
   if (env.scopes !== undefined) give(el, 'scopes', env.scopes);
 
   // A container mounts its own children and needs what the page had.
