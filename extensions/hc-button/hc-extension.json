@@ -12,9 +12,7 @@
         "widget_id": "button",
         "name": "Button",
         "description": "The wide-open one: every field an expression, every state a style, and fields composed from other widgets.",
-        "categories": [
-          "control"
-        ],
+        "categories": ["control"],
         "kind": "instrument"
       }
     ]

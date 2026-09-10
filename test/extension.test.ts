@@ -79,7 +79,14 @@ describe('loading one', () => {
   it('cache-busts on the manifest version, so an update lands on reload', async () => {
     const load = vi.fn(() => import('../extensions/hc-button/button.js'));
     await loadExtension(manifest, '/ext/button/', load);
-    expect(load).toHaveBeenCalledWith('/ext/button/button.js?v=1.0.0');
+
+    // The manifest's *own* version, not a literal. Pinning the number here
+    // makes every legitimate bump a failing test, and this asserts that the
+    // version is used — which is the property §8.1 depends on — rather than
+    // which version it happens to be. Bumping the widget to 1.1.0 for the
+    // composition capability broke exactly this.
+    const version = (manifest as { version: string }).version;
+    expect(load).toHaveBeenCalledWith(`/ext/button/button.js?v=${version}`);
   });
 
   it('survives a module that throws, and names it', async () => {
