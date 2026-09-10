@@ -156,3 +156,42 @@ describe('what the gate proved', () => {
     expect(el.shadowRoot?.textContent).toContain('Lit');
   });
 });
+
+describe('what §7.4 asks hc-button to do, and what that cost', () => {
+  it('composes custom fields from child widgets, not from markup', async () => {
+    // §7.4: "Custom fields composed from child widgets (P4), not raw HTML."
+    // This is the capability the acceptance gate found missing — `ctx.child`
+    // did not exist, so composition was first-party-only in practice while
+    // §5.5 said an extension ships a container like anything else.
+    const { contextFor } = await import('../src/sdk/host.js');
+    const built: unknown[] = [];
+    const ctx = contextFor(
+      {
+        store: new DeviceStore(),
+        context: {},
+        mountChild: (spec) => {
+          built.push(spec);
+          const el = document.createElement('div');
+          el.dataset['type'] = spec.type;
+          return el;
+        },
+      },
+      { type: 'button', config: {} },
+    );
+
+    const child = ctx.child({ type: 'history_chart', config: { device_id: 'lamp' } });
+    expect(child?.dataset['type']).toBe('history_chart');
+    expect(built).toHaveLength(1);
+  });
+
+  it('has no child to give when the host offers none', async () => {
+    // A sandboxed widget is exactly this case: §5.5 says a frame cannot mount
+    // another frame's element, so slots and isolation are mutually exclusive.
+    const { contextFor } = await import('../src/sdk/host.js');
+    const ctx = contextFor(
+      { store: new DeviceStore(), context: {} },
+      { type: 'button', config: {} },
+    );
+    expect(ctx.child({ type: 'text', config: {} })).toBeUndefined();
+  });
+});

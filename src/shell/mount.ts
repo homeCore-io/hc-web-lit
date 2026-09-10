@@ -152,7 +152,10 @@ export function mountWidget(el: MountTarget, w: WidgetSpec, env: MountEnv): void
 
   // A container mounts its own children and needs what the page had.
   give(el, 'env', env);
-  el.ctx = contextFor(env, w);
+  // The child factory is handed over here because this is the only place that
+  // has one: `contextFor` cannot import it without the SDK depending on the
+  // shell, and a widget cannot build one without becoming the host.
+  el.ctx = contextFor({ ...env, mountChild: (spec) => mountChild(spec, env) }, w);
 
   attachActions(el, w, env);
 }

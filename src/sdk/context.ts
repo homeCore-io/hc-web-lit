@@ -83,6 +83,35 @@ export interface HcContext {
   details(deviceId: string): void;
 
   /** P3 — what a template instance stands for (§5.4). */
+  /**
+   * Build a child widget from a spec — P4, for a widget that composes (§5.5).
+   *
+   * **Added because `hc-button` could not be built without it**, which is what
+   * §7.4 says that widget is for: "if it needs a capability that isn't already
+   * a primitive, that is a signal the primitive set is incomplete — fix the
+   * primitive, don't special-case the widget". §7.4 asks for custom fields
+   * "composed from child widgets (P4), not raw HTML", and §5.5 says an
+   * extension ships a container the same way it ships anything else. Neither
+   * was possible: `mountChild` lives in the shell, and nothing reached it from
+   * here, so composition was first-party-only in practice while the plan said
+   * it was not.
+   *
+   * **The one capability that is deliberately not message-shaped.** Rule 3
+   * keeps every other one expressible as data in and data out; this returns a
+   * live element, because a child *is* one. §5.5 already draws the consequence
+   * and accepts it: "a sandboxed widget cannot be a container — a frame cannot
+   * mount another frame's element — so the per-extension sandbox flag and
+   * slots are mutually exclusive." So this is the seam where isolation and
+   * composition are known to be exclusive, rather than a place the rule was
+   * quietly broken.
+   *
+   * The child is mounted exactly as a page mounts one: same registry, same
+   * template resolution, same host callbacks, and `nested` set so it draws no
+   * chrome of its own. Undefined for a type nothing draws, which a caller
+   * should render as visibly missing rather than as nothing.
+   */
+  child(spec: WidgetSpec): HTMLElement | undefined;
+
   template(id: string): WidgetSpec | undefined;
 
   /** Resolved design tokens, so a widget restyles with the house (§15). */

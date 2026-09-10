@@ -41,6 +41,16 @@ export interface MountEnv {
   onAction?: (a: ActionConfig) => void;
   /** Where widget templates come from (§5.4). Absent means none are defined. */
   templates?: TemplateStore;
+
+  /**
+   * Build a child widget, for `ctx.child` (§5.5).
+   *
+   * Supplied by `mountWidget`, which is the only thing that knows how — and
+   * injected rather than imported, because the SDK depends downward only and
+   * `mountChild` lives in the shell. A widget composing children is asking the
+   * host to do it, which is the same shape every other capability here has.
+   */
+  mountChild?: (spec: WidgetSpec) => HTMLElement | undefined;
   /** Open a sheet on a widget spec (§5.6). */
   onSheet?: (content: WidgetSpec) => void;
   /** Album or channel art, fetched by the host because it needs the bearer. */
@@ -144,6 +154,10 @@ export function contextFor(env: MountEnv, spec: WidgetSpec): HcContext {
     template(id) {
       const found = env.templates?.get(id);
       return found?.widget;
+    },
+
+    child(spec) {
+      return env.mountChild?.(spec);
     },
 
     ...(env.tokens !== undefined ? { tokens: env.tokens } : {}),
