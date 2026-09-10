@@ -14,6 +14,7 @@ import type { ActionConfig } from '../core/actions.js';
 import type { DeviceStore } from '../core/store.js';
 import type { SelectionContext } from '../core/selection.js';
 import type { TemplateStore } from '../core/templates.js';
+import type { PluginRunner } from '../core/plugins.js';
 import type { Tokens } from '../design/tokens.js';
 
 /**
@@ -43,6 +44,21 @@ export interface MountEnv {
   onSheet?: (content: WidgetSpec) => void;
   /** Album or channel art, fetched by the host because it needs the bearer. */
   onArt?: (deviceId: string) => Promise<string | undefined>;
+  /**
+   * What the plugins can be asked to do (§5.11).
+   *
+   * A capability rather than a client: the widget names an operation a plugin
+   * declared and the host performs it, so §19.4 holds here as everywhere —
+   * nothing but the host touches the socket or the token.
+   */
+  plugins?: PluginRunner;
+  /**
+   * What this session may do, from `/auth/me` (§5.11).
+   *
+   * So a control gated on `requires_role` is not offered rather than being
+   * offered and refused — §5.10's reasoning about actions, one level up.
+   */
+  scopes?: readonly string[];
   /** Resolved design tokens, so a widget restyles with the house (§15). */
   tokens?: Tokens;
   /** Editing or viewing (§14.2). */

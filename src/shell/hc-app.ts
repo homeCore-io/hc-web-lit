@@ -21,6 +21,7 @@ import { Authored } from '../core/authored.js';
 import { BrowserContent, ServerContent } from '../core/content.js';
 import { PanelCredential } from '../core/panel.js';
 import { LastKnown, ageOf } from '../core/last-known.js';
+import type { CommandEvent } from '../core/plugins.js';
 import { ExtensionSource, type InstalledExtensions } from '../ext/install.js';
 import type { CommandRequest } from '../core/widget.js';
 import { effectiveName, isOn } from '../core/present.js';
@@ -38,6 +39,7 @@ import '../widgets/hc-colour-wheel.js';
 import '../widgets/hc-contact.js';
 import '../widgets/hc-fan.js';
 import '../widgets/hc-presence.js';
+import '../widgets/hc-plugin-actions.js';
 import '../widgets/hc-device-breakdown.js';
 import '../widgets/hc-house-status.js';
 import '../widgets/hc-line.js';
@@ -335,6 +337,41 @@ export class HcApp extends LitElement {
   private readonly art = async (deviceId: string): Promise<string | undefined> =>
     this.api?.mediaArt(deviceId);
 
+  /**
+   * What the plugins can be asked to do (§5.11).
+   *
+   * The host performs it and the widget only names it, so §19.4 holds: a
+   * widget that could reach `EventSource` directly would be a widget holding
+   * the token, since the credential travels in the query.
+   */
+  private readonly plugins = {
+    list: async () => (await this.api?.listPlugins()) ?? [],
+    run: async (pluginId: string, action: string) => {
+      const api = this.api;
+      if (api === undefined) throw new Error('not connected');
+      const started = await api.runPluginAction(pluginId, action);
+      return started.kind === 'done'
+        ? ({ kind: 'done', result: started.result } as const)
+        : ({ kind: 'streaming', requestId: started.requestId } as const);
+    },
+    follow: (pluginId: string, requestId: string, onEvent: (e: CommandEvent) => void) => {
+      const api = this.api;
+      if (api === undefined) return () => undefined;
+      const source = new EventSource(api.pluginStreamUrl(pluginId, requestId));
+      // Core names the SSE event `stream`; the default `message` handler would
+      // never fire and the operation would look like it never reported.
+      source.addEventListener('stream', (e) => {
+        try {
+          onEvent(JSON.parse((e as MessageEvent).data as string) as CommandEvent);
+        } catch {
+          // A frame that is not JSON is a frame this cannot use. The next one
+          // may be fine, and closing the stream over it would lose the rest.
+        }
+      });
+      return () => source.close();
+    },
+  };
+
   private readonly details = (deviceId: string): void => {
     // No title: the sheet's content leads with the device's name, and the
     // chrome saying it again is the same thing said twice.
@@ -353,6 +390,8 @@ export class HcApp extends LitElement {
       onDetails: this.details,
       onAction: this.runAction,
       onArt: this.art,
+      plugins: this.plugins,
+      ...(this.panelScopes !== undefined ? { scopes: this.panelScopes } : {}),
       templates: this.authored.templates(),
     };
   }
@@ -899,6 +938,8 @@ export class HcApp extends LitElement {
         .onEvents=${this.events}
         .onDetails=${this.details}
         .onArt=${this.art}
+        .plugins=${this.plugins}
+        .scopes=${this.panelScopes}
         .templates=${this.authored.templates()}
         .onAction=${this.runAction}
         .context=${this.roomContext}

@@ -114,6 +114,19 @@ export class HcPage extends LitElement {
     ((deviceId: string) => Promise<string | undefined>) | undefined;
 
   /**
+   * What the plugins can be asked to do, and what this session may run (§5.11).
+   *
+   * Passed down rather than reached for: the page rebuilds a `MountEnv` from
+   * the properties it is given, so a capability the shell holds and never
+   * hands over is one no widget on a page can see. That is exactly how this
+   * went missing — `hc-app` put `plugins` in *its* env, and `hc-page` builds a
+   * different one.
+   */
+  @property({ attribute: false }) plugins: MountEnv['plugins'];
+
+  @property({ attribute: false }) scopes: readonly string[] | undefined;
+
+  /**
    * What `@room` and `@picked` mean on this page.
    *
    * **This is the placement seam.** A room page is one document reused for
@@ -294,6 +307,8 @@ export class HcPage extends LitElement {
       ...(this.onDetails !== undefined ? { onDetails: this.onDetails } : {}),
       ...(this.onAction !== undefined ? { onAction: this.onAction } : {}),
       ...(this.onArt !== undefined ? { onArt: this.onArt } : {}),
+      ...(this.plugins !== undefined ? { plugins: this.plugins } : {}),
+      ...(this.scopes !== undefined ? { scopes: this.scopes } : {}),
     };
   }
 

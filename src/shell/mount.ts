@@ -37,6 +37,10 @@ export type MountTarget = HTMLElement & {
   onDetails?: (deviceId: string) => void;
   /** Album or channel art, fetched by the host because it needs the bearer. */
   onArt?: (deviceId: string) => Promise<string | undefined>;
+  /** What the plugins can be asked to do (§5.11). */
+  runner?: MountEnv['plugins'];
+  /** What this session may do, for a `requires_role` check before drawing. */
+  scopes?: readonly string[];
   /**
    * Everything the host gives a widget, handed over whole.
    *
@@ -137,6 +141,8 @@ export function mountWidget(el: MountTarget, w: WidgetSpec, env: MountEnv): void
   if (env.onFetch !== undefined) give(el, 'onFetch', env.onFetch);
   if (env.onEvents !== undefined) give(el, 'onEvents', env.onEvents);
   if (env.onArt !== undefined) give(el, 'onArt', env.onArt);
+  if (env.plugins !== undefined) give(el, 'runner', env.plugins);
+  if (env.scopes !== undefined) give(el, 'scopes', env.scopes);
 
   // A container mounts its own children and needs what the page had.
   give(el, 'env', env);

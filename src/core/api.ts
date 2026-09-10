@@ -10,6 +10,7 @@
  */
 import type { DeviceState } from './device.js';
 import { humanise } from './text.js';
+import { readStart, type CommandStart, type Plugin } from './plugins.js';
 
 /** What core rejected, with enough to act on rather than just a stack trace. */
 export class HcApiError extends Error {
@@ -388,6 +389,56 @@ export class HcApi {
   /** `getDashboard`. */
   async getDashboard(id: string): Promise<unknown> {
     return this.request<unknown>('GET', `/dashboards/${encodeURIComponent(id)}`);
+  }
+
+  /** `listPlugins`. What is installed, and what each says it can do (§5.11). */
+  async listPlugins(): Promise<Plugin[]> {
+    const body = await this.request<unknown>('GET', '/plugins');
+    // Core has answered both ways over its life — a bare array, and an object
+    // with a `plugins` key. Reading both costs one line and saves a client
+    // that breaks on an upgrade nobody thought was breaking.
+    if (Array.isArray(body)) return body as Plugin[];
+    const wrapped = (body as { plugins?: unknown } | null)?.plugins;
+    return Array.isArray(wrapped) ? (wrapped as Plugin[]) : [];
+  }
+
+  /**
+   * `postPluginCommand`. Ask a plugin to do one of the things it declared.
+   *
+   * Returns either the finished result or a request id to follow, because
+   * that is what core returns; which one is decided by `status` rather than by
+   * what the plugin declared (§ plugins.ts).
+   */
+  async runPluginAction(
+    pluginId: string,
+    action: string,
+    params: Record<string, unknown> = {},
+  ): Promise<CommandStart> {
+    const body = await this.request<unknown>(
+      'POST',
+      `/plugins/${encodeURIComponent(pluginId)}/command`,
+      { action, ...params },
+    );
+    const start = readStart(body);
+    if (start === undefined) throw new HcApiError(502, '/plugins', 'Unreadable command response');
+    return start;
+  }
+
+  /**
+   * The URL a command's progress arrives on.
+   *
+   * Server-sent events, and the credential goes in the query for the reason
+   * core's own routing table gives: `EventSource` cannot set a header. That is
+   * the same `?token=` path the event stream uses, and since v0.1.68 it takes
+   * an API key as well as a session — so a wall panel provisioned with a key
+   * can watch a discovery run like anything else.
+   */
+  pluginStreamUrl(pluginId: string, requestId: string): string {
+    if (this.token === undefined) throw new Error('not authenticated');
+    const q = new URLSearchParams({ token: this.token });
+    return `${this.baseUrl}/plugins/${encodeURIComponent(pluginId)}/command/${encodeURIComponent(
+      requestId,
+    )}/stream?${q.toString()}`;
   }
 
   /**
