@@ -1,0 +1,193 @@
+/**
+ * The three §7.3 widgets core describes and this client did not draw.
+ *
+ * A page authored elsewhere can hold any type core validates, so an undrawn
+ * one renders as a labelled placeholder — correct, and useless to the person
+ * looking at it. These close the last three that §7.3 names by name.
+ */
+import { describe, expect, it } from 'vitest';
+import { parseMarkdown, spansIn } from '../src/core/markdown.js';
+import type { DeviceState } from '../src/core/device.js';
+import { setPreferences } from '../src/core/i18n.js';
+import '../src/widgets/hc-gauge.js';
+import '../src/widgets/hc-markdown.js';
+import '../src/widgets/hc-camera.js';
+
+async function mount<T extends HTMLElement>(
+  tag: string,
+  props: Record<string, unknown>,
+): Promise<T> {
+  const el = document.createElement(tag) as T & { updateComplete: Promise<unknown> };
+  Object.assign(el, props);
+  document.body.append(el);
+  await el.updateComplete;
+  return el;
+}
+
+/**
+ * What the widget says, without the stylesheet.
+ *
+ * jsdom has no adopted stylesheets, so Lit injects a `<style>` element into
+ * every shadow root and `textContent` returns the CSS along with the words.
+ */
+const text = (el: HTMLElement): string =>
+  [...(el.shadowRoot?.childNodes ?? [])]
+    .filter((n) => (n as Element).tagName !== 'STYLE')
+    .map((n) => n.textContent ?? '')
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const sensor = (attrs: Record<string, unknown>, schema?: DeviceState['schema']): DeviceState => ({
+  device_id: 'ecowitt_1',
+  name: 'Indoor Sensor',
+  plugin_id: 'ecowitt',
+  available: true,
+  attributes: attrs,
+  last_seen: '2026-09-10T00:00:00Z',
+  ...(schema !== undefined ? { schema } : {}),
+});
+
+describe('the gauge', () => {
+  it('takes its range from what the plugin declared', async () => {
+    // Asking somebody to type a range the schema already states is asking
+    // them to get it wrong.
+    const el = await mount('hc-gauge', {
+      config: { attribute: 'battery' },
+      device: sensor(
+        { battery: 25 },
+        { attributes: { battery: { kind: 'integer', min: 0, max: 200, unit: '%' } } },
+      ),
+    });
+    const fill = el.shadowRoot?.querySelector('[part="indicator"]');
+    // A quarter of 0..200 is an eighth of the sweep, not a quarter of 0..100.
+    expect(fill?.getAttribute('d')).toContain('A');
+    expect(text(el)).toContain('25%');
+  });
+
+  it('converts the value and its bounds together', async () => {
+    // Half of a Fahrenheit range must still be half once it is Celsius, or
+    // the needle points at a scale it is not on.
+    setPreferences({ locale: 'en-US', temperature: 'C' });
+    try {
+      const el = await mount('hc-gauge', {
+        config: { attribute: 'temperature', shape: 'bar', min: 32, max: 212 },
+        device: sensor({ temperature: 122, temperature_unit: '°F' }),
+      });
+      expect(text(el)).toContain('50 °C');
+      expect(el.shadowRoot?.querySelector<HTMLElement>('.fill')?.style.width).toBe('50%');
+    } finally {
+      setPreferences({});
+    }
+  });
+
+  it('says what is missing rather than drawing an empty dial', async () => {
+    expect(text(await mount('hc-gauge', { config: { attribute: 'battery' } }))).toContain(
+      'No device',
+    );
+    const noAttr = await mount('hc-gauge', {
+      config: { attribute: 'nonsense' },
+      device: sensor({ battery: 25 }),
+    });
+    expect(text(noAttr)).toContain('Nothing to gauge');
+  });
+
+  it('gives each gauge its own gradient', async () => {
+    // Two dials sharing a gradient id both draw whichever rendered last.
+    const a = await mount('hc-gauge', {
+      config: { attribute: 'battery', color: 'success' },
+      device: sensor({ battery: 20 }),
+    });
+    const b = await mount('hc-gauge', {
+      config: { attribute: 'battery', color: 'danger' },
+      device: sensor({ battery: 20 }),
+    });
+    const idOf = (el: HTMLElement) => el.shadowRoot?.querySelector('[id^="hc-gauge-"]')?.id;
+    expect(idOf(a)).not.toBe(idOf(b));
+  });
+});
+
+describe('markdown, parsed rather than pasted', () => {
+  it('reads the blocks a house note contains', () => {
+    const blocks = parseMarkdown(
+      ['# Boiler', '', 'Serviced *yearly*.', '', '- filter', '- pressure', '', '---'].join('\n'),
+    );
+    expect(blocks.map((b) => b.kind)).toEqual(['heading', 'paragraph', 'list', 'rule']);
+    const list = blocks[2];
+    expect(list?.kind === 'list' && list.items.length).toBe(2);
+  });
+
+  it('joins consecutive items into one list', () => {
+    const blocks = parseMarkdown('1. one\n2. two\n3. three');
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]?.kind === 'list' && blocks[0].ordered).toBe(true);
+  });
+
+  it('refuses a scheme a link should not carry', () => {
+    // The note is written by whoever can edit the dashboard, and device data
+    // is interpolated into it before it renders.
+    // The words survive; the link does not.
+    expect(spansIn('[tap](javascript:alert(1))').some((s) => s.kind === 'link')).toBe(false);
+    expect(spansIn('[tap](JaVaScRiPt:alert(1))').some((s) => s.kind === 'link')).toBe(false);
+    expect(spansIn('[tap](data:text/html,x)').some((s) => s.kind === 'link')).toBe(false);
+    expect(spansIn('[docs](https://example.com)')).toEqual([
+      { kind: 'link', text: 'docs', href: 'https://example.com' },
+    ]);
+  });
+
+  it('renders text as text, never as markup', async () => {
+    const el = await mount('hc-markdown', {
+      config: { markdown: '# Hi\n\n<img src=x onerror="boom()"> and **bold**' },
+    });
+    expect(el.shadowRoot?.querySelector('h1')?.textContent).toBe('Hi');
+    expect(el.shadowRoot?.querySelector('strong')?.textContent).toBe('bold');
+    // The angle brackets are characters somebody typed, not an element.
+    expect(el.shadowRoot?.querySelector('img')).toBeNull();
+    expect(text(el)).toContain('<img src=x');
+  });
+
+  it('draws an unwritten note as nothing at all', async () => {
+    // Core allows the empty string here on purpose; a placeholder on a wall
+    // panel is worse than a gap.
+    const el = await mount('hc-markdown', { config: { markdown: '' } });
+    expect(text(el)).toBe('');
+  });
+});
+
+describe('the camera', () => {
+  it('names the source type it cannot play', async () => {
+    // A broken image icon is indistinguishable from a camera that is down,
+    // and somebody goes and checks the camera.
+    const el = await mount('hc-camera', {
+      config: { source_type: 'webrtc', url: 'https://cam.local/stream' },
+    });
+    expect(text(el)).toContain('cannot play webrtc');
+    expect(text(el)).toContain('the player is missing');
+  });
+
+  it('asks for a new picture rather than the one already held', async () => {
+    const el = await mount('hc-camera', {
+      config: { source_type: 'image_refresh', url: 'https://cam.local/still.jpg', refresh_secs: 5 },
+    });
+    expect(el.shadowRoot?.querySelector('img')?.getAttribute('src')).toBe(
+      'https://cam.local/still.jpg?hc=0',
+    );
+  });
+
+  it('streams an mjpeg without a cache-buster', async () => {
+    const el = await mount('hc-camera', {
+      config: { source_type: 'mjpeg', url: 'https://cam.local/stream.mjpg' },
+    });
+    expect(el.shadowRoot?.querySelector('img')?.getAttribute('src')).toBe(
+      'https://cam.local/stream.mjpg',
+    );
+  });
+
+  it('refuses an address a picture cannot come from', async () => {
+    const el = await mount('hc-camera', {
+      config: { source_type: 'image_refresh', url: 'javascript:alert(1)' },
+    });
+    expect(el.shadowRoot?.querySelector('img')).toBeNull();
+    expect(text(el)).toContain('not an address');
+  });
+});

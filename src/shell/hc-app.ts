@@ -74,6 +74,9 @@ import '../widgets/hc-tabs.js';
 import '../widgets/hc-accordion.js';
 import '../widgets/hc-property-panel.js';
 import '../widgets/hc-preferences.js';
+import '../widgets/hc-gauge.js';
+import '../widgets/hc-markdown.js';
+import '../widgets/hc-camera.js';
 
 type Phase = 'idle' | 'connecting' | 'ready' | 'failed';
 

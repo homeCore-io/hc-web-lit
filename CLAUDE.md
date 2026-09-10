@@ -2167,10 +2167,11 @@ not a failure of it.
 
 **Phase 4 — Widget vocabulary**
 - [ ] The Tier 1 family (§7.3) on the shared layout shell — every widget type in
-      any live document is drawn, but thirteen core types are not: `gauge`,
-      `markdown`, `camera_video`, `thermostat`, `toggle`, `stepper`,
-      `stat_summary`, `svg`, `web_embed`, `rooms`, `dashboard_link`,
-      `plugin_widget`, `floor_plan` (Phase 7)
+      any live document is drawn, and the three §7.3 names by name are now too
+      (`gauge`, `markdown`, `camera_video`). Nine core types are still not:
+      `thermostat`, `toggle`, `stepper`, `stat_summary`, `svg`, `web_embed`,
+      `rooms`, `dashboard_link`, `plugin_widget` — plus `floor_plan`, which is
+      Phase 7
 - [x] Containers on P4: stack, grid, swipe, tabs, accordion
 - [x] Schema-driven property panel for every widget — no JSON editing required
 - [x] Icon rules engine — the floorplan it is to be shared with is Phase 7
