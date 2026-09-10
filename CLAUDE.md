@@ -4,7 +4,9 @@
 > Drop into the repo root as `CLAUDE.md` (or import into `docs/`) so Claude Code
 > picks it up per session.
 
-**Status:** design accepted, implementation not started
+**Status:** Phases 0–3 done, Phase 4 all but the last of §7.3's family.
+The boxes in §18.3 are kept ticked as work lands; an item naming something
+that was deliberately not built says so on the line rather than staying blank.
 **Supersedes:** the Flutter/wasm implementation of hc-web
 **Targets:** browser (desktop), phone, tablet. **No desktop-native target.**
 
@@ -2088,72 +2090,91 @@ ABI**: no `hc-extension.json`, no published SDK, no third-party anything.
 Widgets written here are expected to be rebuilt in Phase 2 and that is the plan,
 not a failure of it.
 
-- [ ] Shell: auth, WebSocket, device store with per-device fan-out
-- [ ] Read `DashboardDefinition` and draw one real dashboard from redb
-- [ ] `dashboard_layout` reference ported; fixtures green in CI (§5.7) — the one
+- [x] Shell: auth, WebSocket, device store with per-device fan-out
+- [x] Read `DashboardDefinition` and draw one real dashboard from redb
+- [x] `dashboard_layout` reference ported; fixtures green in CI (§5.7) — the one
       piece that is cheaper to get right than to redo, because a wrong
       `normalize` loses edits
-- [ ] Three widgets, however they come out: `hc-device`, `hc-light`, `hc-chart`
+- [x] Three widgets, however they come out: `hc-device`, `hc-light`, `hc-chart`
 - [ ] Deploy it next to the Flutter client and use it for a week
 
 **Phase 1 — Contract & tokens**
-- [ ] Skin seeds + the derivation to tokens, ported from the Dart, with the
-      four built-ins as fixtures — each must rebuild from its seeds field for
-      field (§15)
-- [ ] `@homecore/widget-sdk` skeleton: `HcWidget`, `HcContext`, types
+- [x] Skin seeds + the derivation to tokens, ported from the Dart, with the
+      built-ins as fixtures — each must rebuild from its seeds field for field
+      (§15). Five shipped rather than the four planned: `soft_home` is a light
+      ground, and a derivation that had only dark ones to prove itself against
+      would have been proving very little
+- [x] `@homecore/widget-sdk` skeleton: `HcWidget`, `HcContext`, types
 - [ ] `hc-extension.json` schema (incl. `provides`) + validator, Rust side too —
-      `provides.widgets[]` entries are `WidgetDescriptor`s (§4.6)
+      **client side only.** This host reads and refuses a manifest; core has no
+      validator, so a package it would reject installs anywhere else without a
+      word. `provides.widgets[]` entries are `WidgetDescriptor`s (§4.6)
 - [ ] Core: `graphical` widget kind + its `validate` branch, so a code widget
       with no portable render is legal when it says so (§4.6)
-- [ ] Config-schema vocabulary: `x-hc-picker`, `x-hc-device-type`, `x-hc-asset-kind`,
+- [ ] Config-schema vocabulary — **the client half exists and the wire half does
+      not.** `core/properties.ts` derives a picker per field from core's served
+      vocabulary, which is what §4.4 asks these keys to express; nothing yet
+      *reads* them off a manifest, because no extension ships a config schema:
+      `x-hc-picker`, `x-hc-device-type`, `x-hc-asset-kind`,
       `x-hc-picker: room`, `x-hc-picker: device-or-query`, `x-hc-expr`,
       `hc://schema/action` — names checked against
       `hc_types::dashboard_vocabulary`'s naming ratchet
-- [ ] Vite target pinned to a Chrome version and stated in `vite.config.ts`
+- [x] Vite target pinned to a Chrome version and stated in `vite.config.ts`
 
 **Phase 2 — Host primitives** *(§5, plus presentation — before the SDK ships)*
-- [ ] Presentation primitive: `is_on`, facet classification, effective name/area (§1.1)
-- [ ] **P1** expression compile + cache, the named-parameter scope (§6.4), and
+- [x] Presentation primitive: `is_on`, facet classification, effective name/area (§1.1)
+- [x] **P1** expression compile + cache, the named-parameter scope (§6.4), and
       the throw-renders-a-fallback rule (§6.6)
-- [ ] **P1** expression scope, AST caching, dependency-driven re-evaluation
-- [ ] **P2** device query type, `/api/query`, live client-side maintenance
-- [ ] **P3** template storage, parameter substitution, by-reference instantiation
-- [ ] **P4** slot model + chrome suppression rules
-- [ ] **P5** overlay stack: sheet, dialog, popover, toast, confirm
-- [ ] **P6** layout engine: Phase 0's port finished — four breakpoints, `flow`,
+- [x] **P1** expression scope, AST caching, dependency-driven re-evaluation
+- [x] **P2** device query type, live client-side maintenance — `/api/query` is
+      **not built and not needed**: the whole house fits in the store, so a
+      query resolved there is live by construction (§17)
+- [x] **P3** template storage, parameter substitution, by-reference instantiation
+- [x] **P4** slot model + chrome suppression rules
+- [x] **P5** overlay stack: sheet, dialog, toast, confirm — **no popover**, which
+      nothing has asked for: every case so far wanted the sheet, and a popover
+      is the one of the five that a wall panel has no pointer for
+- [x] **P6** layout engine: Phase 0's port finished — four breakpoints, `flow`,
       `frame`, `groups`, fixtures still green (§5.7)
-- [ ] **P7** styling contract: custom property naming scheme, `part` conventions,
-      SDK lint rule
-- [ ] **P8** history/statistics endpoint with LTTB downsampling + client
-- [ ] **P9** action model, central dispatch, **safety policy (§11.3) enforced here**
-- [ ] **P10** capability schemas: device + plugin, control generation by kind,
+- [x] **P7** styling contract: custom property naming scheme, `part`
+      conventions, enforced by `styling.test.ts` against `design/parts.ts`
+      rather than by the planned SDK lint rule — the list is the ABI (§19.7),
+      so the check belongs where the list is
+- [x] **P8** history/statistics endpoint with LTTB downsampling + client
+- [x] **P9** action model, central dispatch, **safety policy (§11.3) enforced here**
+- [x] **P10** capability schemas: device + plugin, control generation by kind,
       graceful absence (§5.11)
-- [ ] Every primitive reachable from `HcContext`, documented, with tests
-- [ ] **Exit gate:** Phase 0's three widgets rebuilt on the primitives, with
+- [x] Every primitive reachable from `HcContext`, documented, with tests
+- [x] **Exit gate:** Phase 0's three widgets rebuilt on the primitives, with
       nothing reaching around `HcContext`. This is what stops "we'll refactor
       later" from being the thing that never happens — and rebuilding a widget
       that already works is the cheapest possible test of whether the primitive
       set is usable.
 
 **Phase 3 — Extension host + ABI proof**
-- [ ] `ext-host`: manifest load, API version gate, module load, error isolation
-- [ ] Sandbox host for code elements: frame lifecycle, nonce handshake, CSP,
+- [x] `ext-host`: manifest load, API version gate, module load, error isolation
+- [x] Sandbox host for code elements: frame lifecycle, nonce handshake, CSP,
       grant enforcement (§8.1) — and the per-extension flag that reuses it
-- [ ] In-realm ESM loader for the two kinds that cannot be framed (§8.1)
-- [ ] Asset store endpoints + SVG sanitization + attachments
-- [ ] `HcWidgetBase`, `HcLayoutShell` in the SDK
-- [ ] **Acceptance gate:** build `hc-button` (§7.4) *first*, as an extension. If
+- [x] In-realm ESM loader for the two kinds that cannot be framed (§8.1)
+- [x] Asset store endpoints + SVG sanitization + attachments
+- [x] `HcWidgetBase`, `HcLayoutShell` in the SDK
+- [x] **Acceptance gate:** build `hc-button` (§7.4) *first*, as an extension. If
       it needs anything that is not already a primitive, stop and fix Phase 2.
-- [ ] **The ABI is published here, and not before.** Everything up to this point
-      is ours to change freely; after it, §19.7 applies and a rename is a
-      breaking change.
+- [ ] **The ABI is published here, and not before.** **Deliberately still
+      open** — the surface stays freely changeable until the household says it
+      is time. Everything up to this point is ours to change freely; after it,
+      §19.7 applies and a rename is a breaking change.
 
 **Phase 4 — Widget vocabulary**
-- [ ] The Tier 1 family (§7.3) on the shared layout shell
-- [ ] Containers on P4: stack, grid, swipe, tabs, accordion
-- [ ] Schema-driven property panel for every widget — no JSON editing required
-- [ ] Icon rules engine (shared with the floorplan)
-- [ ] i18n scaffolding
+- [ ] The Tier 1 family (§7.3) on the shared layout shell — every widget type in
+      any live document is drawn, but thirteen core types are not: `gauge`,
+      `markdown`, `camera_video`, `thermostat`, `toggle`, `stepper`,
+      `stat_summary`, `svg`, `web_embed`, `rooms`, `dashboard_link`,
+      `plugin_widget`, `floor_plan` (Phase 7)
+- [x] Containers on P4: stack, grid, swipe, tabs, accordion
+- [x] Schema-driven property panel for every widget — no JSON editing required
+- [x] Icon rules engine — the floorplan it is to be shared with is Phase 7
+- [x] i18n scaffolding
 
 **Phase 5 — Dashboards & PWA**
 - [ ] Dashboard document schema v1 + migration harness
