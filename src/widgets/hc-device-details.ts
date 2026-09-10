@@ -164,6 +164,20 @@ export class HcDeviceDetails extends LitElement {
       font-size: var(--hc-text-caption-size, 11px);
       color: var(--hc-ink-muted, #8b95a4);
     }
+    .hint input {
+      min-height: var(--hc-density-min-tap, 44px);
+      background: var(--hc-surface-sunken, #0d1116);
+      color: var(--hc-ink, #e9edf2);
+      border: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
+      border-radius: var(--hc-radius-sm, 8px);
+      padding: 0 0.5rem;
+      font: inherit;
+      min-width: 9rem;
+    }
+    .hint input:focus-visible {
+      outline: 2px solid var(--hc-stroke-focus, #7cc4ff);
+      outline-offset: 2px;
+    }
     .hint select {
       min-height: var(--hc-density-min-tap, 44px);
       background: var(--hc-surface-sunken, #0d1116);
@@ -190,6 +204,16 @@ export class HcDeviceDetails extends LitElement {
 
   /** What this session may do, so a refused control is not offered. */
   @property({ attribute: false }) scopes: readonly string[] | undefined;
+
+  /**
+   * The rest of the house, for the rooms it already has.
+   *
+   * The host sets this on every widget. Deriving the room list from it rather
+   * than fetching `/areas` is not a shortcut: an area *is* the set of devices
+   * assigned to it, so the two answers are the same one, and this one cannot
+   * be stale relative to what is on screen.
+   */
+  @property({ attribute: false }) devices: readonly DeviceState[] = [];
 
   @state() private saving = false;
   @state() private trouble = '';
@@ -257,6 +281,66 @@ export class HcDeviceDetails extends LitElement {
     </label>`;
   }
 
+  /**
+   * Which room this device is in.
+   *
+   * Higher stakes than the hint, and quieter about it: every room page selects
+   * with `area_name: "@room"`, so a device in the wrong room is not wrong —
+   * it is *absent*, on the one page somebody would look for it.
+   *
+   * **A combo rather than a select**, because a room that has no devices yet
+   * does not exist: an area is the set of devices assigned to it, so the first
+   * device moved into a new room is what creates it. A select could never
+   * offer that room, and a plain text field would make somebody retype a room
+   * that already exists and misspell it.
+   *
+   * The text is sent as typed and core normalises it — "Front Porch" and
+   * "front_porch" are the same room to `normalize_area_name`, so the list can
+   * show words a person reads without the value having to be a slug.
+   */
+  private renderArea(d: DeviceState) {
+    if (this.onUpdateDevice === undefined) return nothing;
+    if (this.scopes !== undefined && !this.scopes.includes('devices:write')) return nothing;
+
+    const rooms = [
+      ...new Set(
+        this.devices
+          .map((other) => effectiveArea(other))
+          .filter((a): a is string => typeof a === 'string' && a !== ''),
+      ),
+    ].sort();
+
+    return html`<label class="hint" part="controls">
+      <span part="heading">Room</span>
+      <input
+        part="select"
+        list="hc-rooms"
+        .value=${humanise(effectiveArea(d) ?? '')}
+        placeholder=${d.area === null || d.area === undefined ? 'no room' : humanise(d.area)}
+        ?disabled=${this.saving}
+        @change=${(e: Event) => void this.setArea(d, (e.target as HTMLInputElement).value)}
+      />
+      <datalist id="hc-rooms">
+        ${rooms.map((r) => html`<option value=${humanise(r)}></option>`)}
+      </datalist>
+    </label>`;
+  }
+
+  private async setArea(d: DeviceState, area: string): Promise<void> {
+    this.saving = true;
+    this.trouble = '';
+    try {
+      // Empty clears the override, handing the device back to whatever the
+      // bridge says — which is what core does with `null` and what the
+      // placeholder promises by showing the plugin's own answer.
+      await this.onUpdateDevice?.(d.device_id, { area: area.trim() === '' ? null : area });
+    } catch (e) {
+      this.trouble = e instanceof Error ? e.message : String(e);
+    } finally {
+      this.saving = false;
+    }
+  }
+
   private async setHint(d: DeviceState, hint: string): Promise<void> {
     this.saving = true;
     this.trouble = '';
@@ -297,7 +381,7 @@ export class HcDeviceDetails extends LitElement {
           ${humanise(roleOf(d))}
         </span>
       </div>
-      ${this.renderHint(d)}
+      ${this.renderHint(d)} ${this.renderArea(d)}
       ${
         lead === undefined
           ? nothing

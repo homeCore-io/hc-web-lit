@@ -118,3 +118,60 @@ describe('who is offered it', () => {
     expect(el.shadowRoot?.querySelector('.hint')).toBeNull();
   });
 });
+
+describe('which room a device is in', () => {
+  const house: DeviceState[] = [
+    outlet,
+    { ...outlet, device_id: 'a', area: 'living_room' },
+    { ...outlet, device_id: 'b', area: 'master_bedroom' },
+    { ...outlet, device_id: 'c', area: 'living_room' },
+  ];
+
+  it('offers the rooms the house already has, once each', async () => {
+    const el = await sheet({ devices: house });
+    const rooms = [...(el.shadowRoot?.querySelectorAll('datalist option') ?? [])].map((o) =>
+      o.getAttribute('value'),
+    );
+    expect(rooms).toEqual(['Living room', 'Master bedroom']);
+  });
+
+  it('takes a room that does not exist yet', async () => {
+    // An area *is* the set of devices assigned to it, so a room with no
+    // devices does not exist and a select could never offer it. The first
+    // device moved into a new room is what creates it.
+    const sent = vi.fn(async () => undefined);
+    const el = await sheet({ devices: house, onUpdateDevice: sent });
+    const input = el.shadowRoot?.querySelector('.hint input') as HTMLInputElement;
+    input.value = 'Front Porch';
+    input.dispatchEvent(new Event('change'));
+
+    // Sent as typed: core normalises, so the list can show words a person
+    // reads without the value having to be a slug.
+    expect(sent).toHaveBeenCalledWith('lutron_60', { area: 'Front Porch' });
+  });
+
+  it('clears the override with null, handing it back to the bridge', async () => {
+    const sent = vi.fn(async () => undefined);
+    const el = await sheet({ devices: house, onUpdateDevice: sent });
+    const input = el.shadowRoot?.querySelector('.hint input') as HTMLInputElement;
+    input.value = '   ';
+    input.dispatchEvent(new Event('change'));
+
+    expect(sent).toHaveBeenCalledWith('lutron_60', { area: null });
+  });
+
+  it('shows the plugin’s own room as the placeholder', async () => {
+    // So "empty" reads as "whatever the bridge says" rather than as nothing.
+    const el = await sheet({
+      device: { ...outlet, area: 'office', area_override: null },
+      devices: house,
+    });
+    const input = el.shadowRoot?.querySelector('.hint input') as HTMLInputElement;
+    expect(input.getAttribute('placeholder')).toBe('Office');
+  });
+
+  it('is not shown to a session that may not write devices', async () => {
+    const el = await sheet({ devices: house, scopes: ['devices:read'] });
+    expect(el.shadowRoot?.querySelector('datalist')).toBeNull();
+  });
+});
