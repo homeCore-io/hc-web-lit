@@ -18,14 +18,28 @@ COPY --from=build /app/server ./server
 
 # Where a household's content lives. Mount a volume here and it is as small or
 # as large as the end user decides.
-ENV HC_CONTENT_DIR=/var/lib/hc-web-lit
+#
+# **Inside the application directory, not `/var/lib`.** Two reasons, and the
+# first one is fatal rather than stylistic: this process runs as `node`, and
+# nothing gives an unprivileged user the right to create or write a path under
+# `/var/lib`. The image would start, serve the app, and fail to save anything
+# anybody authored — the failure appearing only when somebody tried. The
+# second is portability: a bare install is the same program with a different
+# `HC_CONTENT_DIR`, and a path outside the install root is one a person may
+# not own on their own machine either.
+ENV HC_CONTENT_DIR=/app/var
 ENV HC_WEB_DIR=/app/dist
 ENV HC_PORT=8090
 # Where core is. This server keeps no users of its own: it asks core who a
 # bearer belongs to and what that role may do, because the household already
 # has one identity system and two would eventually disagree.
 ENV HC_CORE_URL=http://homecore:8080
-VOLUME /var/lib/hc-web-lit
+
+# Created and handed over **before** dropping privileges, because afterwards it
+# is too late: a volume mounted over an empty path inherits root ownership, and
+# `node` cannot chown its way out of that.
+RUN mkdir -p /app/var && chown -R node:node /app/var
+VOLUME /app/var
 EXPOSE 8090
 
 # Not root: this process writes files that a person authored and reads nothing

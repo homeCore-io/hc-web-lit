@@ -25,13 +25,40 @@ import { Store } from './store.ts';
 
 const PORT = Number(process.env['HC_PORT'] ?? 8090);
 const HOST = process.env['HC_HOST'] ?? '0.0.0.0';
-const CONTENT_DIR = resolve(process.env['HC_CONTENT_DIR'] ?? './var');
+/**
+ * Where this install lives, from the code's own location.
+ *
+ * **Not the working directory.** `resolve('./var')` means `cwd/var`, which is
+ * the install directory only when somebody happens to have cd'd into it. Run
+ * as `node /opt/hc-web-lit/server/server.ts` from a home directory and a
+ * household's content lands in `~/var`; run from a systemd unit with no
+ * `WorkingDirectory=` and it lands in `/var`, which the service user cannot
+ * write. Both fail at the moment somebody first saves something, not at
+ * startup, which is the worst time to find out.
+ *
+ * So the defaults hang off the install root: unpack it anywhere, start it from
+ * anywhere, and its content and its app are beside it. That is what makes a
+ * bare install on an existing server the same program as the container rather
+ * than a different deployment story.
+ */
+const ROOT = resolve(import.meta.dirname, '..');
+
+/**
+ * What hc-web-lit's server keeps.
+ *
+ * An absolute `HC_CONTENT_DIR` wins outright, for an operator who wants the
+ * content on a different disk. A relative one is relative to the **install**,
+ * not to whatever directory the process was started from — because that is
+ * what somebody setting `HC_CONTENT_DIR=data` means, and because the
+ * alternative is a path that moves when the service does.
+ */
+const CONTENT_DIR = resolve(ROOT, process.env['HC_CONTENT_DIR'] ?? 'var');
 /**
  * Where core is — the same variable the dev server proxies with, so one
  * setting points both halves of a development machine at the same house.
  */
 const CORE_URL = process.env['HC_CORE_URL'] ?? 'http://10.0.10.150:8080';
-const WEB_DIR = resolve(process.env['HC_WEB_DIR'] ?? './dist');
+const WEB_DIR = resolve(ROOT, process.env['HC_WEB_DIR'] ?? 'dist');
 
 /**
  * Who may read and write, decided by core.
