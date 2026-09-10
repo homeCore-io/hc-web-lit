@@ -381,7 +381,6 @@ export class HcDeviceDetails extends LitElement {
           ${humanise(roleOf(d))}
         </span>
       </div>
-      ${this.renderHint(d)} ${this.renderArea(d)}
       ${
         lead === undefined
           ? nothing
@@ -442,6 +441,20 @@ export class HcDeviceDetails extends LitElement {
               </details>`
         }
       </section>
+
+      ${
+        // **Last, because these are settings and everything above is state.**
+        // They sat under the header first, which pushed the reading and the
+        // controls down the sheet — so opening a lamp to turn it off began
+        // with two questions about how to file it. Somebody corrects a room
+        // once; they read the state every time.
+        this.renderHint(d) === nothing && this.renderArea(d) === nothing
+          ? nothing
+          : html`<section part="section">
+              <h3 part="heading">How this is filed</h3>
+              ${this.renderHint(d)} ${this.renderArea(d)}
+            </section>`
+      }
     `;
   }
 

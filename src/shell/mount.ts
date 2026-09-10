@@ -41,6 +41,8 @@ export type MountTarget = HTMLElement & {
   runner?: MountEnv['plugins'];
   /** Correct a device's presentation (§1.1). */
   onUpdateDevice?: MountEnv['onUpdateDevice'];
+  /** Save the household's icon rules (§11.2). */
+  onSaveIconRules?: MountEnv['onSaveIconRules'];
   /** What this session may do, for a `requires_role` check before drawing. */
   scopes?: readonly string[];
   /**
@@ -145,6 +147,7 @@ export function mountWidget(el: MountTarget, w: WidgetSpec, env: MountEnv): void
   if (env.onArt !== undefined) give(el, 'onArt', env.onArt);
   if (env.plugins !== undefined) give(el, 'runner', env.plugins);
   if (env.onUpdateDevice !== undefined) give(el, 'onUpdateDevice', env.onUpdateDevice);
+  if (env.onSaveIconRules !== undefined) give(el, 'onSaveIconRules', env.onSaveIconRules);
   if (env.scopes !== undefined) give(el, 'scopes', env.scopes);
 
   // A container mounts its own children and needs what the page had.

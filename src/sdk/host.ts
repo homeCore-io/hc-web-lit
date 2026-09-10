@@ -15,6 +15,7 @@ import type { DeviceStore } from '../core/store.js';
 import type { SelectionContext } from '../core/selection.js';
 import type { TemplateStore } from '../core/templates.js';
 import type { PluginRunner } from '../core/plugins.js';
+import type { IconRule } from '../design/icons.js';
 import type { Tokens } from '../design/tokens.js';
 
 /**
@@ -59,6 +60,14 @@ export interface MountEnv {
    * host performs it, so §19.4 holds here as everywhere.
    */
   onUpdateDevice?: (deviceId: string, patch: Record<string, unknown>) => Promise<void>;
+  /**
+   * Save the household's icon rules and put them into force (§11.2).
+   *
+   * A capability rather than the store itself: the rules are module state by
+   * design (`icons.ts`), and what a widget needs is the ability to *change*
+   * them, not a reference to where they live.
+   */
+  onSaveIconRules?: (rules: IconRule[]) => void;
   /**
    * What this session may do, from `/auth/me` (§5.11).
    *

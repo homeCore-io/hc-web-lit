@@ -20,6 +20,7 @@ import { DeviceStore } from '../core/store.js';
 import { Authored } from '../core/authored.js';
 import { BrowserContent, ServerContent } from '../core/content.js';
 import { PanelCredential } from '../core/panel.js';
+import type { IconRule } from '../design/icons.js';
 import { LastKnown, ageOf } from '../core/last-known.js';
 import type { CommandEvent } from '../core/plugins.js';
 import { ExtensionSource, type InstalledExtensions } from '../ext/install.js';
@@ -59,6 +60,7 @@ import '../widgets/hc-divider.js';
 import '../widgets/hc-grid.js';
 import '../widgets/hc-heading.js';
 import '../widgets/hc-icon.js';
+import '../widgets/hc-icon-rules.js';
 import '../widgets/hc-keypad.js';
 import '../widgets/hc-lock.js';
 import '../widgets/hc-timer.js';
@@ -363,6 +365,23 @@ export class HcApp extends LitElement {
     if (fresh !== undefined) this.store.upsert(fresh);
   };
 
+  /**
+   * Save the household's icon rules, and redraw everything that draws a mark.
+   *
+   * `Authored.apply` puts them into force by setting module state, which
+   * nothing observes — so a rule saved on this page would not reach the cards
+   * behind it until something else happened to re-render. Resetting the store
+   * with its own contents is the honest signal for "everything changed": it
+   * notifies every subscriber, which is precisely the set of things that draw
+   * a device.
+   */
+  private readonly saveIconRules = (rules: IconRule[]): void => {
+    this.authored.saveIconRules(rules);
+    this.authored.apply();
+    this.store.reset(this.store.list());
+    this.requestUpdate();
+  };
+
   private readonly plugins = {
     list: async () => (await this.api?.listPlugins()) ?? [],
     run: async (pluginId: string, action: string) => {
@@ -411,6 +430,7 @@ export class HcApp extends LitElement {
       onArt: this.art,
       plugins: this.plugins,
       onUpdateDevice: this.updateDevice,
+      onSaveIconRules: this.saveIconRules,
       ...(this.panelScopes !== undefined ? { scopes: this.panelScopes } : {}),
       templates: this.authored.templates(),
     };
@@ -1010,6 +1030,7 @@ export class HcApp extends LitElement {
         .onArt=${this.art}
         .plugins=${this.plugins}
         .onUpdateDevice=${this.updateDevice}
+        .onSaveIconRules=${this.saveIconRules}
         .scopes=${this.panelScopes}
         .templates=${this.authored.templates()}
         .onAction=${this.runAction}
