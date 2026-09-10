@@ -2170,8 +2170,7 @@ not a failure of it.
       any live document is drawn, and the three §7.3 names by name are now too
       (`gauge`, `markdown`, `camera_video`), along with `toggle`, `stepper`,
       `thermostat`, `stat_summary`, `rooms`, `dashboard_link` and `web_embed`.
-      Two core types are still not: `svg`, which needs a sanitiser this client
-      has only on the server side, and `plugin_widget`, which needs the
+      and `svg`. One core type is still not: `plugin_widget`, which needs the
       portable render tree (§4.6) — plus `floor_plan`, which is Phase 7
 - [x] Containers on P4: stack, grid, swipe, tabs, accordion
 - [x] Schema-driven property panel for every widget — no JSON editing required

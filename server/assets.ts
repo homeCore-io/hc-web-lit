@@ -104,6 +104,13 @@ export function sniff(bytes: Buffer): Sniffed {
  * - `<set>` / `<animate>` targeting an event or href attribute — animation is
  *   allowed to write attributes, which is a way to reintroduce one of the
  *   above after this has run.
+ * - A `style` attribute that fetches. CSS `url()` is a URL-bearing attribute
+ *   like any other, and this did not treat it as one: a stored drawing could
+ *   carry `style="fill:url(https://…)"` and reach another origin from a
+ *   household's own asset store. Found by running one hostile corpus through
+ *   both this and the browser-side parser (`src/core/svg.ts`) — which is what
+ *   that corpus is for, and what one policy in two implementations does when
+ *   nothing checks.
  *
  * **This is the weaker of the two defences and is meant to be.** It is text
  * manipulation on a format that needs a parser, so it is the sandbox CSP in
@@ -147,6 +154,22 @@ export function sanitiseSvg(source: string): string {
         if (external || flat.startsWith('//')) return '';
       }
       return whole as string;
+    },
+  );
+
+  // CSS that fetches. The whole declaration goes rather than the URL inside
+  // it: editing CSS with a regex is how a filter convinces itself it is a
+  // parser. A data URI for an image is the one that reaches nowhere.
+  out = out.replace(
+    /\sstyle\s*=\s*("([^"]*)"|'([^']*)')/gi,
+    (whole, _q, dq?: string, sq?: string) => {
+      const value = (dq ?? sq ?? '').toLowerCase().replace(/\s+/g, '');
+      if (value.includes('@import') || value.includes('expression(')) return '';
+      if (!value.includes('url(')) return whole as string;
+      const safe = [...value.matchAll(/url\(([^)]*)\)/g)].every((m) =>
+        (m[1] ?? '').replace(/['"]/g, '').startsWith('data:image/'),
+      );
+      return safe ? (whole as string) : '';
     },
   );
 

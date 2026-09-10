@@ -84,6 +84,7 @@ import '../widgets/hc-stat-summary.js';
 import '../widgets/hc-rooms.js';
 import '../widgets/hc-web-embed.js';
 import '../widgets/hc-dashboard-link.js';
+import '../widgets/hc-svg.js';
 
 type Phase = 'idle' | 'connecting' | 'ready' | 'failed';
 
