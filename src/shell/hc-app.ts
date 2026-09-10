@@ -77,6 +77,9 @@ import '../widgets/hc-preferences.js';
 import '../widgets/hc-gauge.js';
 import '../widgets/hc-markdown.js';
 import '../widgets/hc-camera.js';
+import '../widgets/hc-toggle.js';
+import '../widgets/hc-stepper.js';
+import '../widgets/hc-thermostat.js';
 
 type Phase = 'idle' | 'connecting' | 'ready' | 'failed';
 
