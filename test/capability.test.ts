@@ -236,3 +236,35 @@ describe('the power facet', () => {
     expect(selectDevices({ selection_mode: 'facet', facet: ['power'] }, [roku], {})).toEqual([]);
   });
 });
+
+describe('a facet name nobody understands', () => {
+  it('is named, rather than looking like a quiet house', async () => {
+    // Core does not define the facet vocabulary and will not — presentation is
+    // the client's (homeCore#30) — so this client is the only thing that can
+    // notice a name that is not a facet. `power` selected nothing in two real
+    // dashboards for as long as it existed and produced no symptom at all.
+    const { unknownFacets } = await import('../src/core/selection.js');
+    expect(unknownFacets({ selection_mode: 'facet', facet: ['swtiches'] })).toEqual(['swtiches']);
+    expect(unknownFacets({ selection_mode: 'facet', facet: ['switches'] })).toEqual([]);
+  });
+
+  it('checks an except list too, where a wrong name excludes nothing', async () => {
+    // The quieter half: `except: [..., "power"]` that excludes nothing looks
+    // identical to one that had nothing to exclude.
+    const { unknownFacets } = await import('../src/core/selection.js');
+    expect(unknownFacets({ selection_mode: 'area', except: ['lights', 'powr'] })).toEqual(['powr']);
+  });
+
+  it('says nothing about a selection that names no facets', async () => {
+    const { unknownFacets } = await import('../src/core/selection.js');
+    expect(unknownFacets({ selection_mode: 'manual', device_ids: ['a'] })).toEqual([]);
+    expect(unknownFacets(undefined)).toEqual([]);
+  });
+
+  it('reports each unknown name once', async () => {
+    const { unknownFacets } = await import('../src/core/selection.js');
+    expect(
+      unknownFacets({ selection_mode: 'facet', facet: ['nope', 'nope'], except: ['nope'] }),
+    ).toEqual(['nope']);
+  });
+});

@@ -21,6 +21,7 @@ import './hc-device-pill.js';
 import './hc-media-card.js';
 import { attachInspect } from './hold.js';
 import { registerWidget, tagForDevice } from '../core/registry.js';
+import { unknownFacets, type SelectionConfig } from '../core/selection.js';
 
 @customElement('hc-device-grid')
 export class HcDeviceGrid extends LitElement {
@@ -85,6 +86,19 @@ export class HcDeviceGrid extends LitElement {
     const chosen = selectDevices(this.config, this.devices, this.context);
 
     if (chosen.length === 0) {
+      // **A facet nobody understands reads differently from one that matched
+      // nothing.** Core does not define the facet vocabulary and will not —
+      // presentation is the client's — so this is the only place a name that
+      // is not a facet can be noticed at all. `power` selected nothing in two
+      // real dashboards for as long as it existed and looked exactly like a
+      // quiet house (homeCore#30).
+      const unknown = unknownFacets(this.config as SelectionConfig);
+      if (unknown.length > 0) {
+        return html`<div class="empty" part="empty">
+          No such ${unknown.length === 1 ? 'facet' : 'facets'}: ${unknown.join(', ')}
+        </div>`;
+      }
+
       // Named, because an empty set is usually a selection that matched nothing
       // rather than a house with nothing in it, and the difference is what a
       // person needs to know.

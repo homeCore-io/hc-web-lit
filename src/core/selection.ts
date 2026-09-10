@@ -87,8 +87,11 @@ const hint = (d: DeviceState): string => d.ui_hint ?? d.device_type ?? '';
  * in, which is what a person setting a hint is actually after.
  *
  * Listed here beside the tests that read them, so the two cannot drift. This
- * is not a claim about the legal set, which is defined nowhere (homeCore#30) —
- * only about which values this client does something with.
+ * This client owns the set. homeCore#30 asked whether core should define it;
+ * the answer is no, because core is device management and automation and this
+ * is presentation. So the list is not a stopgap waiting on an upstream
+ * vocabulary — it is the vocabulary, and it lives beside the tests that read
+ * it so the two cannot drift.
  */
 export function facetHints(): string[] {
   return [
@@ -108,17 +111,42 @@ export function facetHints(): string[] {
   ];
 }
 
+const asList = (v: string | string[] | undefined): string[] =>
+  v === undefined ? [] : Array.isArray(v) ? v : [v];
+
 /** The facet names this client understands. Exported so a test can pin them. */
 export function knownFacets(): string[] {
   return Object.keys(FACETS).sort();
 }
 
+/**
+ * Facet names in a config that this client does not know.
+ *
+ * **Nothing upstream will ever catch these.** homeCore#30 asked whether core
+ * should define the facet vocabulary and the answer is no: core is device
+ * management and automation, and how a household is shown its house is the
+ * client's business. That is the right split, and it hands this client one
+ * duty it cannot delegate — a facet name is now a word that only this program
+ * understands, so this program is the only thing that can say when it meets
+ * one it does not.
+ *
+ * The failure is not hypothetical and it is not a typo. `power` asked for
+ * attributes named `power`, `energy` or `watts`; the house publishes
+ * `power_w` and `energy_kwh`. A correctly-spelled facet in two real dashboards
+ * selected nothing for as long as it existed, and produced no symptom anybody
+ * could see — not an error, not an empty state, just a shorter list. An empty
+ * facet and a facet that is not one have to look different.
+ */
+export function unknownFacets(config: SelectionConfig | undefined): string[] {
+  if (config?.selection_mode !== 'facet' && config?.except === undefined) return [];
+  const known = new Set(Object.keys(FACETS));
+  const named = [...asList(config?.facet), ...asList(config?.except)];
+  return [...new Set(named.filter((f) => !known.has(f)))];
+}
+
 function matchesFacet(d: DeviceState, facets: readonly string[]): boolean {
   return facets.some((f) => FACETS[f]?.(d) ?? false);
 }
-
-const asList = (v: string | string[] | undefined): string[] =>
-  v === undefined ? [] : Array.isArray(v) ? v : [v];
 
 /** `@room` / `@picked` resolved against the placement's context. */
 export function resolveToken(value: string | undefined, ctx: SelectionContext): string | undefined {
