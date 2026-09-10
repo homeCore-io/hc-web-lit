@@ -20,6 +20,7 @@ import { DeviceStore } from '../core/store.js';
 import { Authored } from '../core/authored.js';
 import { BrowserContent, ServerContent } from '../core/content.js';
 import { PanelCredential } from '../core/panel.js';
+import { LastKnown, ageOf } from '../core/last-known.js';
 import { ExtensionSource, type InstalledExtensions } from '../ext/install.js';
 import type { CommandRequest } from '../core/widget.js';
 import { effectiveName, isOn } from '../core/present.js';
@@ -228,6 +229,18 @@ export class HcApp extends LitElement {
    * does not leave a credential sitting in the bar. Whether it is *used* is a
    * separate question, answered in `connectedCallback`.
    */
+  /**
+   * The house as it was, for a panel that came back before the network did
+   * (§16, `last-known.ts`).
+   */
+  private readonly lastKnown = new LastKnown();
+
+  /** Drawing a snapshot rather than the house. Never true while connected. */
+  @state() private restored = false;
+
+  /** The reconnect attempt running behind a restored view. */
+  private retry: ReturnType<typeof setTimeout> | undefined;
+
   private readonly panel = new PanelCredential();
   private readonly panelKey = this.panel.claim();
 
@@ -254,6 +267,21 @@ export class HcApp extends LitElement {
 
   /** Re-renders the age while nothing is arriving, so it counts up visibly. */
   private ageTimer: ReturnType<typeof setInterval> | undefined;
+
+  /** The slower clock that persists what the house last looked like. */
+  private snapshotTimer: ReturnType<typeof setInterval> | undefined;
+
+  /**
+   * The last chance to record what this panel knew.
+   *
+   * `pagehide` rather than `unload`, which a modern browser may never fire —
+   * and which is skipped entirely for a tab restored from the back/forward
+   * cache. A power cut gives no warning at all, which is why the periodic
+   * save exists as well as this.
+   */
+  private readonly onHide = (): void => {
+    if (this.live) this.lastKnown.saveNow(this.store.list(), this.docs);
+  };
   @state() private docs: DashboardDefinition[] = [];
   @state() private current: DashboardDefinition | undefined;
   @state() private breakpoint: DashboardBreakpoint = 'desktop';
@@ -380,12 +408,17 @@ export class HcApp extends LitElement {
     // machine. Without a key this stays on the Connect button, which is right
     // for a browser somebody is sitting at.
     if (this.panelKey !== undefined) void this.connectWithKey(this.panelKey);
+
+    globalThis.addEventListener?.('pagehide', this.onHide);
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.stream?.stop();
     if (this.ageTimer !== undefined) clearInterval(this.ageTimer);
+    if (this.snapshotTimer !== undefined) clearInterval(this.snapshotTimer);
+    if (this.retry !== undefined) clearTimeout(this.retry);
+    globalThis.removeEventListener?.('pagehide', this.onHide);
   }
 
   /**
@@ -501,12 +534,26 @@ export class HcApp extends LitElement {
       });
       this.stream.start();
       this.lastHeard = Date.now();
+
+      // Live again. Whatever was on screen a moment ago was a snapshot; it is
+      // now the house, and the retry behind it has nothing left to do.
+      this.restored = false;
+      if (this.retry !== undefined) clearTimeout(this.retry);
+      this.retry = undefined;
+
+      // The first snapshot is taken here rather than on a timer, so a panel
+      // that is rebooted five minutes after being set up still has one.
+      this.lastKnown.saveNow(this.store.list(), this.docs);
       // Only while disconnected: a page that re-rendered every ten seconds
       // while everything was fine would be a wall panel burning battery to
       // tell somebody nothing changed.
-      this.ageTimer = setInterval(() => {
-        if (!this.live) this.requestUpdate();
-      }, 10_000);
+      this.tickAge();
+
+      // And a snapshot on its own slower clock. `LastKnown` refuses one that
+      // comes too soon, so this asks often and writes rarely (§16).
+      this.snapshotTimer = setInterval(() => {
+        if (this.live) this.lastKnown.save(this.store.list(), this.docs);
+      }, 60_000);
 
       this.phase = 'ready';
     }
@@ -539,9 +586,67 @@ export class HcApp extends LitElement {
   }
 
   private fail(e: unknown): void {
+    // A credential the house refused is not an outage, and a stale dashboard
+    // would hide the one thing the person needs to be told.
+    const refused = e instanceof HcApiError && e.isAuthFailure;
+    if (!refused && this.showLastKnown()) return;
+
     this.phase = 'failed';
     this.message =
       e instanceof HcApiError ? e.message : `Could not reach ${this.baseUrl} — ${String(e)}`;
+  }
+
+  /**
+   * Draw what was last known, and keep trying for what is true.
+   *
+   * The screen a wall panel should show after a power cut it outlived: the
+   * dashboard somebody relies on, every reading exactly as old as it is, and
+   * the staleness badge saying so. `lastHeard` is the snapshot's own timestamp
+   * rather than now, so a view restored from four hours ago says four hours —
+   * the alternative is a panel that looks live and is not, which is the single
+   * worst thing this client could do (§16).
+   */
+  private showLastKnown(): boolean {
+    const snapshot = this.lastKnown.load();
+    if (snapshot === undefined || snapshot.dashboards.length === 0) return false;
+
+    this.store.reset(snapshot.devices);
+    this.docs = snapshot.dashboards;
+    this.current = this.docs.find((d) => d.id === this.current?.id) ?? this.docs[0];
+    this.lastHeard = Date.now() - ageOf(snapshot);
+    this.restored = true;
+    this.live = false;
+    this.phase = 'ready';
+
+    this.tickAge();
+    this.scheduleRetry();
+    return true;
+  }
+
+  /**
+   * Try the house again, slowing down but never giving up.
+   *
+   * A panel is unattended: there is nobody to press anything, so stopping
+   * after N attempts means a screen that stays wrong until somebody notices.
+   * Backing off to a minute costs nothing and recovers on its own.
+   */
+  private scheduleRetry(delay = 5_000): void {
+    if (this.retry !== undefined) clearTimeout(this.retry);
+    this.retry = setTimeout(() => {
+      const key = this.panelKey;
+      const attempt = key !== undefined ? this.connectWithKey(key) : Promise.resolve();
+      void attempt.then(() => {
+        if (this.restored) this.scheduleRetry(Math.min(delay * 2, 60_000));
+      });
+    }, delay);
+  }
+
+  /** Count the age up while nothing is arriving. Idempotent. */
+  private tickAge(): void {
+    if (this.ageTimer !== undefined) return;
+    this.ageTimer = setInterval(() => {
+      if (!this.live) this.requestUpdate();
+    }, 10_000);
   }
 
   /**
@@ -734,10 +839,23 @@ export class HcApp extends LitElement {
         // The one thing a panel must never hide. Chrome goes; "what you are
         // looking at is four minutes old" stays, because a dashboard that
         // quietly shows the past is worse than one that shows nothing.
-        this.kiosk && this.phase === 'ready' && !this.live
+        this.phase === 'ready' && !this.live && (this.kiosk || this.restored)
           ? html`<div class="stale" part="stale">
               <span class="dot"></span>
-              last heard ${sinceHeard(this.lastHeard)}
+              ${
+                this.restored
+                  ? // Said differently on purpose. "Last heard 20m ago" describes
+                    // a live page whose connection dropped; this page was *built*
+                    // from a recording, and nothing on it has been checked since.
+                    // "reconnecting" only when something actually is (see
+                    // `scheduleRetry`): a browser session has no credential to
+                    // retry with and must not claim otherwise.
+                    html`showing the house as it was
+                    ${sinceHeard(this.lastHeard)}${
+                      this.retry !== undefined ? ' · reconnecting' : ''
+                    }`
+                  : html`last heard ${sinceHeard(this.lastHeard)}`
+              }
             </div>`
           : nothing
       }
