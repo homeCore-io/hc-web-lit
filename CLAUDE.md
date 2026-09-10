@@ -2166,12 +2166,12 @@ not a failure of it.
       §19.7 applies and a rename is a breaking change.
 
 **Phase 4 — Widget vocabulary**
-- [ ] The Tier 1 family (§7.3) on the shared layout shell — every widget type in
-      any live document is drawn, and the three §7.3 names by name are now too
-      (`gauge`, `markdown`, `camera_video`), along with `toggle`, `stepper`,
-      `thermostat`, `stat_summary`, `rooms`, `dashboard_link` and `web_embed`.
-      and `svg`. One core type is still not: `plugin_widget`, which needs the
-      portable render tree (§4.6) — plus `floor_plan`, which is Phase 7
+- [x] The Tier 1 family (§7.3) on the shared layout shell — and past it: every
+      widget type core validates is drawn except `floor_plan`, which is Phase 7.
+      That includes `plugin_widget`, which needed the portable render tree
+      (§4.6) rather than a widget: core's element table decides what a plugin
+      may declare, and `core/descriptor.ts` is checked against core's own
+      conformance corpus
 - [x] Containers on P4: stack, grid, swipe, tabs, accordion
 - [x] Schema-driven property panel for every widget — no JSON editing required
 - [x] Icon rules engine — the floorplan it is to be shared with is Phase 7
