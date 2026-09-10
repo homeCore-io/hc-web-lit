@@ -34,8 +34,16 @@ export interface Binding {
   decimals?: number;
 }
 
-/** The tallies `count` can name. */
-export type Tally = 'devices' | 'lights' | 'lights_on' | 'offline' | 'playing';
+/**
+ * The tallies a document can name.
+ *
+ * `count`'s `one_of` in core's vocabulary lists five; `on` is the sixth, and
+ * it is core's own — the dashboard core seeds a new install with carries
+ * `metrics: ["devices", "on", "offline"]` on its `stat_summary`. So the
+ * vocabulary's list has not caught up with core rather than `on` being
+ * something this client invented.
+ */
+export type Tally = 'devices' | 'lights' | 'lights_on' | 'offline' | 'playing' | 'on';
 
 /**
  * A house tally.
@@ -60,6 +68,11 @@ export function houseTally(metric: string, devices: readonly DeviceState[]): num
       return devices.filter(
         (d) => (d.ui_hint ?? d.device_type) === 'media_player' && isOn(d) === true,
       ).length;
+    case 'on':
+      // Whatever is on, of the things on-ness is a question about (§1.1): a
+      // temperature sensor is not off, so counting it as such would make this
+      // number smaller than the truth for no reason a person could see.
+      return devices.filter((d) => isOn(d) === true).length;
     default:
       // An unknown metric renders the literal the document carried, which is
       // what a client that never heard of counts would have drawn.

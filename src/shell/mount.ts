@@ -47,6 +47,8 @@ export type MountTarget = HTMLElement & {
   onSavePreferences?: MountEnv['onSavePreferences'];
   /** Core's table of what a widget config may hold (§4.4). */
   vocabulary?: MountEnv['vocabulary'];
+  /** The pages this household has, for a widget that links to one. */
+  pages?: MountEnv['pages'];
   /** What this session may do, for a `requires_role` check before drawing. */
   scopes?: readonly string[];
   /**
@@ -154,6 +156,7 @@ export function mountWidget(el: MountTarget, w: WidgetSpec, env: MountEnv): void
   if (env.onSaveIconRules !== undefined) give(el, 'onSaveIconRules', env.onSaveIconRules);
   if (env.onSavePreferences !== undefined) give(el, 'onSavePreferences', env.onSavePreferences);
   if (env.vocabulary !== undefined) give(el, 'vocabulary', env.vocabulary);
+  if (env.pages !== undefined) give(el, 'pages', env.pages);
   if (env.scopes !== undefined) give(el, 'scopes', env.scopes);
 
   // A container mounts its own children and needs what the page had.

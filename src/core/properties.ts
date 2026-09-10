@@ -139,7 +139,10 @@ const SUGGESTS: Record<string, Suggest> = {
   dashboard_ids: 'dashboard',
   room_page: 'dashboard',
   facet: 'facet',
-  types: 'facet',
+  // `types` is deliberately absent: it holds device *types*, which are a
+  // plugin's open vocabulary and not this client's facet names. A picker
+  // offering the wrong list is worse than a plain box, because every value in
+  // it looks official and selects nothing.
 };
 
 /**

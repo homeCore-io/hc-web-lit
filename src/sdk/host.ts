@@ -98,6 +98,14 @@ export interface MountEnv {
    */
   onSavePreferences?: (next: Preferences) => void;
   /**
+   * The pages this household has, for a widget that links to one (§5.10).
+   *
+   * Names and ids, never the documents: a widget that wanted to *read*
+   * another page would be reaching around the host, and one that wants to
+   * offer a link needs only what it is called.
+   */
+  pages?: readonly { id: string; name: string; icon?: string }[];
+  /**
    * Core's dashboard vocabulary (§4.4), when this session has reached core.
    *
    * Read by the property panel to generate its controls. Optional and often

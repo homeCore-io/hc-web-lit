@@ -80,6 +80,10 @@ import '../widgets/hc-camera.js';
 import '../widgets/hc-toggle.js';
 import '../widgets/hc-stepper.js';
 import '../widgets/hc-thermostat.js';
+import '../widgets/hc-stat-summary.js';
+import '../widgets/hc-rooms.js';
+import '../widgets/hc-web-embed.js';
+import '../widgets/hc-dashboard-link.js';
 
 type Phase = 'idle' | 'connecting' | 'ready' | 'failed';
 
@@ -426,6 +430,20 @@ export class HcApp extends LitElement {
     this.repaint();
   };
 
+  /**
+   * What the household's pages are called.
+   *
+   * Names and ids only: a widget offering a link to another page needs what it
+   * is called, and nothing else about it (§19.4).
+   */
+  private pageList(): { id: string; name: string; icon?: string }[] {
+    return this.docs.map((d) => ({
+      id: d.id,
+      name: d.name,
+      ...(typeof d.icon === 'string' && d.icon !== '' ? { icon: d.icon } : {}),
+    }));
+  }
+
   private readonly plugins = {
     list: async () => (await this.api?.listPlugins()) ?? [],
     run: async (pluginId: string, action: string) => {
@@ -477,6 +495,7 @@ export class HcApp extends LitElement {
       onSaveIconRules: this.saveIconRules,
       onSavePreferences: this.savePreferences,
       ...(this.vocabulary !== undefined ? { vocabulary: this.vocabulary } : {}),
+      pages: this.pageList(),
       ...(this.panelScopes !== undefined ? { scopes: this.panelScopes } : {}),
       templates: this.authored.templates(),
     };
@@ -1084,6 +1103,7 @@ export class HcApp extends LitElement {
         .onSaveIconRules=${this.saveIconRules}
         .onSavePreferences=${this.savePreferences}
         .vocabulary=${this.vocabulary}
+        .pages=${this.pageList()}
         .scopes=${this.panelScopes}
         .templates=${this.authored.templates()}
         .onAction=${this.runAction}

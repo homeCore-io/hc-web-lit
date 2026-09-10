@@ -138,6 +138,9 @@ export class HcPage extends LitElement {
   /** Core's table of what a widget config may hold (§4.4). */
   @property({ attribute: false }) vocabulary: MountEnv['vocabulary'];
 
+  /** The pages this household has, for a widget that links to one. */
+  @property({ attribute: false }) pages: MountEnv['pages'];
+
   /**
    * What `@room` and `@picked` mean on this page.
    *
@@ -327,6 +330,7 @@ export class HcPage extends LitElement {
         ? { onSavePreferences: this.onSavePreferences }
         : {}),
       ...(this.vocabulary !== undefined ? { vocabulary: this.vocabulary } : {}),
+      ...(this.pages !== undefined ? { pages: this.pages } : {}),
     };
   }
 

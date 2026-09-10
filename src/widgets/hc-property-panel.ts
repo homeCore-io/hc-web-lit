@@ -42,7 +42,7 @@ import {
 } from '../core/properties.js';
 import { registerWidget } from '../core/registry.js';
 import { humanise } from '../core/text.js';
-import { facetHints } from '../core/selection.js';
+import { knownFacets } from '../core/selection.js';
 import { widgetSpec, type Vocabulary } from '../core/vocabulary.js';
 import type { WidgetSpec } from '../core/widget.js';
 import { knownRoles } from '../design/roles.js';
@@ -200,6 +200,8 @@ export class HcPropertyPanel extends LitElement {
   @property({ attribute: false }) env: MountEnv | undefined;
   /** Core's table, when this session has reached core. Absent is workable. */
   @property({ attribute: false }) vocabulary: Vocabulary | undefined;
+  /** The household's pages, so a field that names one can offer them. */
+  @property({ attribute: false }) pages: readonly { id: string; name: string }[] = [];
   /** Where an edit goes, when the host has somewhere to put it. */
   @property({ attribute: false }) onEditWidget: ((next: WidgetSpec) => void) | undefined;
 
@@ -275,10 +277,17 @@ export class HcPropertyPanel extends LitElement {
       case 'icon':
         return [...markNames()].sort().map((m) => ({ value: m, label: humanise(m) }));
       case 'facet':
-        return facetHints().map((f) => ({ value: f, label: humanise(f) }));
+        // `knownFacets`, not `facetHints`. The two lists look alike and are
+        // different vocabularies: a `facet` field is matched by
+        // `selectDevices` against `lights`, `switches`, `doors_windows`, while
+        // `facetHints` is the singular `ui_hint` a person sets on one device.
+        // Offering the hint list here produced a picker whose every value
+        // selected nothing — homeCore#30's second failure mode, arrived at
+        // from the other side.
+        return knownFacets().map((f) => ({ value: f, label: humanise(f) }));
+      case 'dashboard':
+        return this.pages.map((p) => ({ value: p.id, label: p.name }));
       default:
-        // `dashboard` among them: this client has no list of pages to offer,
-        // and an empty datalist is an honest way of saying so.
         return [];
     }
   }
@@ -324,25 +333,32 @@ export class HcPropertyPanel extends LitElement {
     </datalist>`;
   }
 
+  /**
+   * A box that takes anything and offers what exists.
+   *
+   * The suggestion list is emitted by the caller, once per property rather
+   * than once per input: a list of six device ids would otherwise render six
+   * `datalist` elements under one id, which browsers resolve by taking the
+   * first and readers resolve by wondering.
+   */
   private text(p: Property, value: string, onChange: (v: string) => void) {
-    const listId = `list-${p.name}`;
-    const suggestions = this.suggestions(p.suggest ?? p.of);
+    const kind = p.suggest ?? p.of;
     return html`<input
-        part="select"
-        type="text"
-        aria-label=${p.label}
-        .value=${value}
-        list=${suggestions.length > 0 ? listId : nothing}
-        @input=${(e: Event) => onChange((e.target as HTMLInputElement).value)}
-      />
-      ${this.datalist(p.suggest ?? p.of, listId)}`;
+      part="select"
+      type="text"
+      aria-label=${p.label}
+      .value=${value}
+      list=${this.suggestions(kind).length > 0 ? `list-${p.name}` : nothing}
+      @input=${(e: Event) => onChange((e.target as HTMLInputElement).value)}
+    />`;
   }
 
   private renderList(p: Property) {
     const items = asList(p.value);
     const write = (next: string[]): void => this.set(p, next);
 
-    return html`${items.map(
+    return html`${this.datalist(p.of ?? p.suggest, `list-${p.name}`)}
+      ${items.map(
         (item, i) =>
           html`<div class="listrow">
             ${this.text({ ...p, label: `${p.label} ${i + 1}` }, item, (v) =>
@@ -573,7 +589,10 @@ export class HcPropertyPanel extends LitElement {
       }
 
       default:
-        return this.text(p, typeof p.value === 'string' ? p.value : '', (v) => this.set(p, v));
+        return html`${this.text(p, typeof p.value === 'string' ? p.value : '', (v) =>
+          this.set(p, v),
+        )}
+        ${this.datalist(p.suggest, `list-${p.name}`)}`;
     }
   }
 

@@ -11,6 +11,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import fixture from './fixtures/vocabulary.json' with { type: 'json' };
 import { readVocabulary, type Vocabulary } from '../src/core/vocabulary.js';
+import { knownFacets } from '../src/core/selection.js';
 import type { DeviceState } from '../src/core/device.js';
 import type { WidgetSpec } from '../src/core/widget.js';
 import '../src/widgets/hc-heading.js';
@@ -96,6 +97,20 @@ describe('what it draws', () => {
       o.getAttribute('value'),
     );
     expect(values).toContain('brightness_pct');
+  });
+
+  it('offers the facet names that actually select something', async () => {
+    // Two vocabularies that look alike: `selectDevices` matches `lights` and
+    // `doors_windows`; `facetHints` is the singular `ui_hint` set on one
+    // device. A picker offering the wrong one has every value looking
+    // official and selecting nothing.
+    const el = await panel({ type: 'device_grid', config: { selection_mode: 'facet' } });
+    const offered = [
+      ...(el.shadowRoot?.querySelectorAll('datalist[id="list-facet"] option') ?? []),
+    ].map((o) => o.getAttribute('value'));
+    expect(offered).toEqual(knownFacets());
+    expect(offered).toContain('lights');
+    expect(offered).not.toContain('light');
   });
 
   it('says which field core would refuse', async () => {
