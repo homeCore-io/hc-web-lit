@@ -15,7 +15,7 @@ import { builtInSeeds, defaultSkin } from '../design/seeds.js';
 import { deriveTokens } from '../design/tokens.js';
 import type { DashboardBreakpoint, DashboardDefinition } from '../core/dashboard.js';
 import { withWidgetConfig } from '../core/dashboard.js';
-import { addWidget, duplicatePage, newPage, removeWidget } from '../core/pages.js';
+import { addWidget, duplicatePage, newPage, removeWidget, renamed } from '../core/pages.js';
 import { EventStream } from '../core/events.js';
 import { check, checkAction } from '../core/safety.js';
 import { DeviceStore } from '../core/store.js';
@@ -140,6 +140,16 @@ export class HcApp extends LitElement {
     header button:focus-visible {
       outline: 2px solid var(--hc-stroke-focus, #7cc4ff);
       outline-offset: 2px;
+    }
+    header input.rename {
+      min-height: var(--hc-density-min-tap, 44px);
+      padding: 0 0.5rem;
+      border: 1px solid var(--hc-stroke-focus, #7cc4ff);
+      border-radius: var(--hc-radius-sm, 8px);
+      background: var(--hc-surface-sunken, #0d1116);
+      color: var(--hc-ink, #e9edf2);
+      font: inherit;
+      max-width: 40vw;
     }
     header button.danger {
       border-color: color-mix(in srgb, var(--hc-accent-danger, #ff7b72) 55%, transparent);
@@ -578,6 +588,29 @@ export class HcApp extends LitElement {
     );
     this.docs = this.authored.saveDashboard(copy);
     this.current = copy;
+  };
+
+  /** Whether the page's name is being typed rather than shown. */
+  @state() private renaming = false;
+
+  /**
+   * Rename the page, and only that.
+   *
+   * **The id does not move.** It is an address — an `on_tap` targets one, a
+   * `dashboard_link` lists them — so renaming a page that other pages link to
+   * would break the links to fix a label. The name is what a person reads and
+   * the id is what a document refers to, which is exactly the split §1.1 makes
+   * for devices.
+   */
+  private readonly renamePage = (name: string): void => {
+    this.renaming = false;
+    const doc = this.current;
+    if (doc === undefined) return;
+
+    const next = renamed(doc, name);
+    if (next === undefined) return;
+    this.docs = this.authored.saveDashboard(next);
+    this.current = next;
   };
 
   private readonly removePage = (id: string): void => {
@@ -1138,6 +1171,12 @@ export class HcApp extends LitElement {
     this.roomContext = { room };
   }
 
+  /** Put the cursor in the name the moment it appears, not after a click. */
+  override updated(): void {
+    const box = this.shadowRoot?.querySelector<HTMLInputElement>('input.rename');
+    if (box !== null && box !== undefined && this.shadowRoot?.activeElement !== box) box.select();
+  }
+
   override render() {
     return html`
       <header ?hidden=${this.kiosk}>
@@ -1253,7 +1292,34 @@ export class HcApp extends LitElement {
     if (!this.mayWriteDashboards()) return nothing;
     const id = this.current?.id;
 
-    return html`<button title="Make a page" @click=${this.addPage}>+ Page</button> ${
+    if (this.renaming && this.current !== undefined) {
+      return html`<input
+        class="rename"
+        aria-label="Page name"
+        .value=${this.current.name}
+        @keydown=${(e: KeyboardEvent) => {
+          // Escape leaves the name alone, which is what somebody who opened
+          // this by accident is reaching for.
+          if (e.key === 'Escape') this.renaming = false;
+          if (e.key === 'Enter') this.renamePage((e.target as HTMLInputElement).value);
+        }}
+        @blur=${(e: Event) => {
+          // Escape has already turned this off, and its own blur must not
+          // then commit the words somebody was abandoning.
+          if (this.renaming) this.renamePage((e.target as HTMLInputElement).value);
+        }}
+      />`;
+    }
+
+    return html`<button
+        title="Rename this page"
+        @click=${() => {
+          this.renaming = true;
+        }}
+      >
+        Rename
+      </button>
+      <button title="Make a page" @click=${this.addPage}>+ Page</button> ${
         id === undefined
           ? nothing
           : this.confirmingDelete === id

@@ -7,7 +7,14 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { DashboardDefinition } from '../src/core/dashboard.js';
-import { addWidget, duplicatePage, newPage, pageId, removeWidget } from '../src/core/pages.js';
+import {
+  addWidget,
+  duplicatePage,
+  newPage,
+  pageId,
+  removeWidget,
+  renamed,
+} from '../src/core/pages.js';
 import { layoutToDraw } from '../src/core/dashboard.js';
 
 describe('a page id', () => {
@@ -212,5 +219,31 @@ describe('taking a widget off a page', () => {
     const without = removeWidget(doc, id);
     expect(without.widgets).toEqual([]);
     expect(without.layouts?.[0]?.placements).toEqual([]);
+  });
+});
+
+describe('renaming a page', () => {
+  const page = newPage('Upstairs', [], 'u');
+
+  it('leaves the id where it is', () => {
+    // An `on_tap` targets one and a `dashboard_link` lists them: renaming a
+    // page that others link to would break the links to fix a label.
+    const next = renamed(page, 'Upstairs Landing');
+    expect(next?.name).toBe('Upstairs Landing');
+    expect(next?.id).toBe('upstairs');
+  });
+
+  it('is nothing to do when the name did not change', () => {
+    // So a caller leaves the store alone rather than writing a document that
+    // says the same thing.
+    expect(renamed(page, 'Upstairs')).toBeUndefined();
+    expect(renamed(page, '  Upstairs  ')).toBeUndefined();
+    expect(renamed(page, '   ')).toBeUndefined();
+  });
+
+  it('keeps everything else about the page', () => {
+    const next = renamed(page, 'Landing');
+    expect(next?.widgets).toEqual(page.widgets);
+    expect(next?.layouts).toEqual(page.layouts);
   });
 });

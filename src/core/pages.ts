@@ -201,3 +201,21 @@ export function removeWidget(doc: DashboardDefinition, id: string): DashboardDef
     })),
   };
 }
+
+/**
+ * The page under another name.
+ *
+ * **The id does not move.** It is an address — an `on_tap` targets one, a
+ * `dashboard_link` lists them — so renaming a page that others link to would
+ * break the links to fix a label. The name is what a person reads and the id
+ * is what a document refers to, which is the split §1.1 makes for devices one
+ * level up.
+ *
+ * `undefined` for a name that is blank or unchanged, so a caller can leave the
+ * store alone rather than writing a document that says the same thing.
+ */
+export function renamed(doc: DashboardDefinition, name: string): DashboardDefinition | undefined {
+  const trimmed = name.trim();
+  if (trimmed === '' || trimmed === doc.name) return undefined;
+  return { ...doc, name: trimmed };
+}
