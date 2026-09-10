@@ -123,11 +123,14 @@ describe('what core constrains, and what it leaves open', () => {
     expect(scenes?.of).toBe('scene');
   });
 
-  it('says which values core would refuse', () => {
+  it('says which values are outside the shared vocabulary', () => {
+    // Nothing downstream will refuse this — the page lives in this client's
+    // own store — so a value another client cannot read has to be caught here
+    // or not at all.
     const bad = problemsIn(spec('device_grid'), { selection_mode: 'sideways' });
     expect(bad).toContainEqual({
       name: 'selection_mode',
-      problem: 'Core accepts only: manual, area, query, facet.',
+      problem: 'Not one of: manual, area, query, facet.',
     });
   });
 

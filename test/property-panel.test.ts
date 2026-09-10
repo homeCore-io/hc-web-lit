@@ -113,10 +113,10 @@ describe('what it draws', () => {
     expect(offered).not.toContain('light');
   });
 
-  it('says which field core would refuse', async () => {
+  it('says which field nothing else would be able to read', async () => {
     const el = await panel({ type: 'device_grid', config: { selection_mode: 'area' } });
     expect(el.shadowRoot?.textContent).toContain('Needs a value.');
-    expect(el.shadowRoot?.textContent).toContain('1 field is not what core accepts.');
+    expect(el.shadowRoot?.textContent).toContain('1 field is outside the shared vocabulary');
   });
 
   it('draws a widget type core has never heard of', async () => {

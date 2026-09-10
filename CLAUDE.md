@@ -2051,37 +2051,57 @@ it from becoming an excuse.
 
 ### 18.2 Coexistence — this is not a cutover
 
-hc-web-lit reads and writes `DashboardDefinition` (§14). So does
-hc-web-flutter. **Both clients therefore work against the same live documents,
-at the same time**, and the new one does not need an authoring surface to be
-useful:
+hc-web-lit and hc-web-flutter both read and render `DashboardDefinition`
+(§14) — but each **stores its own copy**. A client depends on core to store
+nothing of its own: core keeps the devices, their state, the plugins, and the
+configuration a client submits about them, and a page is none of those.
 
-- hc-web-lit ships as a **viewer** first. Pages are authored in the Flutter
-  designer, which already exists and works, and rendered in either client.
-  It is no longer *only* a viewer: the property panel writes one widget's
-  config back through `PUT /dashboards/{id}` (§4.4), which is the narrowest
-  useful write and the one the panel was pointless without. Placement,
-  creation and deletion stay with the other client until Phase 10.
+**This changed on 2026-09-10 and it changed the shape of coexistence.** The
+original plan had both clients working against one live document in core, so
+an edit in either appeared in both. That is gone, and what replaces it is
+plainer: each client renders its own pages, and a household moving from one to
+the other imports once. The trade is deliberate — a shared document meant this
+client could not be independent of core's storage, and independence is worth
+more than a synchronisation nobody asked for.
+
+- hc-web-lit ships as a **viewer** first. Pages authored in the Flutter
+  designer are taken over on first run (`Authored.importDashboards`, once,
+  recorded) and rendered here afterwards. It is no longer *only* a viewer: the
+  property panel writes one widget's config back into this client's own store
+  (§4.4), which is the narrowest useful write and the one the panel was
+  pointless without. Placement, creation and deletion stay with the other
+  client until Phase 10.
+- **An edit here does not appear there.** Two copies of a page, diverging from
+  the moment the import happens, is the honest description of what
+  independence costs.
 - The Flutter client stays in production and stays the default until the list
   below is done. Nothing is switched off on a date.
 - Anything hc-web-lit cannot draw yet is a page you open in the other client.
   A degraded path, not a broken one.
 
-**Do not build on the parts of core that exist because the other client could
-not store anything.** hc-web-flutter compiles ahead of time and holds nothing,
-so client-side concerns were given a home in core to have one at all —
-`/assets` and `/dashboards/templates` are the named examples. Once this client
-has a proper dashboard, Flutter is revamped and **those pieces come out of
-core**. Building on one would make that cleanup a breaking change here, and
-would recreate the problem the removal exists to fix, so this client keeps its
-own store for them (`server/store.ts`, `core/content.ts`) and reads neither
-endpoint.
+**A client depends on core storing nothing of its own.** hc-web-flutter
+compiles ahead of time and holds nothing, so client-side concerns were given a
+home in core to have one at all — `/assets` and `/dashboards/templates` are the
+named examples, and dashboard documents are the largest. Once this client has a
+proper dashboard, Flutter is revamped and **those pieces come out of core**.
+Building on one would make that cleanup a breaking change here, and would
+recreate the problem the removal exists to fix, so this client keeps its own
+store (`server/store.ts`, `core/content.ts`, `Authored`) and reads none of
+those endpoints except once, to import.
 
 The test to apply before using a core endpoint is the same one §1.1 and
-homeCore#30 answer for data: **device management and automation are core's;
-user content and presentation are the client's.** A dashboard *document* is
-the deliberate exception — §14 is a shared document both clients render, which
-is what makes coexistence above possible at all.
+homeCore#30 answer for data, with the storage question added: **what core
+stores is core's** — devices, state, events, plugins, history, auth, and the
+configuration a client *submits* about them (`ui_hint`, `name` and `area` on
+`PATCH /devices/{id}`, plugin config, automations). Those are core-owned
+however they arrive. **What a person authored is the client's**, and it is
+stored here.
+
+One consequence worth stating rather than discovering: pages are shared between
+devices only where this client's own server is running (`ServerContent`). A
+static deployment falls back to per-browser storage, which is right for a
+preference and wrong for a page — so a household with more than one screen runs
+the server, which is what "self-contained system" has meant since §2.
 
 **hc-web-flutter can be retired when all of these are true.** Until then it is
 maintained, not deprecated. Note that the bar is **what the product needs**, not

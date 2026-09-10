@@ -436,48 +436,66 @@ export class HcApp extends LitElement {
   /**
    * Whether this session may write a page at all.
    *
-   * Undefined scopes mean a password login against a core that does not
-   * report them, which is the ordinary browser session and may write; a key
-   * that reported its scopes and does not carry this one may not. Checked
-   * here so the save is not *offered* rather than offered and refused
+   * `content:write`, not `dashboards:write`: a page is this client's document
+   * now, so what decides is whether this session may write *this client's*
+   * content. Undefined scopes mean a password login against a core that does
+   * not report them, which is the ordinary browser session and may write.
+   * Checked here so the save is not *offered* rather than offered and refused
    * (§5.11).
    */
   private mayWriteDashboards(): boolean {
-    return this.panelScopes === undefined || this.panelScopes.includes('dashboards:write');
+    return this.panelScopes === undefined || this.panelScopes.includes('content:write');
+  }
+
+  /**
+   * The household's pages, and the one-time takeover from core.
+   *
+   * **This client stores its own documents** (§18.2). Core holds what is
+   * core's — the devices, their state, the plugins, and the configuration a
+   * client submits about them — and a page is not one of those.
+   *
+   * The import exists because these documents *were* in core while the other
+   * client was the only one that could author them, and a household should not
+   * have to rebuild its house by hand to move. It runs once and is recorded as
+   * having run, so a page deleted here does not come back on the next boot.
+   * A core that cannot answer is not a failure: this client's own pages are
+   * already loaded by then, and the import can happen on a later start.
+   */
+  private async loadPages(api: HcApi): Promise<DashboardDefinition[]> {
+    const mine = this.authored.dashboards();
+    if (this.authored.imported()) return mine;
+
+    try {
+      const theirs = (await api.listDashboards()) as DashboardDefinition[];
+      return this.authored.importDashboards(theirs);
+    } catch {
+      return mine;
+    }
   }
 
   /**
    * Save one widget's config back into the page it is on.
    *
-   * **Read, modify, write, and re-read.** Core replaces the whole document, so
-   * this sends the page it currently holds with one widget changed — and then
-   * takes core's copy back rather than trusting its own, because core sets
-   * `updated_at` and is the thing that decides what was stored.
-   *
-   * The window between the read and the write is the whole of the concurrency
-   * story: there is no version to send, so two people editing one page at once
-   * is a page where one of them loses their work. Keeping the window to one
-   * request is the only defence a client has, which is why this does not
-   * batch.
+   * Written to this client's own store, which is where its documents live. No
+   * round trip, no `updated_at` from somewhere else, and no other editor to
+   * lose a race with — the page belongs to the thing that is drawing it.
    */
   private readonly saveWidget = async (
     widgetId: string,
     config: Record<string, unknown>,
   ): Promise<void> => {
-    const api = this.api;
     const doc = this.current;
-    if (api === undefined || doc === undefined) throw new Error('Nothing to save into.');
+    if (doc === undefined) throw new Error('Nothing to save into.');
 
     const next = withWidgetConfig(doc, widgetId, config);
     if (next === undefined) throw new Error(`This page has no widget "${widgetId}".`);
 
-    await api.updateDashboard(doc.id, next);
-
-    // Core's copy, not this one: it stamps `updated_at`, and a client showing
-    // its own guess of what was stored is a client that disagrees with the
-    // next reload.
-    this.docs = (await api.listDashboards()) as DashboardDefinition[];
-    this.current = this.docs.find((d) => d.id === doc.id) ?? this.current;
+    this.docs = this.authored.saveDashboard(next);
+    this.current = this.docs.find((d) => d.id === doc.id) ?? next;
+    // A promise because the capability is one: a store that writes over the
+    // network is still the ordinary case (`ServerContent`), and a caller that
+    // could not await this would have no way to report a failure.
+    return Promise.resolve();
   };
 
   /**
@@ -717,7 +735,7 @@ export class HcApp extends LitElement {
       // property panel does, and it works without it.
       this.vocabulary = await api.dashboardVocabulary();
 
-      this.docs = (await api.listDashboards()) as DashboardDefinition[];
+      this.docs = await this.loadPages(api);
       this.current = this.docs[0];
 
       this.stream = new EventStream({

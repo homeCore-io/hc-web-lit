@@ -186,15 +186,14 @@ function formFor(field: VocabularyField): PropertyForm {
 }
 
 /**
- * Whether the stored value is one core would accept.
+ * Whether the stored value is one anything else would understand.
  *
- * **Derived from the table core enforces, not from a second one.** §4.6 is
- * plain that core's answer is the one that counts, and this does not try to
- * be a rival: it reads the same served vocabulary core validates against, so
- * the worst it can do is fall behind a core release — never disagree with the
- * core it is talking to. What it buys is a panel that says which field is
- * wrong, where it is, while somebody is looking at it, instead of one whole
- * save bouncing with a message about a document.
+ * **Derived from the table core publishes, not from a second one.** This
+ * client stores its own pages, so nothing outside it will refuse a config —
+ * which makes the check *more* worth having, not less: a value outside the
+ * shared vocabulary is one another client cannot read, and there is now no
+ * save to bounce and tell somebody so. Reading the served table is what keeps
+ * this from becoming a rival opinion about what a widget config means.
  */
 function problemOf(field: VocabularyField, value: unknown): string | undefined {
   const missing =
@@ -206,7 +205,7 @@ function problemOf(field: VocabularyField, value: unknown): string | undefined {
 
   const one = field.one_of ?? [];
   if (one.length > 0 && typeof value === 'string' && !one.includes(value)) {
-    return `Core accepts only: ${one.join(', ')}.`;
+    return `Not one of: ${one.join(', ')}.`;
   }
 
   if (field.type === 'integer' || field.type === 'number') {

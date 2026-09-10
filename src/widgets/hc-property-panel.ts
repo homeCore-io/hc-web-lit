@@ -237,8 +237,10 @@ export class HcPropertyPanel extends LitElement {
    * core replaces it wholesale with no version to check — so a save is a thing
    * somebody decides to do, not a thing that happens while they are thinking.
    *
-   * A config core would refuse is not sent. The refusal would be correct and
-   * the round trip would be spent learning what the field already says.
+   * A config outside the shared vocabulary is not saved. Nothing downstream
+   * would refuse it — this client stores its own pages — which is exactly why
+   * the panel has to: a page nothing else can read is the failure that used to
+   * be somebody else's job to catch.
    */
   private renderSave(problems: number) {
     const target = this.setting('edits');
@@ -756,8 +758,8 @@ export class HcPropertyPanel extends LitElement {
         <span class="note"
           >${
             problems === 0
-              ? 'Core would accept this.'
-              : `${problems} ${problems === 1 ? 'field is' : 'fields are'} not what core accepts.`
+              ? 'Every field matches the shared vocabulary.'
+              : `${problems} ${problems === 1 ? 'field is' : 'fields are'} outside the shared vocabulary — another client could not read this.`
           }</span
         >
         ${

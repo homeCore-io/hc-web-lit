@@ -8,6 +8,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Authored } from '../src/core/authored.js';
+import type { DashboardDefinition } from '../src/core/dashboard.js';
 import { BrowserContent, MemoryContent } from '../src/core/content.js';
 import { iconFor, iconRules, setIconRules } from '../src/design/icons.js';
 
@@ -103,5 +104,73 @@ describe('what a household authored', () => {
     const authored = new Authored(new MemoryContent());
     expect(authored.iconRules()).toEqual([]);
     expect(authored.templates().list()).toEqual([]);
+    expect(authored.dashboards()).toEqual([]);
+  });
+});
+
+describe('the household’s pages', () => {
+  const page = (id: string, text = 'One'): DashboardDefinition => ({
+    id,
+    name: id,
+    icon: 'home',
+    owner_user_id: 'u',
+    widgets: [{ id: 'w', type: 'heading', config: { text } }],
+  });
+
+  it('lives here, not in core', () => {
+    // Core keeps what is core's — devices, state, plugins, and the
+    // configuration a client submits about them. A page is a thing a person
+    // made (§18.2).
+    const store = new MemoryContent();
+    const authored = new Authored(store);
+    authored.saveDashboard(page('house'));
+
+    // A second instance is what a page reload is.
+    expect(new Authored(store).dashboards().map((d) => d.id)).toEqual(['house']);
+  });
+
+  it('replaces a page in place, so the order somebody sees stays put', () => {
+    const authored = new Authored(new MemoryContent());
+    authored.saveDashboard(page('a'));
+    authored.saveDashboard(page('b'));
+    const after = authored.saveDashboard(page('a', 'Changed'));
+
+    expect(after.map((d) => d.id)).toEqual(['a', 'b']);
+    expect(after[0]?.widgets?.[0]?.config).toEqual({ text: 'Changed' });
+  });
+
+  it('takes over the pages that were in core, once', () => {
+    const store = new MemoryContent();
+    const authored = new Authored(store);
+    expect(authored.imported()).toBe(false);
+
+    authored.importDashboards([page('house'), page('room')]);
+    expect(authored.dashboards()).toHaveLength(2);
+    expect(authored.imported()).toBe(true);
+  });
+
+  it('does not resurrect a page somebody deleted here', () => {
+    const store = new MemoryContent();
+    new Authored(store).importDashboards([page('house')]);
+
+    // What a caller does on the next boot: `imported()` is what stops it.
+    expect(new Authored(store).imported()).toBe(true);
+  });
+
+  it('records the takeover even when core had nothing to give', () => {
+    // Otherwise an empty core means importing on every boot, forever.
+    const store = new MemoryContent();
+    new Authored(store).importDashboards([]);
+    expect(new Authored(store).imported()).toBe(true);
+  });
+
+  it('does not import a page it already has', () => {
+    const store = new MemoryContent();
+    const authored = new Authored(store);
+    authored.saveDashboard(page('house', 'Mine'));
+    authored.importDashboards([page('house', 'Theirs'), page('room')]);
+
+    expect(authored.dashboards().map((d) => d.id)).toEqual(['house', 'room']);
+    expect(authored.dashboards()[0]?.widgets?.[0]?.config).toEqual({ text: 'Mine' });
   });
 });

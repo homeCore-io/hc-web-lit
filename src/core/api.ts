@@ -400,34 +400,30 @@ export class HcApi {
     return this.request<LogEntry[]>('GET', `/events?${q.toString()}`);
   }
 
-  /** `listDashboards`. */
+  /**
+   * `listDashboards`. **For the one-time takeover, and nothing else.**
+   *
+   * A page is a thing a person made, so it belongs in this client's own store
+   * (§18.2) — core keeps what is core's. These documents were in core while
+   * the other client was the only one that could author them, and this is how
+   * a household moves without rebuilding its house by hand. `Authored`
+   * records that the import has happened; nothing calls this afterwards.
+   */
   async listDashboards(): Promise<unknown[]> {
     return this.request<unknown[]>('GET', '/dashboards');
   }
 
   /**
-   * `updateDashboard`. The whole document, as core stores it.
+   * `dashboardVocabulary`. What a widget type is, as core describes it.
    *
-   * **Read, modify, write — and last write wins.** Core replaces the stored
-   * document with this one, preserving only the things a content edit has no
-   * business changing: the id, the owner, when it was created, and the access
-   * list (that last one is what stands between an edit-granted user and
-   * self-promotion). There is no version to send and none to check, so two
-   * people editing one page at once is a page where one of them loses their
-   * work, and a client should keep the window between reading and writing
-   * short rather than pretend otherwise.
-   */
-  async updateDashboard(id: string, dashboard: unknown): Promise<void> {
-    await this.request<unknown>('PUT', `/dashboards/${encodeURIComponent(id)}`, dashboard);
-  }
-
-  /**
-   * `dashboardVocabulary`. The table core validates every document against.
+   * **Not validation of this client's pages** — they live in this client's
+   * store and core never sees them. It is the shared description of what a
+   * widget config means, which is what makes a page portable: a value outside
+   * it is one another client has no way to read. The property panel generates
+   * its controls from it (§4.4).
    *
-   * Read once at startup and handed to the property panel, which generates
-   * its controls from it (§4.4). Undefined rather than an error when core
-   * does not serve it: an older core, or a credential without the scope, is a
-   * panel with fewer labels rather than a panel that will not start.
+   * Undefined rather than an error when core does not serve it: an older core
+   * is a panel with fewer labels, not a panel that will not start.
    */
   async dashboardVocabulary(): Promise<Vocabulary | undefined> {
     try {
@@ -435,11 +431,6 @@ export class HcApi {
     } catch {
       return undefined;
     }
-  }
-
-  /** `getDashboard`. */
-  async getDashboard(id: string): Promise<unknown> {
-    return this.request<unknown>('GET', `/dashboards/${encodeURIComponent(id)}`);
   }
 
   /**
