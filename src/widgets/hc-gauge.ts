@@ -28,24 +28,7 @@ import { readingAt } from '../core/facet.js';
 import { number as formatNumber, convert } from '../core/i18n.js';
 import { registerWidget } from '../core/registry.js';
 import { roleColor } from '../design/roles.js';
-
-/** A point on the dial, in the 0..100 box the SVG draws in. */
-function at(degrees: number, radius: number): [number, number] {
-  const rad = ((degrees - 90) * Math.PI) / 180;
-  return [50 + radius * Math.cos(rad), 50 + radius * Math.sin(rad)];
-}
-
-/** The arc from one angle to another, clockwise. */
-function arc(from: number, sweep: number, radius: number): string {
-  // A full circle has no arc: the two ends coincide and the path draws
-  // nothing, which is worse than the ring somebody asked for.
-  const span = Math.min(Math.abs(sweep), 359.99) * Math.sign(sweep || 1);
-  const [x1, y1] = at(from, radius);
-  const [x2, y2] = at(from + span, radius);
-  return `M ${x1} ${y1} A ${radius} ${radius} 0 ${Math.abs(span) > 180 ? 1 : 0} ${
-    span < 0 ? 0 : 1
-  } ${x2} ${y2}`;
-}
+import { arc } from '../design/arc.js';
 
 /** One id per gauge on the page, for the gradient each one owns. */
 let gauges = 0;

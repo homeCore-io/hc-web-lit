@@ -24,6 +24,19 @@
  * lost without it is the labels and the pickers, not the ability to edit.
  */
 
+import type { WidgetDescriptor } from './descriptor.js';
+
+/**
+ * A plugin's widget as the vocabulary carries it: the descriptor, with the
+ * plugin it came from beside it.
+ *
+ * `plugin_id` is not part of a descriptor — a plugin does not repeat its own
+ * name in every card — so the wire flattens the two together, and a client
+ * matching on `widget_id` alone would draw one plugin's card for another's the
+ * day two plugins pick the same name.
+ */
+export type PluginWidget = WidgetDescriptor & { plugin_id: string };
+
 /** What a field points at, when it points at something in the house. */
 export type Reference = 'device' | 'devices' | 'scene' | 'scenes';
 
@@ -80,6 +93,14 @@ export interface DocumentEnums {
 /** The whole table, as core serves it. */
 export interface Vocabulary {
   widgets: VocabularyWidget[];
+  /**
+   * What the plugins on *this* installation contribute (§4.6).
+   *
+   * A separate list on purpose, and core's comment says why: core's widgets
+   * are types it validates, and a plugin's is a declaration it merely
+   * carries. One request tells a client every card that exists here.
+   */
+  plugin_widgets: PluginWidget[];
   enums: DocumentEnums;
   /** Whether a type core has never heard of is legal. It is (§14.3). */
   unknown_types_accepted: boolean;
@@ -113,6 +134,9 @@ export function readVocabulary(raw: unknown): Vocabulary | undefined {
       flows: strings(enums.flows),
       frame_fits: strings(enums.frame_fits),
     },
+    plugin_widgets: Array.isArray(o['plugin_widgets'])
+      ? (o['plugin_widgets'] as PluginWidget[])
+      : [],
     unknown_types_accepted: o['unknown_types_accepted'] !== false,
     elements: Array.isArray(o['elements']) ? (o['elements'] as VocabularyElement[]) : [],
   };
@@ -143,4 +167,15 @@ export function applies(field: VocabularyField, config: Record<string, unknown>)
   const when = field.when;
   if (when === undefined) return true;
   return config[when.field] === when.equals;
+}
+
+/** A plugin's widget, by the pair `plugin_widget` carries. */
+export function pluginWidget(
+  vocabulary: Vocabulary | undefined,
+  pluginId: string,
+  widgetId: string,
+): PluginWidget | undefined {
+  return (vocabulary?.plugin_widgets ?? []).find(
+    (w) => w.plugin_id === pluginId && w.widget_id === widgetId,
+  );
 }
