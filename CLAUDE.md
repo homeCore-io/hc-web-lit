@@ -2109,9 +2109,14 @@ feature-parity with the other client: some of what that client does was shaped
 by its own constraints and does not need reproducing, and the first item below
 is something it can never do at all (§2).
 
-- [ ] **A third party can ship a widget** — install a `.tar.gz`, place the
+- [x] **A third party can ship a widget** — install a `.tar.gz`, place the
       widget, configure it in the GUI, no rebuild. This is the reason the
-      project exists, and no amount of parity substitutes for it.
+      project exists, and no amount of parity substitutes for it. All three
+      halves are in: `server/tar.ts` unpacks an archive into the store,
+      `hc-extensions` offers it in the GUI, the property panel places and
+      configures the widget. One thing an installer does not do: load the new
+      extension into the running page, because a module that defines a custom
+      element cannot be registered twice — it says "reload to use it".
 - [ ] Every dashboard in redb renders in hc-web-lit, including plugin widgets
 - [ ] Both authoring modes work (§14.1): grid placement, and free composition
       with rotation, groups and decorative elements

@@ -219,6 +219,20 @@ export const handler = async (req: IncomingMessage, res: ServerResponse): Promis
       return void res.end(file.bytes);
     }
 
+    if (url === '/api/extensions' && method === 'POST') {
+      // §18.2's first retirement condition: a third party ships a `.tar.gz`
+      // and a household installs it without rebuilding anything. What the
+      // archive is allowed to contain is `tar.ts`'s business, and it refuses
+      // nearly everything.
+      const bytes = await body(req, store.limits.maxBytes);
+      const got = await extensions.install(bytes, {
+        maxBytes: store.limits.maxBytes,
+        maxTotalBytes: store.limits.maxBytes,
+        maxFiles: 200,
+      });
+      return send(res, 201, got);
+    }
+
     if (url === '/api/assets' && method === 'POST') {
       const bytes = await body(req, store.limits.maxBytes);
       return send(res, 201, await store.putAsset(bytes, String(req.headers['x-extension'] ?? '')));

@@ -188,6 +188,10 @@ export class HcPage extends LitElement {
   /** Move or resize one, in the layout on screen. */
   @property({ attribute: false }) onPlaceWidget: MountEnv['onPlaceWidget'];
 
+  /** What is installed, and how to install something (§18.2). */
+  @property({ attribute: false }) extensions: MountEnv['extensions'];
+  @property({ attribute: false }) onInstallExtension: MountEnv['onInstallExtension'];
+
   /**
    * Viewing or arranging (§14.2).
    *
@@ -595,6 +599,10 @@ export class HcPage extends LitElement {
         this.doc === undefined ? undefined : layoutToDraw(this.doc, this.breakpoint)?.layout,
       breakpoint: this.breakpoint,
       mode: this.mode,
+      ...(this.extensions !== undefined ? { extensions: this.extensions } : {}),
+      ...(this.onInstallExtension !== undefined
+        ? { onInstallExtension: this.onInstallExtension }
+        : {}),
       // The page it is drawing, so a widget that edits one can offer the
       // choice. Taken from the document rather than passed in: this element
       // already has it, and a second source would be a second answer.

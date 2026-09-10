@@ -8,9 +8,9 @@
  *
  * **A directory per extension, and installing is putting one there.** No
  * database, no manifest index to keep in step, no unpack step in the read
- * path. An admin drops a folder in, or a future upload endpoint writes one;
- * either way the store is what is on the disk, so a broken install is visible
- * with `ls` rather than only through this program.
+ * path. An admin drops a folder in, or `install` below unpacks an archive
+ * into one; either way the store is what is on the disk, so a broken install
+ * is visible with `ls` rather than only through this program.
  *
  * ```
  * <content>/extensions/
@@ -26,8 +26,9 @@
  * stands is defence pointed away from the risk. This serves bytes; the host
  * decides what to do with them.
  */
-import { readFile, readdir, stat } from 'node:fs/promises';
-import { extname, join, resolve } from 'node:path';
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { dirname, extname, join, resolve } from 'node:path';
+import { readTarGz, unwrapped, type Limits as TarLimits } from './tar.ts';
 
 /**
  * An extension id is a directory name, so it may not wander out of the store.
@@ -180,5 +181,62 @@ export class Extensions {
     } catch {
       return undefined;
     }
+  }
+  /**
+   * Unpack an archive into the store, and say what it was called.
+   *
+   * §18.2's first retirement condition, and the reason the project exists: a
+   * third party ships a `.tar.gz`, a household installs it without rebuilding
+   * anything, and the widget is then placed and configured like any other.
+   *
+   * **The manifest decides the directory, not the file name.** An extension's
+   * id is inside it; taking the name from the archive would mean two files of
+   * the same bytes installing to different places, and an admin looking for
+   * `io.homecore.button` finding `widget-final-2`.
+   *
+   * **Written beside and renamed**, so a failure halfway leaves the previous
+   * version rather than half of the new one — the same rule the content store
+   * keeps, for the same reason. An install that replaces an extension is
+   * ordinary: it is how an update arrives.
+   */
+  async install(archive: Buffer, limits: TarLimits): Promise<{ id: string; files: number }> {
+    const entries = unwrapped(readTarGz(archive, limits));
+
+    const manifest = entries.find((e) => e.path === MANIFEST);
+    if (manifest === undefined) {
+      throw new Error(`the archive has no ${MANIFEST} at its root`);
+    }
+
+    let id: unknown;
+    try {
+      id = (JSON.parse(manifest.bytes.toString('utf8')) as { id?: unknown }).id;
+    } catch {
+      throw new Error(`${MANIFEST} is not valid JSON`);
+    }
+    if (typeof id !== 'string' || !SAFE_ID.test(id)) {
+      throw new Error(`${MANIFEST} has no usable id`);
+    }
+    // Checked again against the paths it will build, because this is the last
+    // place a mistake is cheap.
+    for (const entry of entries) {
+      if (!SAFE_PATH.test(entry.path)) throw new Error(`refused path: ${entry.path}`);
+    }
+
+    const final = this.dir(id);
+    // `SAFE_ID` has already passed, so this is the second check rather than
+    // the first — and the one that would catch a difference between the two.
+    if (final === undefined) throw new Error(`refused id: ${id}`);
+    const staging = `${final}.installing`;
+    await rm(staging, { recursive: true, force: true });
+
+    for (const entry of entries) {
+      const file = join(staging, entry.path);
+      await mkdir(dirname(file), { recursive: true });
+      await writeFile(file, entry.bytes);
+    }
+
+    await rm(final, { recursive: true, force: true });
+    await rename(staging, final);
+    return { id, files: entries.length };
   }
 }

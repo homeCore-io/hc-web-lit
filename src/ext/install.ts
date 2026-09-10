@@ -102,6 +102,41 @@ export class ExtensionSource {
 
     return { loaded, failed };
   }
+
+  /**
+   * Install an archive somebody was handed.
+   *
+   * §18.2's first retirement condition, from this side: the household picks a
+   * `.tar.gz` and the widget is available. What the archive may contain is
+   * `server/tar.ts`'s business — this only carries the bytes and the reason it
+   * was refused.
+   *
+   * **It does not load what it installed.** A module that defines a custom
+   * element cannot be loaded twice in one page — `customElements.define`
+   * throws on a second registration — so an extension that arrives after
+   * startup is available on the next reload and says so. Pretending otherwise
+   * would mean a widget that works until somebody refreshes, or a page that
+   * throws while installing.
+   */
+  async install(archive: ArrayBuffer | Uint8Array): Promise<{ id: string; files: number }> {
+    const headers: Record<string, string> = { 'content-type': 'application/gzip' };
+    const bearer = this.token?.();
+    if (bearer !== undefined) headers['Authorization'] = `Bearer ${bearer}`;
+
+    const res = await this.doFetch(this.base, {
+      method: 'POST',
+      headers,
+      body: archive as BodyInit,
+    });
+
+    const said = (await res.json().catch(() => ({}))) as {
+      id?: string;
+      files?: number;
+      error?: string;
+    };
+    if (!res.ok) throw new Error(said.error ?? `the store refused it (${res.status})`);
+    return { id: said.id ?? '(unnamed)', files: said.files ?? 0 };
+  }
 }
 
 /**

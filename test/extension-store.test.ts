@@ -7,6 +7,7 @@
  * not appear.
  */
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { gzipSync } from 'node:zlib';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -134,5 +135,116 @@ describe('what it refuses to turn into a path', () => {
     // which is the convention every real id follows.
     await install('io.homecore.button', { 'button.js': 'export {}' });
     expect(await ext.file('io.homecore.button', 'button.js')).toBeDefined();
+  });
+});
+
+describe('installing from an archive', () => {
+  const LIMITS = { maxBytes: 1024 * 64, maxTotalBytes: 1024 * 128, maxFiles: 20 };
+
+  /** A `.tar.gz` of the given files, as `tar czf` would produce. */
+  const archive = (files: Record<string, string>, under = ''): Buffer => {
+    const blocks: Buffer[] = [];
+    for (const [name, body] of Object.entries(files)) {
+      const bytes = Buffer.from(body, 'utf8');
+      const block = Buffer.alloc(512);
+      block.write(`${under}${name}`, 0, 'utf8');
+      block.write('000644 \0', 100);
+      block.write('000000 \0', 108);
+      block.write('000000 \0', 116);
+      block.write(`${bytes.byteLength.toString(8).padStart(11, '0')} `, 124);
+      block.write('00000000000 ', 136);
+      block.write('        ', 148);
+      block.write('0', 156);
+      block.write('ustar\u000000', 257);
+      let sum = 0;
+      for (const b of block) sum += b;
+      block.write(`${sum.toString(8).padStart(6, '0')}\0 `, 148);
+
+      blocks.push(block);
+      const padded = Buffer.alloc(Math.ceil(bytes.byteLength / 512) * 512);
+      bytes.copy(padded);
+      if (padded.byteLength > 0) blocks.push(padded);
+    }
+    blocks.push(Buffer.alloc(1024));
+    return gzipSync(Buffer.concat(blocks));
+  };
+
+  it('unpacks it into a directory named by the manifest', async () => {
+    // Taking the name from the file would mean two archives of the same bytes
+    // installing to different places, and an admin looking for
+    // `io.homecore.button` finding `widget-final-2`.
+    const got = await ext.install(
+      archive({
+        'hc-extension.json': manifest('io.example.dial'),
+        'dial.js': 'export const hello = 1;',
+      }),
+      LIMITS,
+    );
+
+    expect(got).toEqual({ id: 'io.example.dial', files: 2 });
+    expect((await ext.file('io.example.dial', 'dial.js'))?.bytes.toString('utf8')).toBe(
+      'export const hello = 1;',
+    );
+    expect((await ext.list()).manifests).toHaveLength(1);
+  });
+
+  it('takes an archive that wraps its files in a folder', async () => {
+    await ext.install(
+      archive({ 'hc-extension.json': manifest('io.example.dial'), 'dial.js': 'x' }, 'my-widget/'),
+      LIMITS,
+    );
+    expect(await ext.file('io.example.dial', 'dial.js')).toBeDefined();
+  });
+
+  it('replaces what was there, which is how an update arrives', async () => {
+    await ext.install(
+      archive({ 'hc-extension.json': manifest('io.example.dial'), 'old.js': 'x' }),
+      LIMITS,
+    );
+    await ext.install(
+      archive({ 'hc-extension.json': manifest('io.example.dial'), 'new.js': 'y' }),
+      LIMITS,
+    );
+
+    expect(await ext.file('io.example.dial', 'new.js')).toBeDefined();
+    // The previous version's files are gone rather than left beside the new
+    // ones, which is what makes an update an update.
+    expect(await ext.file('io.example.dial', 'old.js')).toBeUndefined();
+  });
+
+  it('refuses an archive with no manifest at its root', async () => {
+    await expect(ext.install(archive({ 'dial.js': 'x' }), LIMITS)).rejects.toThrow(
+      /no hc-extension.json/,
+    );
+    expect((await ext.list()).manifests).toEqual([]);
+  });
+
+  it('refuses a manifest with no usable id', async () => {
+    await expect(
+      ext.install(archive({ 'hc-extension.json': '{"name":"no id"}' }), LIMITS),
+    ).rejects.toThrow(/no usable id/);
+    await expect(
+      ext.install(archive({ 'hc-extension.json': '{ not json' }), LIMITS),
+    ).rejects.toThrow(/not valid JSON/);
+    await expect(
+      ext.install(archive({ 'hc-extension.json': '{"id":"../elsewhere"}' }), LIMITS),
+    ).rejects.toThrow(/no usable id/);
+  });
+
+  it('leaves nothing behind when it refuses', async () => {
+    // Written beside and renamed: a failure halfway leaves the previous
+    // version rather than half of the new one.
+    await ext.install(
+      archive({ 'hc-extension.json': manifest('io.example.dial'), 'good.js': 'x' }),
+      LIMITS,
+    );
+    await expect(
+      ext.install(archive({ 'hc-extension.json': manifest('io.example.dial') }), {
+        ...LIMITS,
+        maxTotalBytes: 1,
+      }),
+    ).rejects.toThrow();
+
+    expect(await ext.file('io.example.dial', 'good.js')).toBeDefined();
   });
 });

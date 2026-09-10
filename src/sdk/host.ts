@@ -152,6 +152,15 @@ export interface MountEnv {
    */
   breakpoint?: string;
   /**
+   * What is installed, and how to install something (§18.2).
+   *
+   * The listing is the host's own startup round rather than a second fetch: a
+   * widget showing a different answer from the one the page was drawn with is
+   * a widget explaining a failure that is not the one anybody has.
+   */
+  extensions?: { loaded: unknown[]; failed: { id: string; error: string }[] };
+  onInstallExtension?: (archive: ArrayBuffer) => Promise<{ id: string; files: number }>;
+  /**
    * The pages this household has, for a widget that links to one (§5.10).
    *
    * Names and ids, never the documents: a widget that wanted to *read*

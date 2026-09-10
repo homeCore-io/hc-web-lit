@@ -97,6 +97,7 @@ import '../widgets/hc-web-embed.js';
 import '../widgets/hc-dashboard-link.js';
 import '../widgets/hc-svg.js';
 import '../widgets/hc-plugin-widget.js';
+import '../widgets/hc-extensions.js';
 
 type Phase = 'idle' | 'connecting' | 'ready' | 'failed';
 
@@ -554,6 +555,19 @@ export class HcApp extends LitElement {
     this.current = this.docs.find((d) => d.id === want) ?? this.docs[0];
   }
 
+  /**
+   * Install an extension somebody was handed as an archive (§18.2).
+   *
+   * The store is this client's own; core never sees an extension, which is
+   * the same rule pages follow. Not loaded into the running page — a module
+   * that defines a custom element cannot be registered twice — so the widget
+   * that offers this says "reload to use it" rather than appearing to work.
+   */
+  private readonly installExtension = async (
+    archive: ArrayBuffer,
+  ): Promise<{ id: string; files: number }> =>
+    new ExtensionSource({ token: () => this.api?.bearer() }).install(archive);
+
   /** Go back, or forward, over the household's pages. */
   private readonly stepHistory = (way: 'undo' | 'redo'): void => {
     const was = this.docs;
@@ -768,6 +782,8 @@ export class HcApp extends LitElement {
       ...(this.vocabulary !== undefined ? { vocabulary: this.vocabulary } : {}),
       pages: this.pageList(),
       mode: this.editing ? 'edit' : 'view',
+      extensions: this.extensions,
+      ...(this.mayWriteDashboards() ? { onInstallExtension: this.installExtension } : {}),
       ...(this.mayWriteDashboards()
         ? {
             onSaveWidget: this.saveWidget,
@@ -1506,6 +1522,8 @@ export class HcApp extends LitElement {
         .onRemoveWidget=${this.mayWriteDashboards() ? this.removeWidgetFromPage : undefined}
         .onPlaceWidget=${this.mayWriteDashboards() ? this.placeWidgetOnPage : undefined}
         mode=${this.editing ? 'edit' : 'view'}
+        .extensions=${this.extensions}
+        .onInstallExtension=${this.mayWriteDashboards() ? this.installExtension : undefined}
         .scopes=${this.panelScopes}
         .templates=${this.authored.templates()}
         .onAction=${this.runAction}

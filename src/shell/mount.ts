@@ -56,6 +56,9 @@ export type MountTarget = HTMLElement & {
   /** Put a widget on the page, or take one off (§14.1). */
   onAddWidget?: MountEnv['onAddWidget'];
   onRemoveWidget?: MountEnv['onRemoveWidget'];
+  /** What is installed, and how to install something (§18.2). */
+  extensions?: MountEnv['extensions'];
+  onInstallExtension?: MountEnv['onInstallExtension'];
   /** Move or resize one, and the layout it is being placed in. */
   onPlaceWidget?: MountEnv['onPlaceWidget'];
   pagePlacements?: MountEnv['pagePlacements'];
@@ -172,6 +175,10 @@ export function mountWidget(el: MountTarget, w: WidgetSpec, env: MountEnv): void
   if (env.onAddWidget !== undefined) give(el, 'onAddWidget', env.onAddWidget);
   if (env.onRemoveWidget !== undefined) give(el, 'onRemoveWidget', env.onRemoveWidget);
   if (env.onPlaceWidget !== undefined) give(el, 'onPlaceWidget', env.onPlaceWidget);
+  if (env.extensions !== undefined) give(el, 'extensions', env.extensions);
+  if (env.onInstallExtension !== undefined) {
+    give(el, 'onInstallExtension', env.onInstallExtension);
+  }
   if (env.pagePlacements !== undefined) give(el, 'pagePlacements', env.pagePlacements);
   if (env.scopes !== undefined) give(el, 'scopes', env.scopes);
 
