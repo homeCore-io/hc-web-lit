@@ -126,6 +126,9 @@ export class HcPage extends LitElement {
 
   @property({ attribute: false }) scopes: readonly string[] | undefined;
 
+  /** Correct a device's presentation (§1.1). */
+  @property({ attribute: false }) onUpdateDevice: MountEnv['onUpdateDevice'];
+
   /**
    * What `@room` and `@picked` mean on this page.
    *
@@ -309,6 +312,7 @@ export class HcPage extends LitElement {
       ...(this.onArt !== undefined ? { onArt: this.onArt } : {}),
       ...(this.plugins !== undefined ? { plugins: this.plugins } : {}),
       ...(this.scopes !== undefined ? { scopes: this.scopes } : {}),
+      ...(this.onUpdateDevice !== undefined ? { onUpdateDevice: this.onUpdateDevice } : {}),
     };
   }
 

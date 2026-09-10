@@ -78,6 +78,36 @@ const FACETS: Record<string, (d: DeviceState) => boolean> = {
 
 const hint = (d: DeviceState): string => d.ui_hint ?? d.device_type ?? '';
 
+/**
+ * The `ui_hint` values the facets above respond to.
+ *
+ * A second half of "what this client draws differently", and the more useful
+ * one: `light`, `switch` and `outlet` change no *widget* — all three draw as
+ * the generic card — but they decide the icon and which facet a device lands
+ * in, which is what a person setting a hint is actually after.
+ *
+ * Listed here beside the tests that read them, so the two cannot drift. This
+ * is not a claim about the legal set, which is defined nowhere (homeCore#30) —
+ * only about which values this client does something with.
+ */
+export function facetHints(): string[] {
+  return [
+    'light',
+    'switch',
+    'outlet',
+    'fan',
+    'media_player',
+    'lock',
+    'scene',
+    'cover',
+    'thermostat',
+    'door',
+    'window',
+    'garage',
+    'gate',
+  ];
+}
+
 /** The facet names this client understands. Exported so a test can pin them. */
 export function knownFacets(): string[] {
   return Object.keys(FACETS).sort();

@@ -21,12 +21,14 @@
 import { LitElement, css, html, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { controlsFor } from '../core/controls.js';
+
 import type { DeviceState } from '../core/device.js';
 import { formatReading, isHousekeeping, readingOf, roleOf } from '../core/facet.js';
 import { effectiveArea, effectiveName, isOn, noStatusReason } from '../core/present.js';
 import type { CommandRequest } from '../core/widget.js';
 import type { HistoryFetch } from './hc-history-chart.js';
-import { registerWidget } from '../core/registry.js';
+import { drawableHints, registerWidget } from '../core/registry.js';
+import { facetHints } from '../core/selection.js';
 import './hc-controls.js';
 import './hc-history-chart.js';
 import { humanise } from '../core/text.js';
@@ -154,9 +156,43 @@ export class HcDeviceDetails extends LitElement {
     [hidden] {
       display: none !important;
     }
+    .hint {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0;
+      font-size: var(--hc-text-caption-size, 11px);
+      color: var(--hc-ink-muted, #8b95a4);
+    }
+    .hint select {
+      min-height: var(--hc-density-min-tap, 44px);
+      background: var(--hc-surface-sunken, #0d1116);
+      color: var(--hc-ink, #e9edf2);
+      border: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
+      border-radius: var(--hc-radius-sm, 8px);
+      padding: 0 0.5rem;
+      font: inherit;
+    }
+    .hint select:focus-visible {
+      outline: 2px solid var(--hc-stroke-focus, #7cc4ff);
+      outline-offset: 2px;
+    }
+    .trouble {
+      color: var(--hc-accent-danger, #ff7b72);
+    }
   `;
 
   @property({ attribute: false }) device: DeviceState | undefined;
+
+  /** The host's device-correction capability (§1.1). Absent means read-only. */
+  @property({ attribute: false }) onUpdateDevice:
+    ((deviceId: string, patch: Record<string, unknown>) => Promise<void>) | undefined;
+
+  /** What this session may do, so a refused control is not offered. */
+  @property({ attribute: false }) scopes: readonly string[] | undefined;
+
+  @state() private saving = false;
+  @state() private trouble = '';
   @property({ attribute: false }) config: Record<string, unknown> = {};
   @property({ attribute: false }) onCommand: ((r: CommandRequest) => void) | undefined;
   @property({ attribute: false }) onFetch: HistoryFetch | undefined;
@@ -173,6 +209,65 @@ export class HcDeviceDetails extends LitElement {
     if (changed.has('device')) {
       this.charted = undefined;
       this.noHistory = false;
+    }
+  }
+
+  /**
+   * What this device should be shown as, when its plugin could not know.
+   *
+   * **An outlet cannot know what is plugged into it.** A lamp, a fan, a
+   * radio — the endpoint is unknowable from the socket, so a plugin safely
+   * reports `switch` and a person says what it really is. `ui_hint` is that
+   * correction, it is read first by every facet, icon and type-specific widget
+   * in this client (§1.1), and until now nothing here could set it.
+   *
+   * The options are the hints this client *draws differently*, taken from its
+   * own registry rather than from a list somebody typed. The legal set is
+   * defined nowhere (homeCore#30), so offering a value that changes nothing
+   * would be inventing a vocabulary and disappointing whoever picked from it.
+   *
+   * Hidden where the session may not write devices: a control whose only
+   * outcome is a refusal is worse than no control (§5.10's reasoning).
+   */
+  private renderHint(d: DeviceState) {
+    if (this.onUpdateDevice === undefined) return nothing;
+    if (this.scopes !== undefined && !this.scopes.includes('devices:write')) return nothing;
+
+    // Both halves of "what this client draws differently": the hints that
+    // select a type-specific widget, and the hints that decide an icon and a
+    // facet. The second half is the one a person reaches for — `light`,
+    // `switch` and `outlet` draw as the generic card and still change plenty.
+    const options = [...new Set([...drawableHints(), ...facetHints()])].sort();
+    const current = d.ui_hint ?? '';
+
+    return html`<label class="hint" part="controls">
+      <span part="heading">Show as</span>
+      <select
+        part="select"
+        .value=${current}
+        ?disabled=${this.saving}
+        @change=${(e: Event) => void this.setHint(d, (e.target as HTMLSelectElement).value)}
+      >
+        <option value="">
+          ${d.device_type === undefined ? 'Default' : `Default (${humanise(d.device_type)})`}
+        </option>
+        ${options.map((o) => html`<option value=${o}>${humanise(o)}</option>`)}
+      </select>
+      ${this.trouble !== '' ? html`<span class="trouble" part="note">${this.trouble}</span>` : nothing}
+    </label>`;
+  }
+
+  private async setHint(d: DeviceState, hint: string): Promise<void> {
+    this.saving = true;
+    this.trouble = '';
+    try {
+      // Empty clears it: core reads `null` and an empty string both as "no
+      // hint", and "Default" has to mean going back rather than being stuck.
+      await this.onUpdateDevice?.(d.device_id, { ui_hint: hint === '' ? null : hint });
+    } catch (e) {
+      this.trouble = e instanceof Error ? e.message : String(e);
+    } finally {
+      this.saving = false;
     }
   }
 
@@ -202,7 +297,7 @@ export class HcDeviceDetails extends LitElement {
           ${humanise(roleOf(d))}
         </span>
       </div>
-
+      ${this.renderHint(d)}
       ${
         lead === undefined
           ? nothing

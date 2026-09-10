@@ -66,6 +66,22 @@ export function registerForCapability(test: (d: DeviceState) => boolean, tag: Wi
 }
 
 /**
+ * Every hint this client draws differently.
+ *
+ * **Derived from what is registered, not a list somebody typed.** The legal
+ * set of `ui_hint` values is defined nowhere (homeCore#30), so this client is
+ * in no position to publish one — but it *can* say honestly which values
+ * change what it draws, because that is exactly what this map holds. A picker
+ * offering anything else would be offering a choice with no effect.
+ *
+ * Sorted, so a person reading the list twice reads the same list: registration
+ * order is import order, which is nobody's idea of an order.
+ */
+export function drawableHints(): string[] {
+  return [...forDevice.keys()].sort();
+}
+
+/**
  * The tag for this device, or `undefined` to use the generic card.
  *
  * **The hint wins, then the type, then what the device declared.** That order

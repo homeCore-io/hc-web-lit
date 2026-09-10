@@ -34,6 +34,18 @@ export class DeviceStore {
     this.notifyAll();
   }
 
+  /**
+   * Put one device in, whether or not it was there.
+   *
+   * `reset` replaces the world and `apply` merges an event; neither fits a
+   * device re-read on its own after a correction. A device that was not in the
+   * store is added rather than dropped — it may have been created a moment ago.
+   */
+  upsert(device: DeviceState): void {
+    this.devices.set(device.device_id, device);
+    this.notify(device.device_id);
+  }
+
   get(deviceId: string): DeviceState | undefined {
     return this.devices.get(deviceId);
   }

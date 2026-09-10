@@ -39,6 +39,8 @@ export type MountTarget = HTMLElement & {
   onArt?: (deviceId: string) => Promise<string | undefined>;
   /** What the plugins can be asked to do (§5.11). */
   runner?: MountEnv['plugins'];
+  /** Correct a device's presentation (§1.1). */
+  onUpdateDevice?: MountEnv['onUpdateDevice'];
   /** What this session may do, for a `requires_role` check before drawing. */
   scopes?: readonly string[];
   /**
@@ -142,6 +144,7 @@ export function mountWidget(el: MountTarget, w: WidgetSpec, env: MountEnv): void
   if (env.onEvents !== undefined) give(el, 'onEvents', env.onEvents);
   if (env.onArt !== undefined) give(el, 'onArt', env.onArt);
   if (env.plugins !== undefined) give(el, 'runner', env.plugins);
+  if (env.onUpdateDevice !== undefined) give(el, 'onUpdateDevice', env.onUpdateDevice);
   if (env.scopes !== undefined) give(el, 'scopes', env.scopes);
 
   // A container mounts its own children and needs what the page had.

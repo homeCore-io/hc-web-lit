@@ -298,6 +298,24 @@ export class HcApi {
   }
 
   /** `getDeviceSchema`. Absent for many devices; the caller gets `undefined`. */
+  /**
+   * `getDevice`. One device, whole, with its schema resolved.
+   *
+   * Used after correcting a device's presentation: `ui_hint` is not device
+   * state, so nothing on the event stream announces it, and re-reading the one
+   * device is cheaper and more honest than re-listing 184.
+   */
+  async getDevice(deviceId: string): Promise<DeviceState | undefined> {
+    try {
+      return await this.request<DeviceState>(
+        'GET',
+        `/devices/${encodeURIComponent(deviceId)}?include_schema=true`,
+      );
+    } catch {
+      return undefined;
+    }
+  }
+
   async getDeviceSchema(deviceId: string): Promise<DeviceSchema | undefined> {
     try {
       return await this.request<DeviceSchema>(
@@ -389,6 +407,20 @@ export class HcApi {
   /** `getDashboard`. */
   async getDashboard(id: string): Promise<unknown> {
     return this.request<unknown>('GET', `/dashboards/${encodeURIComponent(id)}`);
+  }
+
+  /**
+   * `updateDevice`. Correct what a plugin got wrong, or could not know.
+   *
+   * Core accepts `name`, `area`, `ui_hint`, `status_icon`, `canonical_name`
+   * and `button_names` here. `ui_hint` is the one that carries weight: an
+   * outlet cannot know whether it feeds a lamp, a fan or a radio, so a plugin
+   * safely calls it a switch and a person says what it really is. Every facet,
+   * icon and type-specific widget in this client reads that field first (§1.1)
+   * — and until now nothing could set it.
+   */
+  async updateDevice(deviceId: string, patch: Record<string, unknown>): Promise<void> {
+    await this.request<unknown>('PATCH', `/devices/${encodeURIComponent(deviceId)}`, patch);
   }
 
   /** `listPlugins`. What is installed, and what each says it can do (§5.11). */

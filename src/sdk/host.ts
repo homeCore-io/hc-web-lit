@@ -53,6 +53,13 @@ export interface MountEnv {
    */
   plugins?: PluginRunner;
   /**
+   * Correct a device's presentation — `ui_hint`, `area`, a name (§1.1).
+   *
+   * A capability rather than a client: the widget names the change and the
+   * host performs it, so §19.4 holds here as everywhere.
+   */
+  onUpdateDevice?: (deviceId: string, patch: Record<string, unknown>) => Promise<void>;
+  /**
    * What this session may do, from `/auth/me` (§5.11).
    *
    * So a control gated on `requires_role` is not offered rather than being

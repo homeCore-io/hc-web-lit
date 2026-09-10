@@ -344,6 +344,25 @@ export class HcApp extends LitElement {
    * widget that could reach `EventSource` directly would be a widget holding
    * the token, since the credential travels in the query.
    */
+  /**
+   * Correct a device's presentation, and show the result immediately.
+   *
+   * The store is updated from the response rather than waiting for an event:
+   * `ui_hint` is not device state, so nothing on the stream announces it, and
+   * a person who has just chosen "this outlet is a fan" should not watch the
+   * card stay a switch.
+   */
+  private readonly updateDevice = async (
+    deviceId: string,
+    patch: Record<string, unknown>,
+  ): Promise<void> => {
+    const api = this.api;
+    if (api === undefined) return;
+    await api.updateDevice(deviceId, patch);
+    const fresh = await api.getDevice(deviceId);
+    if (fresh !== undefined) this.store.upsert(fresh);
+  };
+
   private readonly plugins = {
     list: async () => (await this.api?.listPlugins()) ?? [],
     run: async (pluginId: string, action: string) => {
@@ -391,6 +410,7 @@ export class HcApp extends LitElement {
       onAction: this.runAction,
       onArt: this.art,
       plugins: this.plugins,
+      onUpdateDevice: this.updateDevice,
       ...(this.panelScopes !== undefined ? { scopes: this.panelScopes } : {}),
       templates: this.authored.templates(),
     };
@@ -989,6 +1009,7 @@ export class HcApp extends LitElement {
         .onDetails=${this.details}
         .onArt=${this.art}
         .plugins=${this.plugins}
+        .onUpdateDevice=${this.updateDevice}
         .scopes=${this.panelScopes}
         .templates=${this.authored.templates()}
         .onAction=${this.runAction}
