@@ -72,6 +72,11 @@ export class HcPropertyPanel extends LitElement {
       padding: 0.5rem;
       margin-bottom: 0.75rem;
       min-height: 3rem;
+      /* Capped, because the subject is a real widget at its real size: a
+         device grid of a busy room drew 880px of tiles and pushed every
+         field it was meant to be edited by below the fold. */
+      max-height: 40vh;
+      overflow: auto;
     }
     .subject {
       color: var(--hc-ink-muted, #8b95a4);
@@ -606,7 +611,20 @@ export class HcPropertyPanel extends LitElement {
         : [];
 
     return html`
-      ${preview.length > 0 ? html`<div class="preview" part="preview">${preview[0]}</div>` : nothing}
+      ${
+        preview.length === 0
+          ? nothing
+          : html`<div class="preview" part="preview">
+              ${
+                // Nothing draws this type here: an extension that is not
+                // installed, or a type from another client. The config is
+                // still fully editable, and saying so beats an empty box
+                // that reads as a broken widget.
+                preview[0] ??
+                html`<span class="opaque">Nothing installed here draws a ${subject.type}.</span>`
+              }
+            </div>`
+      }
 
       <div class="subject" part="state">
         ${subject.type}${
