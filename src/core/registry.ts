@@ -1,3 +1,5 @@
+import type { DeviceState } from './device.js';
+
 /**
  * Which element draws a widget `type`.
  *
@@ -45,7 +47,50 @@ export function registerForDevice(facet: string, tag: WidgetTag): void {
   forDevice.set(facet, tag);
 }
 
-/** The tag for this device, or `undefined` to use the generic card. */
-export function tagForDevice(d: { ui_hint?: string; device_type?: string }): WidgetTag | undefined {
-  return forDevice.get(d.ui_hint ?? d.device_type ?? '');
+/**
+ * Widgets that can be chosen from what a device *declares*, when its name
+ * does not name them.
+ *
+ * A list rather than a map, because order is the tie-break and there is no
+ * other place to state it: a device that is both lockable and switchable is a
+ * lock, and drawing it as a switch would put a plain toggle on a door.
+ *
+ * Registered by the widget itself alongside its type registration, so a
+ * widget's two ways of being chosen live together and neither is a table
+ * somewhere else.
+ */
+const byCapability: { test: (d: DeviceState) => boolean; tag: WidgetTag }[] = [];
+
+export function registerForCapability(test: (d: DeviceState) => boolean, tag: WidgetTag): void {
+  byCapability.push({ test, tag });
+}
+
+/**
+ * The tag for this device, or `undefined` to use the generic card.
+ *
+ * **The hint wins, then the type, then what the device declared.** That order
+ * is deliberate and is the one §1.1 asks for: `ui_hint` exists so a person can
+ * correct a plugin, and a capability check that overrode it would make the
+ * override cosmetic. The declaration comes last precisely because it is the
+ * one nobody typed — it is there to catch what no name reached.
+ *
+ * What it catches: a device whose registration is stale or wrong. The front
+ * door on the reference house reported `device_type: "zwave"` — as every
+ * Z-Wave node did — until a `rescan_nodes` re-registered it as `lock`. For
+ * however long that had been true, a name-based dispatch drew a door as a
+ * generic card with a `locked` toggle in its control row, openable by one tap.
+ * Its writable `locked` said what it was the entire time.
+ */
+export function tagForDevice(d: {
+  ui_hint?: string;
+  device_type?: string;
+  schema?: DeviceState['schema'];
+}): WidgetTag | undefined {
+  const named = forDevice.get(d.ui_hint ?? d.device_type ?? '');
+  if (named !== undefined) return named;
+
+  // Only a full device can be asked what it declares; several callers pass a
+  // bare `{device_type}` to ask "what would this type draw as".
+  if (d.schema === undefined) return undefined;
+  return byCapability.find((c) => c.test(d as DeviceState))?.tag;
 }

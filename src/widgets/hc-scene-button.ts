@@ -20,7 +20,8 @@ import type { CommandRequest } from '../core/widget.js';
 import { activation, sceneKind } from '../core/scenes.js';
 import { noStatusReason } from '../core/present.js';
 import { effectiveName, isOn } from '../core/present.js';
-import { registerForDevice, registerWidget } from '../core/registry.js';
+import { registerForCapability, registerForDevice, registerWidget } from '../core/registry.js';
+import { isScene } from '../core/capability.js';
 import { icon } from '../design/icons.js';
 import { HcLayoutShell } from '../sdk/shell.js';
 
@@ -164,6 +165,7 @@ registerWidget('scene_button', 'hc-scene-button');
 // rather than switched, and a card offering a toggle would be offering to turn
 // off something that does not turn off (§7.3).
 registerForDevice('scene', 'hc-scene-button');
+registerForCapability(isScene, 'hc-scene-button');
 
 declare global {
   interface HTMLElementTagNameMap {

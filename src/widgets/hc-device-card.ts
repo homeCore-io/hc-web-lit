@@ -17,6 +17,7 @@
  * attribute the plugin publishes, and every widget that re-derived it got it
  * wrong the same way.
  */
+import { isScene } from '../core/capability.js';
 import { css, html, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { controlsFor } from '../core/controls.js';
@@ -298,7 +299,7 @@ export class HcDeviceCard extends HcLayoutShell {
     // A scene that gives no feedback has no state to show. Lutron marks some
     // scenes on so you can tell when they are off; others report nothing, and
     // activating one of those is a thing you do rather than a state you read.
-    if (d.device_type === 'scene' && sceneKind(d) === 'momentary') return nothing;
+    if (isScene(d) && sceneKind(d) === 'momentary') return nothing;
 
     if (!hasPowerState(d)) {
       const reading = readingOf(d);

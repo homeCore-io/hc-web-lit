@@ -14,6 +14,7 @@
  * membership tests below read declared data (`device_type`, `ui_hint`) rather
  * than guessing, but the *names* remain a convention.
  */
+import { isScene } from './capability.js';
 import type { DeviceState } from './device.js';
 import { parseQuery, runQuery } from './query.js';
 import { effectiveArea, effectiveName, isOn, normalizeAreaName } from './present.js';
@@ -198,7 +199,9 @@ export function selectDevices(
  */
 function keepable(d: DeviceState, byHand: ReadonlySet<string>): boolean {
   if (byHand.has(d.device_id)) return true;
-  if (d.device_type === 'scene') return false;
+  // Declared rather than named: every scene in the reference house declares
+  // `activate` and nothing else does (§ capability.ts).
+  if (isScene(d)) return false;
   return true;
 }
 

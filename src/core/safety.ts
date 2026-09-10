@@ -12,6 +12,7 @@
  */
 import type { DeviceState } from './device.js';
 import { humanise } from './text.js';
+import { isLockable } from './capability.js';
 
 export type Verdict = { allow: true } | { allow: false; reason: string } | { confirm: string };
 
@@ -59,8 +60,27 @@ export function check(device: DeviceState, patch: Record<string, unknown>): Verd
   return { confirm: `${kind === 'lock' ? 'Lock' : 'Change'} ${name}?` };
 }
 
-/** Whether an action needs asking about. Same policy, applied to actions. */
+/**
+ * Whether an action needs asking about. Same policy, applied to actions.
+ *
+ * **The type is not enough on its own, and the house proves it.** `check`
+ * above has always had a second test — a write to `locked`, `armed` or
+ * `arm_mode` is the guarded act whatever the device calls itself — and this
+ * had only the first. That mattered the moment a device turned up that is a
+ * lock and does not say so: every Z-Wave node in the reference house reports
+ * `device_type: "zwave"`, and one of them declares a writable `locked`. No
+ * name could have found it.
+ *
+ * So a device that *declares* itself lockable is guarded here too, on the same
+ * reasoning as the attribute test: the policy is about the cost of being
+ * wrong, and that cost does not depend on the plugin having picked a word this
+ * client recognises.
+ *
+ * Nothing on this house exercises it yet — the Z-Wave lock declares no actions
+ * — which is exactly why it is worth closing now rather than after a plugin
+ * ships one.
+ */
 export function checkAction(device: DeviceState, actionId: string): Verdict {
-  if (!GUARDED.has(facet(device))) return { allow: true };
+  if (!GUARDED.has(facet(device)) && !isLockable(device)) return { allow: true };
   return { confirm: `${humanise(actionId)} on ${device.name_override ?? device.name}?` };
 }

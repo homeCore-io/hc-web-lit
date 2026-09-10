@@ -22,7 +22,8 @@ import { customElement, property } from 'lit/decorators.js';
 import type { DeviceState } from '../core/device.js';
 import type { CommandRequest } from '../core/widget.js';
 import { effectiveName } from '../core/present.js';
-import { registerForDevice, registerWidget } from '../core/registry.js';
+import { registerForCapability, registerForDevice, registerWidget } from '../core/registry.js';
+import { isLockable } from '../core/capability.js';
 import { humanise } from '../core/text.js';
 import { icon } from '../design/icons.js';
 import { HcLayoutShell } from '../sdk/shell.js';
@@ -138,6 +139,12 @@ export class HcLock extends HcLayoutShell {
 
 registerWidget('lock', 'hc-lock');
 registerForDevice('lock', 'hc-lock');
+// And whatever declares a writable `locked`, whatever it is called. The front
+// door on this house reported `device_type: "zwave"` until a rescan
+// re-registered it — for that whole time a name-based check drew it as a
+// generic card, with a plain toggle on a door in its generated control row
+// (§ capability.ts).
+registerForCapability(isLockable, 'hc-lock');
 
 declare global {
   interface HTMLElementTagNameMap {

@@ -7,6 +7,7 @@
  * implements that.
  */
 import type { DeviceState } from './device.js';
+import { isScene } from './capability.js';
 import type { CommandRequest } from './widget.js';
 import { effectiveArea, normalizeAreaName, sceneKind } from './present.js';
 
@@ -20,8 +21,6 @@ export interface SceneRowConfig {
   heading?: string;
   hide_when_empty?: boolean;
 }
-
-const isScene = (d: DeviceState): boolean => d.device_type === 'scene';
 
 /**
  * A scene bound to a light group, rather than to a room.

@@ -10,6 +10,7 @@
  * what a wall panel is for. The count is there underneath for when somebody
  * actually wants it.
  */
+import { isScene } from '../core/capability.js';
 import { LitElement, css, html } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { DeviceState } from '../core/device.js';
@@ -144,7 +145,7 @@ export class HcRoomField extends LitElement {
   private rooms(): Room[] {
     const by = new Map<string, Room>();
     for (const d of this.devices) {
-      if (d.device_type === 'scene') continue;
+      if (isScene(d)) continue;
       const area = effectiveArea(d);
       const key = normalizeAreaName(area);
       // Devices with no room are the caption's "32 in none" — real, and not a
