@@ -267,3 +267,66 @@ describe('a widget larger than its placement', () => {
     expect(css).toMatch(/\.cell\s*\{[^}]*overflow:\s*hidden/);
   });
 });
+
+describe('a page being edited, rather than a page being left', () => {
+  const withText = (id: string, text: string): DashboardDefinition =>
+    base({
+      widgets: [{ id, type: 'text', config: { text } }],
+      layouts: [
+        {
+          breakpoint: 'desktop',
+          columns: 12,
+          row_height: 120,
+          gap: 12,
+          placements: [{ widget_id: id, x: 0, y: 0, w: 6, h: 1 }],
+        },
+      ],
+    });
+
+  const drawn = (el: HcPage): Element | null | undefined => el.shadowRoot?.querySelector('hc-text');
+
+  // The widget has its own shadow root, so its words are a level down.
+  const says = (el: HcPage): string => drawn(el)?.shadowRoot?.textContent ?? '';
+
+  it('keeps its elements when the same page changes', async () => {
+    // Editing a page hands this element a new document object several times a
+    // minute. Rebuilding every widget each time re-fetches a chart's six
+    // hours of readings, reloads a media card's art, and loses whatever a
+    // widget was in the middle of.
+    const el = await mount(withText('t', 'One'));
+    const first = drawn(el);
+
+    el.doc = withText('t', 'Two');
+    await el.updateComplete;
+
+    expect(drawn(el)).toBe(first);
+    expect(says(el)).toContain('Two');
+  });
+
+  it('rebuilds when it is a different page', async () => {
+    // Widget ids are unique within a document and not across them, so an
+    // element cached from the last page would be handed the wrong config.
+    const el = await mount(withText('t', 'One'));
+    const first = drawn(el);
+
+    el.doc = { ...withText('t', 'Elsewhere'), id: 'other' };
+    await el.updateComplete;
+
+    expect(drawn(el)).not.toBe(first);
+  });
+
+  it('forgets a widget that is no longer on the page', async () => {
+    // A cache that only grows is a leak on a panel that runs for months, and
+    // an id that came back would find a stale element.
+    const el = await mount(withText('t', 'One'));
+    const first = drawn(el);
+
+    el.doc = { ...withText('t', 'One'), widgets: [] };
+    await el.updateComplete;
+    el.doc = withText('t', 'Back');
+    await el.updateComplete;
+
+    expect(drawn(el)).not.toBe(first);
+    expect(says(el)).toContain('Back');
+  });
+});

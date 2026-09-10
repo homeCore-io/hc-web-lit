@@ -144,6 +144,10 @@ export class HcPage extends LitElement {
   /** Save one widget's config back into the page it is on (§14.1). */
   @property({ attribute: false }) onSaveWidget: MountEnv['onSaveWidget'];
 
+  /** Put a widget on the page, or take one off (§14.1). */
+  @property({ attribute: false }) onAddWidget: MountEnv['onAddWidget'];
+  @property({ attribute: false }) onRemoveWidget: MountEnv['onRemoveWidget'];
+
   /**
    * What `@room` and `@picked` mean on this page.
    *
@@ -189,9 +193,31 @@ export class HcPage extends LitElement {
   }
 
   override willUpdate(changed: Map<string, unknown>): void {
-    // Widget ids are unique within a document, not across documents, so a
-    // cached element from the last page would be handed the wrong config.
-    if (changed.has('doc')) this.elements.clear();
+    if (!changed.has('doc')) return;
+
+    // **Another page, not another version of this one.** Widget ids are
+    // unique within a document and not across documents, so an element cached
+    // from the last page would be handed the wrong config — but this used to
+    // fire on *any* new document object, and a page being edited is a new
+    // document object several times a minute.
+    //
+    // What that cost: every widget on the page destroyed and rebuilt on every
+    // save. A history chart re-fetching six hours of readings, a media card
+    // reloading its art, and — the way it was found — a property panel losing
+    // which widget it was editing the instant it added one.
+    const was = changed.get('doc') as DashboardDefinition | undefined;
+    if (was?.id !== this.doc?.id) {
+      this.elements.clear();
+      return;
+    }
+
+    // Same page, edited: keep the elements, and drop the ones whose widget is
+    // no longer in it. A cache that only grows is a leak on a panel that runs
+    // for months, and an id that came back would find a stale element.
+    const live = new Set((this.doc?.widgets ?? []).map((w) => w.id));
+    for (const key of [...this.elements.keys()]) {
+      if (!live.has(key.slice(0, key.lastIndexOf(':')))) this.elements.delete(key);
+    }
   }
 
   override render() {
@@ -335,6 +361,12 @@ export class HcPage extends LitElement {
       ...(this.vocabulary !== undefined ? { vocabulary: this.vocabulary } : {}),
       ...(this.pages !== undefined ? { pages: this.pages } : {}),
       ...(this.onSaveWidget !== undefined ? { onSaveWidget: this.onSaveWidget } : {}),
+      ...(this.onAddWidget !== undefined ? { onAddWidget: this.onAddWidget } : {}),
+      ...(this.onRemoveWidget !== undefined ? { onRemoveWidget: this.onRemoveWidget } : {}),
+      // The page it is drawing, so a widget that edits one can offer the
+      // choice. Taken from the document rather than passed in: this element
+      // already has it, and a second source would be a second answer.
+      pageWidgets: this.doc?.widgets ?? [],
     };
   }
 

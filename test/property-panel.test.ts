@@ -12,9 +12,11 @@ import { describe, expect, it, vi } from 'vitest';
 import fixture from './fixtures/vocabulary.json' with { type: 'json' };
 import { readVocabulary, type Vocabulary } from '../src/core/vocabulary.js';
 import { knownFacets } from '../src/core/selection.js';
+import { knownTypes } from '../src/core/registry.js';
 import type { DeviceState } from '../src/core/device.js';
 import type { WidgetSpec } from '../src/core/widget.js';
 import '../src/widgets/hc-heading.js';
+import '../src/widgets/hc-device-grid.js';
 import '../src/widgets/hc-property-panel.js';
 import type { HcPropertyPanel } from '../src/widgets/hc-property-panel.js';
 
@@ -205,6 +207,161 @@ describe('what it writes back', () => {
       type: 'device_grid',
       config: { selection_mode: 'manual', device_ids: ['hue_1', ''] },
     });
+  });
+});
+
+describe('editing any widget on the page', () => {
+  const pageWidgets = [
+    { id: 'h_001', type: 'heading', config: { text: 'Hall' } },
+    { id: 'g_002', type: 'device_grid', title: 'Office', config: { selection_mode: 'manual' } },
+  ];
+
+  const onPage = async (config: Record<string, unknown> = {}): Promise<HcPropertyPanel> => {
+    const el = document.createElement('hc-property-panel');
+    el.config = { preview: false, ...config };
+    el.devices = house;
+    el.vocabulary = vocabulary;
+    el.pageWidgets = pageWidgets;
+    el.onSaveWidget = async () => undefined;
+    document.body.append(el);
+    await el.updateComplete;
+    return el;
+  };
+
+  const picker = (el: HcPropertyPanel): HTMLSelectElement =>
+    el.shadowRoot?.querySelector('[aria-label="Widget"]') as HTMLSelectElement;
+
+  it('offers every widget the page has', async () => {
+    // One panel is an editor for the page, not for the one widget its config
+    // happened to name.
+    const el = await onPage({ edits: 'h_001' });
+    expect([...picker(el).options].map((o) => o.value)).toEqual(['h_001', 'g_002']);
+    expect(picker(el).value).toBe('h_001');
+  });
+
+  it('edits the widget it is pointed at, from the page', async () => {
+    const el = await onPage({ edits: 'g_002' });
+    expect(el.shadowRoot?.textContent).toContain('device_grid');
+    expect((field(el, 'Selection mode') as HTMLSelectElement).value).toBe('manual');
+  });
+
+  it('changes what it is editing when somebody picks another', async () => {
+    const el = await onPage({ edits: 'h_001' });
+    picker(el).value = 'g_002';
+    picker(el).dispatchEvent(new Event('change'));
+    await el.updateComplete;
+    expect(el.shadowRoot?.textContent).toContain('device_grid');
+  });
+
+  it('will not carry an unsaved edit to another widget', async () => {
+    // Discarding it silently and carrying it over both lose work; this is a
+    // sentence a person can act on.
+    const el = await onPage({ edits: 'h_001' });
+    const text = field(el, 'Text') as HTMLInputElement;
+    text.value = 'Hallway';
+    text.dispatchEvent(new Event('input'));
+    await el.updateComplete;
+
+    expect(picker(el).disabled).toBe(true);
+    expect(el.shadowRoot?.textContent).toContain('Save this edit or take it back');
+  });
+
+  it('falls back to the literal in its config when it is not on a page', async () => {
+    // A sheet, or a test. This is what the panel always did.
+    const el = document.createElement('hc-property-panel');
+    el.config = { widget: { type: 'heading', config: { text: 'Loose' } }, preview: false };
+    el.vocabulary = vocabulary;
+    document.body.append(el);
+    await el.updateComplete;
+    expect((field(el, 'Text') as HTMLInputElement).value).toBe('Loose');
+    expect(el.shadowRoot?.querySelector('[aria-label="Widget"]')).toBeNull();
+  });
+});
+
+describe('adding and removing a widget', () => {
+  const page = [{ id: 'h_001', type: 'heading', config: { text: 'Hall' } }];
+
+  const withHost = async (
+    hosts: {
+      onAddWidget?: (type: string) => Promise<string>;
+      onRemoveWidget?: (id: string) => Promise<void>;
+    } = {},
+  ): Promise<HcPropertyPanel> => {
+    const el = document.createElement('hc-property-panel');
+    el.config = { preview: false, edits: 'h_001' };
+    el.vocabulary = vocabulary;
+    el.pageWidgets = page;
+    el.onSaveWidget = async () => undefined;
+    if (hosts.onAddWidget !== undefined) el.onAddWidget = hosts.onAddWidget;
+    if (hosts.onRemoveWidget !== undefined) el.onRemoveWidget = hosts.onRemoveWidget;
+    document.body.append(el);
+    await el.updateComplete;
+    return el;
+  };
+
+  const catalogue = (el: HcPropertyPanel): HTMLSelectElement =>
+    el.shadowRoot?.querySelector('[aria-label="Add a widget"]') as HTMLSelectElement;
+
+  it('offers only what this client can draw', async () => {
+    // Offering a type that renders as a labelled placeholder would be offering
+    // somebody a broken card and calling it a choice.
+    const el = await withHost({ onAddWidget: async () => 'x' });
+    const offered = [...catalogue(el).options].map((o) => o.value).filter((v) => v !== '');
+    expect(offered).toEqual(knownTypes());
+    expect(offered).toContain('device_grid');
+    expect(offered).not.toContain('floor_plan');
+  });
+
+  it('starts editing what it just added', async () => {
+    // The widget arrives with an empty config and draws as its own "nothing to
+    // show"; leaving somebody looking at that with no next step reads as
+    // broken.
+    // What the host does: the page gains the widget, and the panel is handed
+    // the page again on the next render. Deferred through a holder so the
+    // callback can reach the element it is given to.
+    const panel: { el?: HcPropertyPanel } = {};
+    const added = vi.fn(async (type: string) => {
+      if (panel.el !== undefined) {
+        panel.el.pageWidgets = [...page, { id: 'grid_1', type, config: {} }];
+      }
+      return 'grid_1';
+    });
+    const el = await withHost({ onAddWidget: added });
+    panel.el = el;
+
+    catalogue(el).value = 'device_grid';
+    catalogue(el).dispatchEvent(new Event('change'));
+    await el.updateComplete;
+    await el.updateComplete;
+
+    expect(added).toHaveBeenCalledWith('device_grid');
+    expect(el.shadowRoot?.textContent).toContain('nothing in it yet');
+    // And it is the new widget being edited, not the one that was there.
+    expect(el.shadowRoot?.textContent).toContain('device_grid');
+  });
+
+  it('asks before taking one off', async () => {
+    // No undo and no bin, the same reason the icon rules reset asks twice.
+    const removed = vi.fn(async () => undefined);
+    const el = await withHost({ onAddWidget: async () => 'x', onRemoveWidget: removed });
+
+    const arm = [...(el.shadowRoot?.querySelectorAll('button') ?? [])].find((b) =>
+      (b.textContent ?? '').includes('Remove this widget'),
+    );
+    arm?.click();
+    await el.updateComplete;
+    expect(removed).not.toHaveBeenCalled();
+
+    const confirm = [...(el.shadowRoot?.querySelectorAll('button') ?? [])].find((b) =>
+      (b.textContent ?? '').includes('Remove h_001?'),
+    );
+    confirm?.click();
+    expect(removed).toHaveBeenCalledWith('h_001');
+  });
+
+  it('offers none of it without a host that can write', async () => {
+    const el = await withHost();
+    expect(catalogue(el)).toBeNull();
   });
 });
 

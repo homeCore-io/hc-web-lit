@@ -18,6 +18,7 @@ import type { PluginRunner } from '../core/plugins.js';
 import type { IconRule } from '../design/icons.js';
 import type { Tokens } from '../design/tokens.js';
 import type { Vocabulary } from '../core/vocabulary.js';
+import type { DashboardWidget } from '../core/dashboard.js';
 import { locale, units, type Preferences } from '../core/i18n.js';
 
 /**
@@ -98,6 +99,16 @@ export interface MountEnv {
    */
   onSavePreferences?: (next: Preferences) => void;
   /**
+   * The widgets on the page being drawn.
+   *
+   * Reading, which is not the same shape as writing: the save takes a widget
+   * id and a config (below), because a widget that could hand over a whole
+   * page could rewrite the page it is on. An editor needs to *see* the page
+   * to offer a choice of what to edit, and the layouts — where things sit —
+   * are not part of that and are not handed over.
+   */
+  pageWidgets?: readonly DashboardWidget[];
+  /**
    * Save one widget's config back into the page it is on.
    *
    * The narrowest write that is useful: a widget id and a config, not a
@@ -109,6 +120,18 @@ export interface MountEnv {
    * perform is worse than one that does not offer it (§5.11).
    */
   onSaveWidget?: (widgetId: string, config: Record<string, unknown>) => Promise<void>;
+  /**
+   * Put a widget on the page, and say what it was called.
+   *
+   * The type only: a widget cannot choose where another one sits, because
+   * where things sit is the page's business and the designer's (Phase 10).
+   * It lands below everything else with an empty config, which is the honest
+   * first frame — a config invented here would be a widget that looks
+   * configured and points at nothing.
+   */
+  onAddWidget?: (type: string) => Promise<string>;
+  /** Take one off the page, with its placements. */
+  onRemoveWidget?: (widgetId: string) => Promise<void>;
   /**
    * The pages this household has, for a widget that links to one (§5.10).
    *

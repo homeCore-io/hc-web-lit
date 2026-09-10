@@ -12,7 +12,12 @@
  * loop a household actually has: duplicate the page that nearly does what you
  * want, then edit it with the property panel.
  */
-import type { DashboardDefinition, DashboardWidget } from './dashboard.js';
+import type {
+  DashboardDefinition,
+  DashboardLayout,
+  DashboardWidget,
+  DashboardWidgetPlacement,
+} from './dashboard.js';
 
 /**
  * A page id from what somebody typed.
@@ -106,4 +111,93 @@ export function duplicatePage(
 ): DashboardDefinition {
   const copy = structuredClone(doc) as DashboardDefinition;
   return { ...copy, id: pageId(name, taken), name };
+}
+
+/** A widget id that is not already taken on this page. */
+function widgetId(type: string, taken: readonly string[]): string {
+  const base = type.replace(/[^a-z0-9]+/gi, '_').toLowerCase();
+  for (let n = 1; ; n++) {
+    const tried = `${base}_${n}`;
+    if (!taken.includes(tried)) return tried;
+  }
+}
+
+/**
+ * Where a new widget goes in one layout.
+ *
+ * Below everything else, full-ish width, because the alternative is guessing
+ * at a gap somebody left on purpose. Moving it is the designer's job (Phase
+ * 10); putting it somewhere visible is this one's.
+ */
+function placeBelow(layout: DashboardLayout, id: string): DashboardWidgetPlacement {
+  const placements = layout.placements ?? [];
+  const nextRow = placements.reduce((low, p) => Math.max(low, p.y + p.h), 0);
+  const grid = { widget_id: id, x: 0, y: nextRow, w: Math.min(6, layout.columns || 12), h: 2 };
+
+  // A composed page positions by rect and ignores the grid, so a placement
+  // with only grid coordinates lands at the top left under everything already
+  // there. The grid numbers are still filled in: they are what a client that
+  // has never heard of frames draws (§5.7).
+  if (layout.flow !== 'free') return grid;
+
+  const bottom = placements.reduce(
+    (low, p) => Math.max(low, (p.rect?.y ?? 0) + (p.rect?.h ?? 0)),
+    0,
+  );
+  return { ...grid, rect: { x: 0, y: bottom + (layout.gap || 12), w: 360, h: 200 } };
+}
+
+/**
+ * The page with a widget added, and the id it was given.
+ *
+ * **A placement in every layout the page has, not just the one on screen.**
+ * A document with a desktop and a mobile layout that gained a widget in one of
+ * them is a page where a phone silently shows less than a laptop — and nobody
+ * finds out until they pick up a phone. Where they *sit* can differ per size;
+ * whether they exist cannot.
+ *
+ * The config is empty. Almost every type needs one — a device, a heading, a
+ * selection — and inventing a plausible one would mean a widget that looks
+ * configured and points at nothing. It draws as its own "nothing to show"
+ * until somebody fills it in, which is the honest first frame.
+ */
+export function addWidget(
+  doc: DashboardDefinition,
+  type: string,
+): { doc: DashboardDefinition; id: string } {
+  const id = widgetId(
+    type,
+    (doc.widgets ?? []).map((w) => w.id),
+  );
+  const widget: DashboardWidget = { id, type, config: {} };
+
+  return {
+    id,
+    doc: {
+      ...doc,
+      widgets: [...(doc.widgets ?? []), widget],
+      layouts: (doc.layouts ?? []).map((l) => ({
+        ...l,
+        placements: [...(l.placements ?? []), placeBelow(l, id)],
+      })),
+    },
+  };
+}
+
+/**
+ * The page without a widget, and without its placements.
+ *
+ * Both halves, because a placement naming a widget that is not there is a
+ * document core would still store and every client would draw as nothing —
+ * a gap in a page with no way to tell why.
+ */
+export function removeWidget(doc: DashboardDefinition, id: string): DashboardDefinition {
+  return {
+    ...doc,
+    widgets: (doc.widgets ?? []).filter((w) => w.id !== id),
+    layouts: (doc.layouts ?? []).map((l) => ({
+      ...l,
+      placements: (l.placements ?? []).filter((p) => p.widget_id !== id),
+    })),
+  };
 }

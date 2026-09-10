@@ -40,11 +40,12 @@ import {
   type Property,
   type Suggest,
 } from '../core/properties.js';
-import { registerWidget } from '../core/registry.js';
+import { knownTypes, registerWidget } from '../core/registry.js';
 import { humanise } from '../core/text.js';
 import { knownFacets } from '../core/selection.js';
 import { widgetSpec, type Vocabulary } from '../core/vocabulary.js';
 import type { WidgetSpec } from '../core/widget.js';
+import type { DashboardWidget } from '../core/dashboard.js';
 import { knownRoles } from '../design/roles.js';
 import { markNames } from '../design/icons.js';
 import { mountChildren, type MountEnv } from '../shell/mount.js';
@@ -205,6 +206,15 @@ export class HcPropertyPanel extends LitElement {
   @property({ attribute: false }) vocabulary: Vocabulary | undefined;
   /** The household's pages, so a field that names one can offer them. */
   @property({ attribute: false }) pages: readonly { id: string; name: string }[] = [];
+  /**
+   * The widgets on the page this panel is on.
+   *
+   * What turns one panel into an editor for the page rather than for the one
+   * widget its config happened to name. Empty when the panel is mounted
+   * somewhere that is not a page — a sheet, a test — and then it edits the
+   * literal in its config, which is what it always did.
+   */
+  @property({ attribute: false }) pageWidgets: readonly DashboardWidget[] = [];
   /** Where an edit goes, when the host has somewhere to put it. */
   @property({ attribute: false }) onEditWidget: ((next: WidgetSpec) => void) | undefined;
   /**
@@ -215,9 +225,20 @@ export class HcPropertyPanel extends LitElement {
    */
   @property({ attribute: false }) onSaveWidget:
     ((widgetId: string, config: Record<string, unknown>) => Promise<void>) | undefined;
+  /** Put a widget on the page, or take one off. Absent means read-only. */
+  @property({ attribute: false }) onAddWidget: ((type: string) => Promise<string>) | undefined;
+  @property({ attribute: false }) onRemoveWidget: ((widgetId: string) => Promise<void>) | undefined;
 
   /** The edit in progress. Undefined until somebody changes something. */
   @state() private draft: Record<string, unknown> | undefined;
+
+  /**
+   * Which widget on the page is being edited.
+   *
+   * Undefined means "whatever the config says", which is where every panel
+   * starts. Choosing another one is what makes this an editor for the page.
+   */
+  @state() private chosen: string | undefined;
 
   /** What the last save did, in a person's words. */
   @state() private saved = '';
@@ -227,6 +248,105 @@ export class HcPropertyPanel extends LitElement {
 
   /** Whether a save is in flight, so a second press cannot start another. */
   @state() private saving = false;
+
+  /** Whether "remove this widget" has been asked once already. */
+  @state() private confirmingRemove = false;
+
+  /**
+   * Put a widget on the page and start editing it.
+   *
+   * **Straight to editing it**, because the widget arrives with an empty
+   * config and draws as its own "nothing to show": leaving somebody looking at
+   * that with no obvious next step is how a feature reads as broken.
+   */
+  private async addOfType(type: string): Promise<void> {
+    if (this.onAddWidget === undefined) return;
+    this.trouble = '';
+    try {
+      this.chosen = await this.onAddWidget(type);
+      this.saved = `Added a ${humanise(type)}. It has nothing in it yet.`;
+    } catch (e) {
+      this.trouble = `Not added: ${e instanceof Error ? e.message : String(e)}`;
+    }
+  }
+
+  /**
+   * Take a widget off the page.
+   *
+   * Not called `remove`: that is `Element`'s, and a private one with a
+   * different signature makes the class assignable to nothing — which
+   * TypeScript reports as `@customElement` failing and never mentions the
+   * name. The same trap as a private `valueOf` (`hc-plugin-widget`).
+   */
+  private async dropWidget(widgetId: string): Promise<void> {
+    if (this.onRemoveWidget === undefined) return;
+    this.confirmingRemove = false;
+    try {
+      await this.onRemoveWidget(widgetId);
+      // Whatever the page has now; the one that was chosen is gone.
+      this.chosen = this.pageWidgets.find((w) => w.id !== widgetId)?.id;
+      this.draft = undefined;
+      this.saved = 'Removed.';
+    } catch (e) {
+      this.trouble = `Not removed: ${e instanceof Error ? e.message : String(e)}`;
+    }
+  }
+
+  /**
+   * Add a widget, and take this one away.
+   *
+   * The catalogue is what *this client can draw* rather than every type core
+   * describes: offering a type that renders as a labelled placeholder would be
+   * offering somebody a broken card and calling it a choice. A page that
+   * already holds such a type still draws it and still edits it — reading a
+   * document is a different question from authoring one (§14.3).
+   */
+  private renderCatalogue() {
+    if (this.onAddWidget === undefined || this.pageWidgets.length === 0) return nothing;
+    const target = this.target;
+
+    return html`<div class="row" part="row">
+      <div class="name">This page</div>
+      <div class="field">
+        <select
+          part="select"
+          aria-label="Add a widget"
+          data-value=""
+          @change=${(e: Event) => {
+            const type = (e.target as HTMLSelectElement).value;
+            if (type !== '') void this.addOfType(type);
+          }}
+        >
+          <option value="">Add a widget…</option>
+          ${knownTypes().map((t) => html`<option value=${t}>${humanise(t)}</option>`)}
+        </select>
+        ${
+          this.onRemoveWidget === undefined || target === ''
+            ? nothing
+            : this.confirmingRemove
+              ? html`<button part="action" @click=${() => void this.dropWidget(target)}>
+                    Remove ${target}?
+                  </button>
+                  <button
+                    part="action"
+                    @click=${() => {
+                      this.confirmingRemove = false;
+                    }}
+                  >
+                    Keep it
+                  </button>`
+              : html`<button
+                  part="action"
+                  @click=${() => {
+                    this.confirmingRemove = true;
+                  }}
+                >
+                  Remove this widget
+                </button>`
+        }
+      </div>
+    </div>`;
+  }
 
   /**
    * Save the edit back into the page.
@@ -243,7 +363,7 @@ export class HcPropertyPanel extends LitElement {
    * be somebody else's job to catch.
    */
   private renderSave(problems: number) {
-    const target = this.setting('edits');
+    const target = this.target;
     if (this.onSaveWidget === undefined || target === '') {
       return html`<span class="note"
         >${
@@ -290,8 +410,22 @@ export class HcPropertyPanel extends LitElement {
   /** The preview child, reused across renders. */
   private readonly cache = new Map<string, HTMLElement>();
 
-  /** The widget being edited, as the config gives it. */
+  /** The widget id this panel is pointed at, chosen or configured. */
+  private get target(): string {
+    return this.chosen ?? this.setting('edits');
+  }
+
+  /**
+   * The widget being edited.
+   *
+   * The one on the page it is pointed at, if there is one; otherwise the
+   * literal in this panel's own config, which is how a panel in a sheet or a
+   * test still has something to edit.
+   */
   private get subject(): WidgetSpec | undefined {
+    const onPage = this.pageWidgets.find((w) => w.id === this.target);
+    if (onPage !== undefined) return { type: onPage.type, config: onPage.config ?? {} };
+
     const raw = this.config['widget'];
     if (typeof raw !== 'object' || raw === null) return undefined;
     const spec = raw as WidgetSpec;
@@ -690,6 +824,46 @@ export class HcPropertyPanel extends LitElement {
     });
   }
 
+  /**
+   * Which widget on this page to edit.
+   *
+   * **Disabled while there is an unsaved edit**, rather than discarding it or
+   * carrying it to the next widget. Both alternatives lose work silently, and
+   * this one is a sentence a person can act on: save it or take it back.
+   */
+  private renderPicker() {
+    if (this.pageWidgets.length === 0) return nothing;
+    const unsaved = this.draft !== undefined;
+
+    return html`<div class="row" part="row">
+      <div class="name">Editing</div>
+      <div class="field">
+        <select
+          part="select"
+          aria-label="Widget"
+          data-value=${this.target}
+          ?disabled=${unsaved}
+          @change=${(e: Event) => {
+            this.chosen = (e.target as HTMLSelectElement).value;
+            this.saved = '';
+            this.trouble = '';
+          }}
+        >
+          ${this.pageWidgets.map(
+            (w) => html`<option value=${w.id}>${w.title ?? humanise(w.type)} · ${w.id}</option>`,
+          )}
+        </select>
+        ${
+          unsaved
+            ? html`<span class="note warn" part="note"
+                >Save this edit or take it back before editing another.</span
+              >`
+            : nothing
+        }
+      </div>
+    </div>`;
+  }
+
   override render() {
     const subject = this.subject;
     if (subject === undefined) {
@@ -723,6 +897,7 @@ export class HcPropertyPanel extends LitElement {
               }
             </div>`
       }
+      ${this.renderPicker()} ${this.renderCatalogue()}
 
       <div class="subject" part="state">
         ${subject.type}${

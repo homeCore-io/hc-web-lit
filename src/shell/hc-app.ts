@@ -15,7 +15,7 @@ import { builtInSeeds, defaultSkin } from '../design/seeds.js';
 import { deriveTokens } from '../design/tokens.js';
 import type { DashboardBreakpoint, DashboardDefinition } from '../core/dashboard.js';
 import { withWidgetConfig } from '../core/dashboard.js';
-import { duplicatePage, newPage } from '../core/pages.js';
+import { addWidget, duplicatePage, newPage, removeWidget } from '../core/pages.js';
 import { EventStream } from '../core/events.js';
 import { check, checkAction } from '../core/safety.js';
 import { DeviceStore } from '../core/store.js';
@@ -518,6 +518,30 @@ export class HcApp extends LitElement {
   };
 
   /**
+   * Put a widget on the page being shown, and say what it was called.
+   *
+   * The same store the save writes to, so a page gains a widget and keeps it
+   * without anything else being involved.
+   */
+  private readonly addWidgetToPage = async (type: string): Promise<string> => {
+    const doc = this.current;
+    if (doc === undefined) throw new Error('No page to add to.');
+    const { doc: next, id } = addWidget(doc, type);
+    this.docs = this.authored.saveDashboard(next);
+    this.current = next;
+    return Promise.resolve(id);
+  };
+
+  private readonly removeWidgetFromPage = async (widgetId: string): Promise<void> => {
+    const doc = this.current;
+    if (doc === undefined) throw new Error('No page to remove from.');
+    const next = removeWidget(doc, widgetId);
+    this.docs = this.authored.saveDashboard(next);
+    this.current = next;
+    return Promise.resolve();
+  };
+
+  /**
    * Whether "delete this page" has been asked once already.
    *
    * There is no undo and no bin. The icon rules editor learned this by having
@@ -628,7 +652,13 @@ export class HcApp extends LitElement {
       onSavePreferences: this.savePreferences,
       ...(this.vocabulary !== undefined ? { vocabulary: this.vocabulary } : {}),
       pages: this.pageList(),
-      ...(this.mayWriteDashboards() ? { onSaveWidget: this.saveWidget } : {}),
+      ...(this.mayWriteDashboards()
+        ? {
+            onSaveWidget: this.saveWidget,
+            onAddWidget: this.addWidgetToPage,
+            onRemoveWidget: this.removeWidgetFromPage,
+          }
+        : {}),
       ...(this.panelScopes !== undefined ? { scopes: this.panelScopes } : {}),
       templates: this.authored.templates(),
     };
@@ -1298,6 +1328,8 @@ export class HcApp extends LitElement {
         .vocabulary=${this.vocabulary}
         .pages=${this.pageList()}
         .onSaveWidget=${this.mayWriteDashboards() ? this.saveWidget : undefined}
+        .onAddWidget=${this.mayWriteDashboards() ? this.addWidgetToPage : undefined}
+        .onRemoveWidget=${this.mayWriteDashboards() ? this.removeWidgetFromPage : undefined}
         .scopes=${this.panelScopes}
         .templates=${this.authored.templates()}
         .onAction=${this.runAction}

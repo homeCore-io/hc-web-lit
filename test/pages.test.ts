@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { DashboardDefinition } from '../src/core/dashboard.js';
-import { duplicatePage, newPage, pageId } from '../src/core/pages.js';
+import { addWidget, duplicatePage, newPage, pageId, removeWidget } from '../src/core/pages.js';
 import { layoutToDraw } from '../src/core/dashboard.js';
 
 describe('a page id', () => {
@@ -95,5 +95,122 @@ describe('duplicating a page', () => {
     const copy = duplicatePage(original, ['house']);
     expect(copy.id).not.toBe('house');
     expect(copy.name).toBe('Every room copy');
+  });
+});
+
+describe('putting a widget on a page', () => {
+  const twoSizes: DashboardDefinition = {
+    id: 'house',
+    name: 'House',
+    icon: 'home',
+    owner_user_id: 'u',
+    widgets: [{ id: 'heading_1', type: 'heading', config: { text: 'Hall' } }],
+    layouts: [
+      {
+        breakpoint: 'desktop',
+        columns: 12,
+        row_height: 120,
+        gap: 12,
+        placements: [{ widget_id: 'heading_1', x: 0, y: 0, w: 12, h: 1 }],
+      },
+      {
+        breakpoint: 'mobile',
+        columns: 4,
+        row_height: 120,
+        gap: 12,
+        placements: [{ widget_id: 'heading_1', x: 0, y: 0, w: 4, h: 1 }],
+      },
+    ],
+  };
+
+  it('places it in every layout the page has', () => {
+    // A page that gained a widget in one layout is a page where a phone shows
+    // less than a laptop, and nobody finds out until they pick up a phone.
+    const { doc, id } = addWidget(twoSizes, 'device_grid');
+    for (const layout of doc.layouts ?? []) {
+      expect(layout.placements?.some((p) => p.widget_id === id)).toBe(true);
+    }
+  });
+
+  it('puts it below what is already there, in that layout’s own units', () => {
+    const { doc, id } = addWidget(twoSizes, 'device_grid');
+    const desktop = doc.layouts?.[0]?.placements?.find((p) => p.widget_id === id);
+    const mobile = doc.layouts?.[1]?.placements?.find((p) => p.widget_id === id);
+    expect(desktop?.y).toBe(1);
+    expect(desktop?.w).toBe(6);
+    // Four columns is the whole width on a phone; six would be off the page.
+    expect(mobile?.w).toBe(4);
+  });
+
+  it('gives a composed page a rect, because it ignores the grid', () => {
+    const free: DashboardDefinition = {
+      ...twoSizes,
+      layouts: [
+        {
+          breakpoint: 'desktop',
+          columns: 12,
+          row_height: 120,
+          gap: 12,
+          flow: 'free',
+          placements: [
+            {
+              widget_id: 'heading_1',
+              x: 0,
+              y: 0,
+              w: 12,
+              h: 1,
+              rect: { x: 0, y: 0, w: 600, h: 48 },
+            },
+          ],
+        },
+      ],
+    };
+    const { doc, id } = addWidget(free, 'text');
+    const placed = doc.layouts?.[0]?.placements?.find((p) => p.widget_id === id);
+    expect(placed?.rect?.y).toBe(60);
+    // The grid numbers are still filled in: they are what a client that has
+    // never heard of frames draws.
+    expect(placed?.w).toBe(6);
+  });
+
+  it('arrives with nothing in it', () => {
+    // Inventing a plausible config would mean a widget that looks configured
+    // and points at nothing.
+    const { doc, id } = addWidget(twoSizes, 'device_grid');
+    expect(doc.widgets?.find((w) => w.id === id)?.config).toEqual({});
+  });
+
+  it('does not take an id the page is already using', () => {
+    const once = addWidget(twoSizes, 'heading');
+    expect(once.id).toBe('heading_2');
+    expect(addWidget(once.doc, 'heading').id).toBe('heading_3');
+  });
+
+  it('leaves the page it was given alone', () => {
+    addWidget(twoSizes, 'device_grid');
+    expect(twoSizes.widgets).toHaveLength(1);
+    expect(twoSizes.layouts?.[0]?.placements).toHaveLength(1);
+  });
+});
+
+describe('taking a widget off a page', () => {
+  it('takes its placements with it', () => {
+    // A placement naming a widget that is not there draws as nothing, in a
+    // page with no way to tell why.
+    const { doc, id } = addWidget(
+      {
+        id: 'p',
+        name: 'P',
+        icon: 'home',
+        owner_user_id: 'u',
+        widgets: [],
+        layouts: [{ breakpoint: 'desktop', columns: 12, row_height: 120, gap: 12, placements: [] }],
+      },
+      'text',
+    );
+
+    const without = removeWidget(doc, id);
+    expect(without.widgets).toEqual([]);
+    expect(without.layouts?.[0]?.placements).toEqual([]);
   });
 });

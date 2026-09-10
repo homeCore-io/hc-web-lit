@@ -51,6 +51,11 @@ export type MountTarget = HTMLElement & {
   pages?: MountEnv['pages'];
   /** Save one widget's config back into the page it is on (§14.1). */
   onSaveWidget?: MountEnv['onSaveWidget'];
+  /** The widgets on the page being drawn, for a widget that edits one. */
+  pageWidgets?: MountEnv['pageWidgets'];
+  /** Put a widget on the page, or take one off (§14.1). */
+  onAddWidget?: MountEnv['onAddWidget'];
+  onRemoveWidget?: MountEnv['onRemoveWidget'];
   /** What this session may do, for a `requires_role` check before drawing. */
   scopes?: readonly string[];
   /**
@@ -160,6 +165,9 @@ export function mountWidget(el: MountTarget, w: WidgetSpec, env: MountEnv): void
   if (env.vocabulary !== undefined) give(el, 'vocabulary', env.vocabulary);
   if (env.pages !== undefined) give(el, 'pages', env.pages);
   if (env.onSaveWidget !== undefined) give(el, 'onSaveWidget', env.onSaveWidget);
+  if (env.pageWidgets !== undefined) give(el, 'pageWidgets', env.pageWidgets);
+  if (env.onAddWidget !== undefined) give(el, 'onAddWidget', env.onAddWidget);
+  if (env.onRemoveWidget !== undefined) give(el, 'onRemoveWidget', env.onRemoveWidget);
   if (env.scopes !== undefined) give(el, 'scopes', env.scopes);
 
   // A container mounts its own children and needs what the page had.
