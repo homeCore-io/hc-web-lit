@@ -456,6 +456,7 @@ export class HcApp extends LitElement {
     this.stream?.stop();
     if (this.ageTimer !== undefined) clearInterval(this.ageTimer);
     if (this.snapshotTimer !== undefined) clearInterval(this.snapshotTimer);
+    if (this.schemaSweep !== undefined) clearTimeout(this.schemaSweep);
     if (this.retry !== undefined) clearTimeout(this.retry);
     globalThis.removeEventListener?.('pagehide', this.onHide);
   }
@@ -561,7 +562,18 @@ export class HcApp extends LitElement {
       this.stream = new EventStream({
         // Asked again on every reconnect, so a session renewed while the
         // panel was offline is the one the next attempt uses.
-        url: () => api.streamUrl({ type: ['device_state_changed', 'device_availability_changed'] }),
+        url: () =>
+          api.streamUrl({
+            type: [
+              'device_state_changed',
+              'device_availability_changed',
+              // A schema changing is an event (core v0.1.69). Without it a
+              // Lutron phantom scene renders with no status until somebody
+              // reloads, because it upgrades its own schema about a second
+              // after the bridge connects.
+              'device_schema_changed',
+            ],
+          }),
         onEvent: (e) => {
           this.store.apply(e);
           this.lastHeard = Date.now();
@@ -571,6 +583,10 @@ export class HcApp extends LitElement {
           if (connected) this.lastHeard = Date.now();
         },
       });
+      // The store decides *whether* a schema moved; refetching needs the API
+      // client, so the shell does that half (§19.4).
+      this.store.onSchemaStale = () => this.refetchSchemas();
+
       this.stream.start();
       this.lastHeard = Date.now();
 
@@ -623,6 +639,40 @@ export class HcApp extends LitElement {
     }
     return undefined;
   }
+
+  /**
+   * Refetch the schemas the store says have moved.
+   *
+   * **Coalesced, because a plugin restart is not one event.** hc-zwave
+   * republishes on rescan and hc-hue when an aux device gains a facet, so a
+   * client that fetched per event would answer a restart with one request per
+   * device — 184 of them on this house, arriving in a burst, on the hardware
+   * least able to absorb it. A short window turns that into one pass, and a
+   * schema arriving 250ms late is invisible where a request storm is not.
+   */
+  private refetchSchemas(): void {
+    if (this.schemaSweep !== undefined) return;
+    this.schemaSweep = setTimeout(() => {
+      this.schemaSweep = undefined;
+      void this.sweepSchemas();
+    }, 250);
+  }
+
+  private async sweepSchemas(): Promise<void> {
+    const api = this.api;
+    if (api === undefined) return;
+
+    for (const deviceId of this.store.staleSchemas()) {
+      try {
+        this.store.setSchema(deviceId, (await api.getDeviceSchema(deviceId)) ?? null);
+      } catch {
+        // Left stale on purpose: the next event, or the next connect, tries
+        // again. Dropping it would mean a device whose controls never return.
+      }
+    }
+  }
+
+  private schemaSweep: ReturnType<typeof setTimeout> | undefined;
 
   private fail(e: unknown): void {
     // A credential the house refused is not an outage, and a stale dashboard

@@ -14,6 +14,7 @@
  * migrate for.
  */
 import type { DeviceState } from './device.js';
+import type { DeviceSchema } from './api.js';
 import type { HcEvent } from './events.js';
 
 export type Unsubscribe = () => void;
@@ -110,7 +111,88 @@ export class DeviceStore {
       if (existing === undefined) return;
       this.devices.set(e.device_id, { ...existing, available: e.available });
       this.notify(e.device_id);
+      return;
     }
+
+    if (event.type === 'device_schema_changed') {
+      // The event carries the declared *names*, not the schema, so a client
+      // can tell whether it cares before refetching. This is where "whether it
+      // cares" is decided; the refetch is the shell's, because it needs the
+      // API client (§19.4).
+      const e = event as unknown as {
+        device_id: string;
+        attributes?: string[];
+        actions?: string[];
+      };
+      const existing = this.devices.get(e.device_id);
+      if (existing === undefined) return;
+      if (!this.schemaMoved(existing, e.attributes ?? [], e.actions ?? [])) return;
+      this.stale.add(e.device_id);
+      this.onSchemaStale?.(e.device_id);
+    }
+  }
+
+  /**
+   * Devices whose declared schema has moved since it was last fetched.
+   *
+   * Held so a shell that is offline, or busy, can catch up later rather than
+   * losing the fact that a schema changed while it was not listening.
+   */
+  private readonly stale = new Set<string>();
+
+  /** Told when a device's declaration no longer matches what is held. */
+  onSchemaStale: ((deviceId: string) => void) | undefined;
+
+  /** Which devices are waiting for a refetched schema. */
+  staleSchemas(): string[] {
+    return [...this.stale];
+  }
+
+  /**
+   * Take a freshly fetched schema, and stop calling that device stale.
+   *
+   * Separate from `apply` because fetching needs the API client and a store
+   * does not have one — the same split every other capability follows.
+   */
+  setSchema(deviceId: string, schema: DeviceSchema | null): void {
+    const existing = this.devices.get(deviceId);
+    this.stale.delete(deviceId);
+    if (existing === undefined) return;
+    this.devices.set(deviceId, { ...existing, schema });
+    this.notify(deviceId);
+  }
+
+  /**
+   * Whether this event describes a schema the store does not already have.
+   *
+   * **The comparison is why the event carries names.** A Lutron phantom scene
+   * republishes its schema about a second after the bridge connects, and
+   * hc-ecowitt republishes whenever a sensor's attribute set changes — so a
+   * client that refetched on every event would refetch constantly, and one
+   * that never refetched would render a scene with no status until somebody
+   * reloaded the page. Comparing first is what makes the middle path cheap.
+   *
+   * Core sorts both lists before sending, precisely so this comparison is a
+   * comparison and not a set difference: `attributes` is a `HashMap` in Rust
+   * and two events describing one schema would otherwise differ in order.
+   */
+  private schemaMoved(
+    device: DeviceState,
+    attributes: readonly string[],
+    actions: readonly string[],
+  ): boolean {
+    const held = device.schema;
+    // No schema held at all: anything declared is news.
+    if (held === undefined || held === null) return attributes.length > 0 || actions.length > 0;
+
+    const heldAttributes = Object.keys(held.attributes ?? {}).sort();
+    const heldActions = (held.actions ?? []).map((a) => a.id).sort();
+    return (
+      heldAttributes.length !== attributes.length ||
+      heldActions.length !== actions.length ||
+      heldAttributes.some((k, i) => k !== attributes[i]) ||
+      heldActions.some((k, i) => k !== actions[i])
+    );
   }
 
   private snapshot(ids: readonly string[]): DeviceState[] {
