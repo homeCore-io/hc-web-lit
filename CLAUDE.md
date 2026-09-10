@@ -2067,6 +2067,22 @@ useful:
 - Anything hc-web-lit cannot draw yet is a page you open in the other client.
   A degraded path, not a broken one.
 
+**Do not build on the parts of core that exist because the other client could
+not store anything.** hc-web-flutter compiles ahead of time and holds nothing,
+so client-side concerns were given a home in core to have one at all —
+`/assets` and `/dashboards/templates` are the named examples. Once this client
+has a proper dashboard, Flutter is revamped and **those pieces come out of
+core**. Building on one would make that cleanup a breaking change here, and
+would recreate the problem the removal exists to fix, so this client keeps its
+own store for them (`server/store.ts`, `core/content.ts`) and reads neither
+endpoint.
+
+The test to apply before using a core endpoint is the same one §1.1 and
+homeCore#30 answer for data: **device management and automation are core's;
+user content and presentation are the client's.** A dashboard *document* is
+the deliberate exception — §14 is a shared document both clients render, which
+is what makes coexistence above possible at all.
+
 **hc-web-flutter can be retired when all of these are true.** Until then it is
 maintained, not deprecated. Note that the bar is **what the product needs**, not
 feature-parity with the other client: some of what that client does was shaped
