@@ -98,6 +98,18 @@ export interface MountEnv {
    */
   onSavePreferences?: (next: Preferences) => void;
   /**
+   * Save one widget's config back into the page it is on.
+   *
+   * The narrowest write that is useful: a widget id and a config, not a
+   * document. A widget that could hand over a whole page could rewrite the
+   * page it is on, and the host is the thing that owns what a page is (§19.4).
+   *
+   * Absent means this session cannot write — an older core, or a credential
+   * without `dashboards:write` — and a widget that offers a save it cannot
+   * perform is worse than one that does not offer it (§5.11).
+   */
+  onSaveWidget?: (widgetId: string, config: Record<string, unknown>) => Promise<void>;
+  /**
    * The pages this household has, for a widget that links to one (§5.10).
    *
    * Names and ids, never the documents: a widget that wanted to *read*

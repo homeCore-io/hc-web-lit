@@ -172,3 +172,26 @@ export function gridItems(
     ...(p.rect != null ? { rect: p.rect } : {}),
   }));
 }
+
+/**
+ * The document with one widget's config replaced.
+ *
+ * **Everything else is carried over untouched**, including the keys this
+ * client has never heard of: core replaces the whole document on a write, so
+ * anything dropped here is dropped from the house. That is the same round-trip
+ * rule the property panel keeps for a widget's config (§4.4), one level up,
+ * and it is why this builds a new document rather than assembling one from the
+ * fields it happens to know.
+ *
+ * `undefined` when the page has no such widget, so a caller can say which id
+ * was wrong rather than writing a document that quietly changed nothing.
+ */
+export function withWidgetConfig(
+  doc: DashboardDefinition,
+  widgetId: string,
+  config: Record<string, unknown>,
+): DashboardDefinition | undefined {
+  const widgets = doc.widgets ?? [];
+  if (!widgets.some((w) => w.id === widgetId)) return undefined;
+  return { ...doc, widgets: widgets.map((w) => (w.id === widgetId ? { ...w, config } : w)) };
+}

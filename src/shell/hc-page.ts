@@ -141,6 +141,9 @@ export class HcPage extends LitElement {
   /** The pages this household has, for a widget that links to one. */
   @property({ attribute: false }) pages: MountEnv['pages'];
 
+  /** Save one widget's config back into the page it is on (§14.1). */
+  @property({ attribute: false }) onSaveWidget: MountEnv['onSaveWidget'];
+
   /**
    * What `@room` and `@picked` mean on this page.
    *
@@ -331,6 +334,7 @@ export class HcPage extends LitElement {
         : {}),
       ...(this.vocabulary !== undefined ? { vocabulary: this.vocabulary } : {}),
       ...(this.pages !== undefined ? { pages: this.pages } : {}),
+      ...(this.onSaveWidget !== undefined ? { onSaveWidget: this.onSaveWidget } : {}),
     };
   }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DashboardDefinition, DashboardWidget } from '../src/core/dashboard.js';
-import { gridItems, layoutFor, layoutToDraw } from '../src/core/dashboard.js';
+import { gridItems, layoutFor, layoutToDraw, withWidgetConfig } from '../src/core/dashboard.js';
 import { Engine } from '../src/core/layout.js';
 
 /**
@@ -140,5 +140,40 @@ describe('a size the document does not carry', () => {
 
   it('has nothing to draw only when there is nothing at all', () => {
     expect(layoutToDraw(doc([]), 'mobile')).toBeUndefined();
+  });
+});
+
+describe('writing one widget back into a page', () => {
+  const page = doc({
+    widgets: [widget('a', { text: 'One' }), widget('b', { text: 'Two' })],
+    tags: ['house'],
+    background: { image: 'plan.png' },
+  });
+
+  it('changes the one widget and nothing else', () => {
+    const next = withWidgetConfig(page, 'b', { text: 'Changed' });
+    expect(next?.widgets?.map((w) => w.config)).toEqual([{ text: 'One' }, { text: 'Changed' }]);
+    // Core replaces the whole document on a write, so anything dropped here is
+    // dropped from the house — including the keys this client has never heard
+    // of.
+    expect(next?.background).toEqual({ image: 'plan.png' });
+    expect(next?.tags).toEqual(['house']);
+  });
+
+  it('keeps a key nothing in this client reads', () => {
+    const odd = { ...page, some_field_from_a_newer_core: 42 } as DashboardDefinition;
+    const next = withWidgetConfig(odd, 'a', { text: 'x' }) as unknown as Record<string, unknown>;
+    expect(next['some_field_from_a_newer_core']).toBe(42);
+  });
+
+  it('is nothing for a widget the page does not have', () => {
+    // So a caller can say which id was wrong, rather than writing a document
+    // that quietly changed nothing.
+    expect(withWidgetConfig(page, 'nope', { text: 'x' })).toBeUndefined();
+  });
+
+  it('leaves the document it was given alone', () => {
+    withWidgetConfig(page, 'a', { text: 'Changed' });
+    expect(page.widgets?.[0]?.config).toEqual({ text: 'One' });
   });
 });

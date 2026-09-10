@@ -14,6 +14,7 @@ import { applyTokens } from '../design/css.js';
 import { builtInSeeds, defaultSkin } from '../design/seeds.js';
 import { deriveTokens } from '../design/tokens.js';
 import type { DashboardBreakpoint, DashboardDefinition } from '../core/dashboard.js';
+import { withWidgetConfig } from '../core/dashboard.js';
 import { EventStream } from '../core/events.js';
 import { check, checkAction } from '../core/safety.js';
 import { DeviceStore } from '../core/store.js';
@@ -433,6 +434,53 @@ export class HcApp extends LitElement {
   };
 
   /**
+   * Whether this session may write a page at all.
+   *
+   * Undefined scopes mean a password login against a core that does not
+   * report them, which is the ordinary browser session and may write; a key
+   * that reported its scopes and does not carry this one may not. Checked
+   * here so the save is not *offered* rather than offered and refused
+   * (§5.11).
+   */
+  private mayWriteDashboards(): boolean {
+    return this.panelScopes === undefined || this.panelScopes.includes('dashboards:write');
+  }
+
+  /**
+   * Save one widget's config back into the page it is on.
+   *
+   * **Read, modify, write, and re-read.** Core replaces the whole document, so
+   * this sends the page it currently holds with one widget changed — and then
+   * takes core's copy back rather than trusting its own, because core sets
+   * `updated_at` and is the thing that decides what was stored.
+   *
+   * The window between the read and the write is the whole of the concurrency
+   * story: there is no version to send, so two people editing one page at once
+   * is a page where one of them loses their work. Keeping the window to one
+   * request is the only defence a client has, which is why this does not
+   * batch.
+   */
+  private readonly saveWidget = async (
+    widgetId: string,
+    config: Record<string, unknown>,
+  ): Promise<void> => {
+    const api = this.api;
+    const doc = this.current;
+    if (api === undefined || doc === undefined) throw new Error('Nothing to save into.');
+
+    const next = withWidgetConfig(doc, widgetId, config);
+    if (next === undefined) throw new Error(`This page has no widget "${widgetId}".`);
+
+    await api.updateDashboard(doc.id, next);
+
+    // Core's copy, not this one: it stamps `updated_at`, and a client showing
+    // its own guess of what was stored is a client that disagrees with the
+    // next reload.
+    this.docs = (await api.listDashboards()) as DashboardDefinition[];
+    this.current = this.docs.find((d) => d.id === doc.id) ?? this.current;
+  };
+
+  /**
    * What the household's pages are called.
    *
    * Names and ids only: a widget offering a link to another page needs what it
@@ -498,6 +546,7 @@ export class HcApp extends LitElement {
       onSavePreferences: this.savePreferences,
       ...(this.vocabulary !== undefined ? { vocabulary: this.vocabulary } : {}),
       pages: this.pageList(),
+      ...(this.mayWriteDashboards() ? { onSaveWidget: this.saveWidget } : {}),
       ...(this.panelScopes !== undefined ? { scopes: this.panelScopes } : {}),
       templates: this.authored.templates(),
     };
@@ -1106,6 +1155,7 @@ export class HcApp extends LitElement {
         .onSavePreferences=${this.savePreferences}
         .vocabulary=${this.vocabulary}
         .pages=${this.pageList()}
+        .onSaveWidget=${this.mayWriteDashboards() ? this.saveWidget : undefined}
         .scopes=${this.panelScopes}
         .templates=${this.authored.templates()}
         .onAction=${this.runAction}

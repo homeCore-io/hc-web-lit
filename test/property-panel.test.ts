@@ -208,18 +208,122 @@ describe('what it writes back', () => {
   });
 });
 
+describe('saving into the page', () => {
+  const mount = async (
+    config: Record<string, unknown>,
+    onSaveWidget?: (id: string, c: Record<string, unknown>) => Promise<void>,
+  ): Promise<HcPropertyPanel> => {
+    const el = document.createElement('hc-property-panel');
+    el.config = config;
+    el.devices = house;
+    el.vocabulary = vocabulary;
+    if (onSaveWidget !== undefined) el.onSaveWidget = onSaveWidget;
+    document.body.append(el);
+    await el.updateComplete;
+    return el;
+  };
+
+  const button = (el: HcPropertyPanel, starts: string): HTMLButtonElement | undefined =>
+    [...(el.shadowRoot?.querySelectorAll('button') ?? [])].find((b) =>
+      (b.textContent ?? '').trim().startsWith(starts),
+    );
+
+  const type = async (el: HcPropertyPanel, label: string, value: string): Promise<void> => {
+    const input = field(el, label) as HTMLInputElement;
+    input.value = value;
+    input.dispatchEvent(new Event('input'));
+    await el.updateComplete;
+  };
+
+  const editing = {
+    widget: { type: 'heading', config: { text: 'Hall' } },
+    edits: 'h_012',
+    preview: false,
+  };
+
+  it('writes the widget id and the config, and nothing else', async () => {
+    // The narrowest write that is useful: a widget that could hand over a
+    // whole page could rewrite the page it is on.
+    const save = vi.fn(async () => undefined);
+    const el = await mount(editing, save);
+    await type(el, 'Text', 'Hallway');
+
+    button(el, 'Save into')?.click();
+    expect(save).toHaveBeenCalledWith('h_012', { text: 'Hallway' });
+  });
+
+  it('drops the draft once the house has it', async () => {
+    // What is drawn from here on is what the house holds, not what this panel
+    // remembers sending.
+    const el = await mount(
+      editing,
+      vi.fn(async () => undefined),
+    );
+    await type(el, 'Text', 'Hallway');
+    button(el, 'Save into')?.click();
+    await el.updateComplete;
+    await el.updateComplete;
+    expect(el.shadowRoot?.textContent).toContain('Saved.');
+    expect(button(el, 'Undo the changes')).toBeUndefined();
+  });
+
+  it('says why a save did not happen, and keeps the edit', async () => {
+    const el = await mount(
+      editing,
+      vi.fn(async () => {
+        throw new Error('dashboard access denied');
+      }),
+    );
+    await type(el, 'Text', 'Hallway');
+    button(el, 'Save into')?.click();
+    await el.updateComplete;
+    await el.updateComplete;
+
+    expect(el.shadowRoot?.textContent).toContain('dashboard access denied');
+    // The words somebody typed are still there to try again with.
+    expect((field(el, 'Text') as HTMLInputElement).value).toBe('Hallway');
+  });
+
+  it('does not offer to send a config core would refuse', async () => {
+    // The refusal would be correct, and the round trip would be spent
+    // learning what the field already says.
+    const el = await mount(
+      {
+        widget: { type: 'device_grid', config: { selection_mode: 'area', area_name: 'office' } },
+        edits: 'g_1',
+        preview: false,
+      },
+      vi.fn(async () => undefined),
+    );
+    await type(el, 'Area name', '');
+    expect(button(el, 'Fix the fields first')?.disabled).toBe(true);
+  });
+
+  it('says so plainly when this session may not write', async () => {
+    const el = await mount(editing);
+    await type(el, 'Text', 'Hallway');
+    expect(el.shadowRoot?.textContent).toContain('may not write pages');
+  });
+
+  it('says so plainly when it is not pointed at a widget', async () => {
+    const el = await mount(
+      { widget: { type: 'heading', config: { text: 'Hall' } }, preview: false },
+      vi.fn(async () => undefined),
+    );
+    await type(el, 'Text', 'Hallway');
+    expect(el.shadowRoot?.textContent).toContain('not pointed at a widget');
+  });
+});
+
 describe('an edit that cannot be saved yet', () => {
-  it('says so, and can be taken back', async () => {
-    // There is no dashboard write path in this client. A panel that let
-    // somebody make ten changes without saying that would be lying by
-    // omission, and the changes would go when the page did.
+  it('can be taken back', async () => {
+    // A panel with no target and no way to write still edits; what it must
+    // not do is let somebody make ten changes believing they are kept.
     const el = await panel({ type: 'heading', config: { text: 'Hall' } });
     const input = field(el, 'Text') as HTMLInputElement;
     input.value = 'Hallway';
     input.dispatchEvent(new Event('input'));
     await el.updateComplete;
-
-    expect(el.shadowRoot?.textContent).toContain('no dashboard write path yet');
 
     const undo = [...(el.shadowRoot?.querySelectorAll('button') ?? [])].find(
       (b) => b.textContent?.trim() === 'Undo the changes',

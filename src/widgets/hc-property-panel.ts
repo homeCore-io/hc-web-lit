@@ -192,6 +192,9 @@ export class HcPropertyPanel extends LitElement {
       color: var(--hc-ink-muted, #8b95a4);
       font-size: var(--hc-text-caption-size, 11px);
     }
+    .note.warn {
+      color: var(--hc-accent-warn, #ffc978);
+    }
   `;
 
   /** The panel's own config. `widget` is the subject it edits. */
@@ -204,9 +207,83 @@ export class HcPropertyPanel extends LitElement {
   @property({ attribute: false }) pages: readonly { id: string; name: string }[] = [];
   /** Where an edit goes, when the host has somewhere to put it. */
   @property({ attribute: false }) onEditWidget: ((next: WidgetSpec) => void) | undefined;
+  /**
+   * Write one widget's config back into the page it is on.
+   *
+   * Absent when this session may not write, which is why the save is not
+   * offered rather than offered and refused (§5.11).
+   */
+  @property({ attribute: false }) onSaveWidget:
+    ((widgetId: string, config: Record<string, unknown>) => Promise<void>) | undefined;
 
   /** The edit in progress. Undefined until somebody changes something. */
   @state() private draft: Record<string, unknown> | undefined;
+
+  /** What the last save did, in a person's words. */
+  @state() private saved = '';
+
+  /** Why the last save did not happen. */
+  @state() private trouble = '';
+
+  /** Whether a save is in flight, so a second press cannot start another. */
+  @state() private saving = false;
+
+  /**
+   * Save the edit back into the page.
+   *
+   * **Behind a button, unlike the icon rules editor.** That one saves on every
+   * keystroke because a rule is two fields whose effect is visible
+   * immediately; this writes a whole dashboard document to the house, and
+   * core replaces it wholesale with no version to check — so a save is a thing
+   * somebody decides to do, not a thing that happens while they are thinking.
+   *
+   * A config core would refuse is not sent. The refusal would be correct and
+   * the round trip would be spent learning what the field already says.
+   */
+  private renderSave(problems: number) {
+    const target = this.setting('edits');
+    if (this.onSaveWidget === undefined || target === '') {
+      return html`<span class="note"
+        >${
+          target === ''
+            ? 'Changed here only — this panel is not pointed at a widget on this page.'
+            : 'Changed here only — this session may not write pages.'
+        }</span
+      >`;
+    }
+
+    return html`<button
+      part="action"
+      ?disabled=${this.saving || problems > 0}
+      @click=${() => void this.save(target)}
+    >
+      ${this.saving ? 'Saving…' : problems > 0 ? 'Fix the fields first' : `Save into ${target}`}
+    </button>`;
+  }
+
+  private async save(widgetId: string): Promise<void> {
+    if (this.onSaveWidget === undefined || this.draft === undefined) return;
+    this.saving = true;
+    this.trouble = '';
+    try {
+      await this.onSaveWidget(widgetId, this.draft);
+      // The draft is dropped, so what is drawn from here on is what the house
+      // holds rather than what this panel remembers sending.
+      this.draft = undefined;
+      this.saved = 'Saved.';
+    } catch (e) {
+      this.saved = '';
+      this.trouble = `Not saved: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      this.saving = false;
+    }
+  }
+
+  /** A string out of this panel's own config. */
+  private setting(name: string): string {
+    const v = this.config[name];
+    return typeof v === 'string' ? v : '';
+  }
 
   /** The preview child, reused across renders. */
   private readonly cache = new Map<string, HTMLElement>();
@@ -684,19 +761,24 @@ export class HcPropertyPanel extends LitElement {
           }</span
         >
         ${
-          this.draft !== undefined
-            ? html`<span class="note">
-                  Changed here only — this client has no dashboard write path yet.
-                </span>
-                <button
+          this.draft === undefined
+            ? nothing
+            : html`<button
                   part="action"
                   @click=${() => {
                     this.draft = undefined;
+                    this.saved = '';
                   }}
                 >
                   Undo the changes
-                </button>`
-            : nothing
+                </button>
+                ${this.renderSave(problems)}`
+        }
+        ${this.saved === '' ? nothing : html`<span class="note">${this.saved}</span>`}
+        ${
+          this.trouble === ''
+            ? nothing
+            : html`<span class="note warn" part="note">${this.trouble}</span>`
         }
       </div>
     `;

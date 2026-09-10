@@ -406,6 +406,22 @@ export class HcApi {
   }
 
   /**
+   * `updateDashboard`. The whole document, as core stores it.
+   *
+   * **Read, modify, write — and last write wins.** Core replaces the stored
+   * document with this one, preserving only the things a content edit has no
+   * business changing: the id, the owner, when it was created, and the access
+   * list (that last one is what stands between an edit-granted user and
+   * self-promotion). There is no version to send and none to check, so two
+   * people editing one page at once is a page where one of them loses their
+   * work, and a client should keep the window between reading and writing
+   * short rather than pretend otherwise.
+   */
+  async updateDashboard(id: string, dashboard: unknown): Promise<void> {
+    await this.request<unknown>('PUT', `/dashboards/${encodeURIComponent(id)}`, dashboard);
+  }
+
+  /**
    * `dashboardVocabulary`. The table core validates every document against.
    *
    * Read once at startup and handed to the property panel, which generates

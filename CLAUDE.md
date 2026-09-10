@@ -2058,6 +2058,10 @@ useful:
 
 - hc-web-lit ships as a **viewer** first. Pages are authored in the Flutter
   designer, which already exists and works, and rendered in either client.
+  It is no longer *only* a viewer: the property panel writes one widget's
+  config back through `PUT /dashboards/{id}` (§4.4), which is the narrowest
+  useful write and the one the panel was pointless without. Placement,
+  creation and deletion stay with the other client until Phase 10.
 - The Flutter client stays in production and stays the default until the list
   below is done. Nothing is switched off on a date.
 - Anything hc-web-lit cannot draw yet is a page you open in the other client.
