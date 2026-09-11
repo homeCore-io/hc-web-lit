@@ -298,3 +298,172 @@ describe('a television on an HDMI input', () => {
     expect(nowPlaying(roku({})).state).toBe('unknown');
   });
 });
+
+describe('the transport a player actually declares (§5.11)', () => {
+  const at = (actions: { id: string; icon?: string }[], attrs: Record<string, unknown> = {}) => {
+    const el = document.createElement('hc-media-card');
+    el.device = {
+      device_id: 'p',
+      name: 'Player',
+      plugin_id: 'x',
+      available: true,
+      device_type: 'media_player',
+      attributes: { state: 'playing', ...attrs },
+      last_seen: '2026-09-11T00:00:00Z',
+      schema: { actions: actions.map((a) => ({ label: a.id, ...a })) },
+    };
+    el.config = {};
+    document.body.append(el);
+    return el.updateComplete.then(() => el);
+  };
+
+  const marks = (el: HTMLElement): string[] =>
+    [...(el.shadowRoot?.querySelectorAll('button') ?? [])].map(
+      (b) => b.getAttribute('aria-label') ?? '',
+    );
+
+  it('shows the combined toggle instead of play, pause and stop', async () => {
+    // A Roku will genuinely accept all four, which is why it declares all four
+    // — and four buttons is a row of alternatives where a person wants one
+    // control. It is also how a Sonos stops being offered a stop.
+    const el = await at([
+      { id: 'previous' },
+      { id: 'play', icon: 'play' },
+      { id: 'pause', icon: 'pause' },
+      { id: 'play_pause', icon: 'play-pause' },
+      { id: 'stop', icon: 'stop' },
+      { id: 'next' },
+    ]);
+    expect(marks(el)).toEqual(['Previous', 'Play pause', 'Next']);
+  });
+
+  it('recognises the toggle however a plugin spells its id', async () => {
+    // Sonos calls it `toggle_play_pause` and Roku calls it `play_pause`; both
+    // declare the same icon, which is the half that generalises.
+    const el = await at([
+      { id: 'play', icon: 'play' },
+      { id: 'pause', icon: 'pause' },
+      { id: 'stop', icon: 'stop' },
+      { id: 'toggle_play_pause', icon: 'play-pause' },
+    ]);
+    expect(marks(el)).toEqual(['Toggle play pause']);
+  });
+
+  it('falls back to the separate keys for a player with no toggle', async () => {
+    // Not every transport has one, and the separate keys are then the control
+    // rather than clutter beside it.
+    const el = await at([
+      { id: 'play', icon: 'play' },
+      { id: 'pause', icon: 'pause' },
+      { id: 'stop', icon: 'stop' },
+    ]);
+    expect(marks(el)).toEqual(['Play', 'Pause', 'Stop']);
+  });
+});
+
+describe('the volume a player actually declares (§5.11)', () => {
+  const sonos = (over: Record<string, unknown> = {}): DeviceState => ({
+    device_id: 'sonos',
+    name: 'Office-1',
+    plugin_id: 'sonos',
+    available: true,
+    device_type: 'media_player',
+    attributes: { state: 'playing', volume: 6, muted: false },
+    last_seen: '2026-09-11T00:00:00Z',
+    schema: {
+      actions: [
+        { id: 'toggle_play_pause', label: 'Play / pause', icon: 'play-pause' },
+        {
+          id: 'set_volume',
+          label: 'Set volume',
+          writes: 'volume',
+          params: [{ name: 'volume', kind: 'int', min: 0, max: 100, unit: '%' }],
+        },
+        {
+          id: 'set_mute',
+          label: 'Mute',
+          writes: 'muted',
+          params: [{ name: 'muted', kind: 'bool' }],
+        },
+      ],
+    },
+    ...over,
+  });
+
+  const mount = async (d: DeviceState, onCommand?: (r: unknown) => void) => {
+    const el = document.createElement('hc-media-card');
+    el.device = d;
+    el.config = {};
+    if (onCommand !== undefined) el.onCommand = onCommand as never;
+    document.body.append(el);
+    await el.updateComplete;
+    return el;
+  };
+
+  it('gives a level to a player that declares one it can be set to', async () => {
+    // Every Sonos showed no volume control whatsoever, beside a `volume`
+    // reading the card was already printing.
+    const el = await mount(sonos());
+    const slider = el.shadowRoot?.querySelector('.level') as HTMLInputElement;
+    expect(slider, 'no level control').not.toBeNull();
+    expect(slider.min).toBe('0');
+    expect(slider.max).toBe('100');
+  });
+
+  it('reads the level off the attribute the action says it writes', async () => {
+    // `writes` is the device naming the reading this action moves, which is
+    // what keeps the control showing the volume rather than a number that
+    // happens to share a name with the parameter.
+    const el = await mount(sonos());
+    expect((el.shadowRoot?.querySelector('.level') as HTMLInputElement).value).toBe('6');
+  });
+
+  it('sends the parameter the action declared, under its own name', async () => {
+    const sent: unknown[] = [];
+    const el = await mount(sonos(), (r) => sent.push(r));
+    const slider = el.shadowRoot?.querySelector('.level') as HTMLInputElement;
+    slider.value = '22';
+    slider.dispatchEvent(new Event('change'));
+    expect(sent).toEqual([
+      { deviceId: 'sonos', action: { id: 'set_volume', params: { volume: 22 } } },
+    ]);
+  });
+
+  it('offers mute as the state it is, not as a key to press', async () => {
+    const sent: unknown[] = [];
+    const el = await mount(sonos(), (r) => sent.push(r));
+    const mute = [...(el.shadowRoot?.querySelectorAll('button') ?? [])].find(
+      (b) => b.getAttribute('aria-label') === 'Mute',
+    );
+    expect(mute, 'no mute control').not.toBeUndefined();
+    mute?.click();
+    expect(sent).toEqual([
+      { deviceId: 'sonos', action: { id: 'set_mute', params: { muted: true } } },
+    ]);
+  });
+
+  it('leaves a television its three keys and no level', async () => {
+    // A television's volume belongs to whatever is amplifying it, so a Roku
+    // declares no level at all. Neither shape is a degraded version of the
+    // other.
+    const el = await mount({
+      ...sonos(),
+      device_id: 'roku',
+      name: 'Office TV',
+      schema: {
+        actions: [
+          { id: 'play_pause', label: 'Play / pause', icon: 'play-pause' },
+          { id: 'volume_down', label: 'Down' },
+          { id: 'mute', label: 'Mute' },
+          { id: 'volume_up', label: 'Up' },
+        ],
+      },
+    });
+    expect(el.shadowRoot?.querySelector('.level')).toBeNull();
+    expect(
+      [...(el.shadowRoot?.querySelectorAll('button') ?? [])].map((b) =>
+        b.getAttribute('aria-label'),
+      ),
+    ).toEqual(['Play pause', 'Volume down', 'Mute', 'Volume up']);
+  });
+});

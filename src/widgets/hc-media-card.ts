@@ -30,17 +30,84 @@ import { humanise } from '../core/text.js';
 const TRANSPORT: { id: string; mark: string; primary?: boolean }[] = [
   { id: 'previous', mark: 'prev' },
   { id: 'play_pause', mark: 'play_pause', primary: true },
+  { id: 'toggle_play_pause', mark: 'play_pause', primary: true },
   { id: 'play', mark: 'play', primary: true },
   { id: 'pause', mark: 'pause' },
   { id: 'stop', mark: 'stop' },
   { id: 'next', mark: 'next' },
 ];
 
+/**
+ * The combined play/pause, which two plugins spell two different ways.
+ *
+ * Sonos declares `toggle_play_pause`; Roku declares `play_pause`. **Both
+ * declare the same icon for it**, which is the signal that actually
+ * generalises — a third plugin will invent a third id and is far less likely
+ * to invent a third name for a glyph everybody draws the same. So the id list
+ * above is the fast path and this is the answer: read what the device said.
+ */
+const TOGGLE_ICON = 'play-pause';
+
+/** Volume as three presses, for a device that has no level to set. */
 const VOLUME: { id: string; mark: string }[] = [
   { id: 'volume_down', mark: 'volume_down' },
   { id: 'mute', mark: 'mute' },
   { id: 'volume_up', mark: 'volume_up' },
 ];
+
+/**
+ * The volume control a device actually declares, which is one of two shapes.
+ *
+ * A Sonos declares `set_volume` with an `int` parameter from 0 to 100 and a
+ * `writes` naming the attribute it drives — everything a slider needs, stated
+ * by the device. A Roku declares `volume_up`, `volume_down` and `mute` and no
+ * level at all, because a television's volume belongs to whatever is amplifying
+ * it. Neither is a degraded version of the other, and the widget had only the
+ * second: every Sonos showed no volume control whatsoever, next to a `volume`
+ * attribute it was already reading and printing.
+ */
+interface Level {
+  action: string;
+  param: string;
+  attribute: string;
+  min: number;
+  max: number;
+}
+
+function levelOf(d: DeviceState): Level | undefined {
+  const set = (d.schema?.actions ?? []).find((a) => a.id === 'set_volume');
+  const param = (set?.params ?? []).find((p) => p.kind === 'int' || p.kind === 'float');
+  if (set === undefined || param === undefined) return undefined;
+  // `writes` is the device saying which of its own readings this action moves,
+  // and it is what keeps the slider showing the volume rather than a number
+  // that happens to share a name with the parameter.
+  const attribute = set.writes ?? param.name;
+  return {
+    action: set.id,
+    param: param.name,
+    attribute,
+    min: typeof param.min === 'number' ? param.min : 0,
+    max: typeof param.max === 'number' ? param.max : 100,
+  };
+}
+
+/** The mute a device declares as a state to set, rather than a key to press. */
+/** A reading as a number, whichever way the plugin publishes it. */
+function numberOf(value: unknown): number | undefined {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : undefined;
+  }
+  return undefined;
+}
+
+function muteOf(d: DeviceState): { action: string; param: string; attribute: string } | undefined {
+  const set = (d.schema?.actions ?? []).find((a) => a.id === 'set_mute');
+  const param = (set?.params ?? []).find((p) => p.kind === 'bool');
+  if (set === undefined || param === undefined) return undefined;
+  return { action: set.id, param: param.name, attribute: set.writes ?? param.name };
+}
 
 @customElement('hc-media-card')
 export class HcMediaCard extends LitElement {
@@ -275,6 +342,25 @@ export class HcMediaCard extends LitElement {
       font-size: var(--hc-text-caption-size, 11px);
       color: var(--hc-ink-muted, #8b95a4);
       font-variant-numeric: tabular-nums;
+      min-width: 2ch;
+      text-align: right;
+    }
+    /* The level a device declares it can be set to. Narrow on purpose: it
+       shares a row with the transport, and a volume that took half the card
+       would be a card about the volume. */
+    .level {
+      flex: 1 1 4rem;
+      min-width: 3rem;
+      max-width: 8rem;
+      height: var(--hc-density-min-tap, 44px);
+      margin: 0;
+      accent-color: var(--hc-accent-active, #ffb661);
+      background: none;
+      cursor: pointer;
+    }
+    .level:focus-visible {
+      outline: 2px solid var(--hc-stroke-focus, #7cc4ff);
+      outline-offset: 2px;
     }
   `;
 
@@ -330,14 +416,23 @@ export class HcMediaCard extends LitElement {
     const offer = <T extends { id: string }>(list: readonly T[]): T[] =>
       list.filter((b) => declared.has(b.id));
 
-    // A Roku declares `play_pause` *and* `play`, and two accented buttons is
-    // two answers to "which one do I press".
+    // **A combined play/pause is the transport, not one of four buttons.**
+    // Both plugins here declare `play`, `pause`, `stop` *and* a toggle, which
+    // is honest — a Roku really will accept all four — and rendering all four
+    // is a row of alternatives where a person wants one control. A toggle also
+    // says the thing the household had to point out twice: a Sonos has play
+    // and pause and no stop, and the way to stop offering stop is to stop
+    // drawing the separate keys once there is one key that does the job.
+    const toggle = (d.schema?.actions ?? []).find((a) => a.icon === TOGGLE_ICON)?.id;
+    const separate = new Set(['play', 'pause', 'stop']);
     let claimed = false;
-    const transport = offer(TRANSPORT).map((b) => {
-      if (b.primary !== true || claimed) return { ...b, primary: false };
-      claimed = true;
-      return b;
-    });
+    const transport = offer(TRANSPORT)
+      .filter((b) => toggle === undefined || !separate.has(b.id))
+      .map((b) => {
+        if (b.primary !== true || claimed) return { ...b, primary: false };
+        claimed = true;
+        return b;
+      });
 
     // **Status first, one control** (§7.2's curation, one step further). A
     // house page wants to know what is playing where, not to conduct it: seven
@@ -391,18 +486,7 @@ export class HcMediaCard extends LitElement {
           <span class="sub">${n.title === undefined ? nothing : summary(n)}</span>
         </span>
       </div>
-      ${this.renderProgress(n)}
-      ${
-        transport.length === 0 && offer(VOLUME).length === 0
-          ? nothing
-          : html`<div class="controls">
-              ${this.buttons(d, transport)}
-              <span class="buttons">
-                ${this.buttons(d, offer(VOLUME))}
-                ${n.volume === undefined ? nothing : html`<span class="volume">${Math.round(n.volume)}</span>`}
-              </span>
-            </div>`
-      }
+      ${this.renderProgress(n)} ${this.renderControls(d, n, transport, offer(VOLUME))}
     </div>`;
   }
 
@@ -416,6 +500,76 @@ export class HcMediaCard extends LitElement {
       <span>${clock(n.position ?? 0)}</span>
       <span class="track"><span class="fill" style="width:${done * 100}%"></span></span>
       <span>${clock(n.duration ?? 0)}</span>
+    </div>`;
+  }
+
+  /**
+   * The transport row and whatever the device offers for volume.
+   *
+   * Two shapes, and which one a device gets is its own answer: a level it can
+   * be set to, or three keys it can be pressed. Nothing here knows what a
+   * Sonos is (§5.11) — `set_volume` declares its range, its unit and the
+   * reading it moves, and that is the whole slider.
+   */
+  private renderControls(
+    d: DeviceState,
+    n: NowPlaying,
+    transport: { id: string; mark: string; primary?: boolean }[],
+    keys: { id: string; mark: string }[],
+  ) {
+    const level = levelOf(d);
+    const mute = muteOf(d);
+    if (transport.length === 0 && keys.length === 0 && level === undefined) return nothing;
+
+    const at = level === undefined ? undefined : numberOf(d.attributes[level.attribute]);
+    const muted = mute === undefined ? undefined : d.attributes[mute.attribute] === true;
+
+    return html`<div class="controls">
+      ${this.buttons(d, transport)}
+      <span class="buttons">
+        ${this.buttons(d, keys)}
+        ${
+          mute === undefined
+            ? nothing
+            : html`<button
+                part="action"
+                title=${muted === true ? 'Unmute' : 'Mute'}
+                aria-label=${muted === true ? 'Unmute' : 'Mute'}
+                ?data-primary=${muted === true}
+                @click=${() =>
+                  this.onCommand?.({
+                    deviceId: d.device_id,
+                    action: { id: mute.action, params: { [mute.param]: muted !== true } },
+                  })}
+              >
+                ${icon(muted === true ? 'mute' : 'volume_up')}
+              </button>`
+        }
+        ${
+          level === undefined
+            ? n.volume === undefined
+              ? nothing
+              : html`<span class="volume">${Math.round(n.volume)}</span>`
+            : html`<input
+                  class="level"
+                  part="controls"
+                  type="range"
+                  min=${level.min}
+                  max=${level.max}
+                  .value=${String(at ?? level.min)}
+                  aria-label="Volume"
+                  @change=${(e: Event) =>
+                    this.onCommand?.({
+                      deviceId: d.device_id,
+                      action: {
+                        id: level.action,
+                        params: { [level.param]: Number((e.target as HTMLInputElement).value) },
+                      },
+                    })}
+                />
+                <span class="volume">${at === undefined ? '' : Math.round(at)}</span>`
+        }
+      </span>
     </div>`;
   }
 

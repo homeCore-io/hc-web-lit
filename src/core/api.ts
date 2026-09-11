@@ -133,6 +133,15 @@ export interface DeviceAction {
   /** Natural-language template: "press button {button} on {device}". */
   sentence?: string;
   params?: ActionParam[];
+  /**
+   * Which of the device's own readings this action moves.
+   *
+   * `set_volume` on a Sonos declares `writes: "volume"`, which is what lets a
+   * control show the level it is about to change rather than a number that
+   * happens to share a name with the parameter. Served today and mirrored here
+   * late — a client that does not read it re-derives the link by guessing.
+   */
+  writes?: string;
 }
 
 export interface ActionParam {
@@ -141,6 +150,11 @@ export interface ActionParam {
   label?: string;
   required?: boolean;
   default?: unknown;
+  /** The range and unit a numeric parameter accepts, when it declares one. */
+  min?: number;
+  max?: number;
+  step?: number;
+  unit?: string;
   options?: { label: string; value: string }[];
   /** Populate the option list from a live attribute of the same device. */
   options_from?: {
