@@ -2284,8 +2284,11 @@ not a failure of it.
       be stored turned and would render square. Guides are the third magnet and
       beat the grid where they catch, because an edge that snapped to the
       8-grid first would land *next* to its neighbour rather than on it — both
-      edges and the middle, each axis decided on its own. Still open: lift
-      above the grid, groups and group rotation
+      edges and the middle, each axis decided on its own. **Lift is in too**,
+      as a `Layer` choice in the property panel: `gridItems` has always
+      resolved the engine's `floating` from `config.layer === "free"`, and
+      nothing could write it — so a lifted card could only be made by hand in
+      another editor. Still open: groups and group rotation
 - [x] Transform geometry — written against the placement model, gestures working
       from the placement alone so a sandboxed element is transformable without
       being inspectable (§14.2). `core/geometry.ts`, pure and tested as such.

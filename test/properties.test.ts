@@ -203,7 +203,9 @@ describe('a config with keys nothing describes', () => {
   it('edits a widget type core has never heard of', () => {
     // No spec at all: still fully editable, just unlabelled and unchecked.
     const props = propertiesFor(undefined, { caption: 'x', big: true });
-    expect(props.map((p) => p.name)).toEqual([...GESTURES, 'big', 'caption']);
+    // The gestures and the layer: the keys core describes for nobody and every
+    // client uses, offered wherever extra fields are legal.
+    expect(props.map((p) => p.name)).toEqual([...GESTURES, 'layer', 'big', 'caption']);
     expect(props.every((p) => p.problem === undefined)).toBe(true);
   });
 });
@@ -243,5 +245,39 @@ describe('with no vocabulary at all', () => {
     // has cached.
     expect(widgetSpec(undefined, 'heading')).toBeUndefined();
     expect(propertiesFor(undefined, { text: 'Hall' }).length).toBeGreaterThan(0);
+  });
+});
+
+describe('lifting an element above the grid (§14.1)', () => {
+  it('is offered as a choice, not typed as a word', () => {
+    // It showed up as an undescribed text field on documents that already had
+    // it, and not at all on documents that did not — so a lifted card could
+    // only be made by hand in another editor.
+    const layer = propertiesFor(undefined, {}).find((p) => p.name === 'layer');
+    expect(layer?.form).toBe('select');
+    expect(layer?.options).toEqual(['grid', 'free']);
+  });
+
+  it('shows what the document already says', () => {
+    const layer = propertiesFor(undefined, { layer: 'free' }).find((p) => p.name === 'layer');
+    expect(layer?.value).toBe('free');
+    // Once only: the undescribed sweep must not offer it a second time.
+    expect(
+      propertiesFor(undefined, { layer: 'free' }).filter((p) => p.name === 'layer'),
+    ).toHaveLength(1);
+  });
+
+  it('clears back to the grid rather than storing a word for the default', () => {
+    // `withValue` drops an optional field set to nothing, so a card put back
+    // on the grid carries no `layer` at all — which is what every document
+    // that never lifted anything already looks like.
+    const layer = propertiesFor(undefined, { layer: 'free' }).find((p) => p.name === 'layer');
+    expect(withValue({ layer: 'free' }, layer!, '')).toEqual({});
+  });
+
+  it('is not offered where core has closed the widget to extra fields', () => {
+    // §5.11's shape again: not offered rather than offered and refused.
+    const closed = { type: 'heading', config_required: false, extra_fields: false, fields: [] };
+    expect(propertiesFor(closed, {}).some((p) => p.name === 'layer')).toBe(false);
   });
 });

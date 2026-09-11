@@ -108,6 +108,24 @@ export interface Property {
  */
 export const GESTURES = ['on_tap', 'on_hold', 'on_double_tap'] as const;
 
+/**
+ * Lifting an element above the grid (§14.1).
+ *
+ * **A property of the element, not of the layout.** A card lifted on the wall
+ * is lifted on the phone too, because a design decision that changes when you
+ * rotate a tablet is not one anybody asked for — so it rides in the widget's
+ * own config, which is also why it needs no schema change (`gridItems`
+ * resolves the engine's `floating` from it).
+ *
+ * Offered here for the same reason the gestures are: every real document uses
+ * the key, core's vocabulary describes it for no widget, and a client that
+ * reads it and cannot write it is one where a lifted card can only be made by
+ * hand in another editor. Without this it showed up as an undescribed text
+ * field on documents that already had it, and not at all on documents that
+ * did not.
+ */
+export const LAYERS = ['grid', 'free'] as const;
+
 const isGesture = (name: string): boolean => (GESTURES as readonly string[]).includes(name);
 
 /**
@@ -296,8 +314,9 @@ export function propertiesFor(
     });
   }
 
-  // The two gestures core does not describe. Legal because `extra_fields` is,
-  // and offered only where that is true rather than assumed of every widget.
+  // The keys core does not describe but every client uses. Legal because
+  // `extra_fields` is, and offered only where that is true rather than assumed
+  // of every widget.
   if (spec === undefined || spec.extra_fields) {
     for (const name of GESTURES) {
       if (seen.has(name)) continue;
@@ -309,6 +328,18 @@ export function propertiesFor(
         value: cfg[name],
         required: false,
         allowEmpty: true,
+      });
+    }
+    if (!seen.has('layer')) {
+      seen.add('layer');
+      out.push({
+        name: 'layer',
+        label: 'Layer',
+        form: 'select',
+        value: cfg['layer'],
+        required: false,
+        allowEmpty: true,
+        options: LAYERS,
       });
     }
   }
