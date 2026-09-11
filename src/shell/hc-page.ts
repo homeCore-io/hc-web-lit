@@ -21,8 +21,16 @@ import type {
 } from '../core/dashboard.js';
 import { gridItems, layoutToDraw } from '../core/dashboard.js';
 import type { Box } from '../core/pages.js';
-import { Engine, type GridItem } from '../core/layout.js';
-import { FINE, HANDLES, angleFrom, resizedBy, type Handle } from '../core/geometry.js';
+import { Engine, type DashboardRect, type GridItem } from '../core/layout.js';
+import {
+  FINE,
+  HANDLES,
+  alignTo,
+  angleFrom,
+  resizedBy,
+  type Guide,
+  type Handle,
+} from '../core/geometry.js';
 import type { SelectionContext } from '../core/selection.js';
 import { isVisible } from '../core/visibility.js';
 import type { DeviceStore } from '../core/store.js';
@@ -270,6 +278,14 @@ export class HcPage extends LitElement {
     /* The rubber band, in screen space (§14.2). Fixed, and a direct child of
        the shadow root: a transformed ancestor becomes the containing block for
        a fixed element, and the composed frame is transformed. */
+    /* A guide, in the same untransformed overlay as the band (§14.2), so it
+       stays a hairline however the frame is scaled. */
+    .guide {
+      position: fixed;
+      z-index: 8;
+      background: var(--hc-accent-danger, #ff7b72);
+      pointer-events: none;
+    }
     .band {
       position: fixed;
       z-index: 7;
@@ -529,7 +545,9 @@ export class HcPage extends LitElement {
 
     // Once per frame, not once per card: a group move is one delta applied to
     // every member, and recomputing it inside the loop would re-normalise the
-    // whole page for each of them.
+    // whole page for each of them. `movesFrom` is also what works out the
+    // guides, so they are cleared first and refilled by the same pass.
+    this.guides = [];
     this.moving = this.dragging === undefined ? undefined : this.movesFrom(this.dragging);
 
     const scene =
@@ -538,7 +556,7 @@ export class HcPage extends LitElement {
         : this.grid(items, byId, layout.columns, layout.row_height, layout.gap);
 
     // The overlay is a sibling of the scene and never inside it (§14.2).
-    return html`${scene}${this.bandOverlay()}`;
+    return html`${scene}${this.bandOverlay()}${this.guideOverlay()}`;
   }
 
   /** Where each carried widget is going this frame. Derived, not state. */
@@ -668,6 +686,9 @@ export class HcPage extends LitElement {
       target.removeEventListener('pointerup', end);
       target.removeEventListener('pointercancel', end);
 
+      // The lines belong to the gesture, not to the arrangement — dropping
+      // `dragging` is what takes them away, because the next render recomputes
+      // them from it and finds nothing being dragged.
       const drag = this.dragging;
       this.dragging = undefined;
       if (drag === undefined) return;
@@ -718,7 +739,7 @@ export class HcPage extends LitElement {
    * thirds, and a drag that ignored that would move things half again as far
    * as the finger.
    */
-  private boxFrom(drag: Pick<Drag, 'id' | 'grip' | 'from' | 'dx' | 'dy' | 'angle'>): Box {
+  private boxFrom(drag: Pick<Drag, 'id' | 'grip' | 'from' | 'dx' | 'dy' | 'angle' | 'with'>): Box {
     const step = this.stepOf(drag.dx, drag.dy);
     // Nowhere to measure a cell against — a page that has not been laid out
     // yet. Moving by the raw pixels would send a widget three hundred cells to
@@ -726,11 +747,18 @@ export class HcPage extends LitElement {
     if (step === undefined) return drag.from;
 
     if (drag.grip === 'move') {
-      return {
+      const moved = {
         ...drag.from,
         x: Math.max(0, drag.from.x + step.dx),
         y: Math.max(0, drag.from.y + step.dy),
       };
+      // A packed card lands on cells and has nothing finer to line up with;
+      // a composed one gets §14.1's third magnet, the neighbours' own edges.
+      if (!this.free) return moved;
+
+      const lined = alignTo(moved, this.neighbours(drag.with));
+      this.guides = lined.guides;
+      return { ...lined.rect, x: Math.max(0, lined.rect.x), y: Math.max(0, lined.rect.y) };
     }
     if (drag.grip === 'turn') return drag.from;
 
@@ -741,6 +769,7 @@ export class HcPage extends LitElement {
       return resizedBy(drag.from, drag.grip, step, {
         step: FINE,
         angle: drag.angle,
+        near: this.neighbours(drag.with),
         ...this.leastFor(drag.id),
       });
     }
@@ -832,6 +861,36 @@ export class HcPage extends LitElement {
     for (const [id, box] of boxes) moves.set(id, { ...box, x: box.x + dx, y: box.y + dy });
     return moves;
   }
+
+  /**
+   * What a moving element can line up with: everything else on the page.
+   *
+   * **Everything it is not carrying.** A group dragged as one must not line up
+   * with its own members — they are moving by the same delta, so every edge
+   * would match from the first pixel and the group would be welded in place.
+   */
+  private neighbours(carrying: ReadonlySet<string>): DashboardRect[] {
+    const now = this.itemsNow();
+    if (now === undefined || now.layout.flow !== 'free') return [];
+    const rects: DashboardRect[] = [];
+    for (const item of now.items) {
+      if (carrying.has(item.id) || item.rect == null) continue;
+      rects.push(item.rect);
+    }
+    return rects;
+  }
+
+  /**
+   * The lines a gesture in progress is lining up with.
+   *
+   * Derived per frame like `moving`, not state: `boxFrom` fills it in as it
+   * works out where the drag lands, and it is reset at the top of every render
+   * so a gesture that has ended leaves nothing behind. Held as reactive state
+   * it was written *during* render — which Lit would schedule another update
+   * for — and cleared at the end of a drag by a line that then ran before
+   * `movesFrom` put it straight back.
+   */
+  private guides: readonly Guide[] = [];
 
   /** Where this widget should be drawn right now, drag included. */
   private previewOf(id: string, box: Box): Box {
@@ -1257,6 +1316,41 @@ export class HcPage extends LitElement {
    * ancestor becomes the containing block for `fixed` — so a band drawn inside
    * it would be scaled by the very thing it is measuring against.
    */
+  /**
+   * The lines a gesture is currently lining up with (§14.1, §14.2).
+   *
+   * **Computed in frame units and drawn in screen ones.** The claim a guide
+   * makes — this edge and that edge are the same — is only true in the
+   * coordinate space the two rectangles live in, so that is where `alignTo`
+   * works. But §14.2 puts guides in the untransformed overlay, and the reason
+   * shows up on a `contain` frame: a line inside a scaled frame is a scaled
+   * line, so the hairline that says "these are aligned" gets thinner as the
+   * page gets smaller and disappears exactly when the alignment is hardest to
+   * see by eye.
+   */
+  private guideOverlay() {
+    if (this.guides.length === 0 || !this.free) return nothing;
+    const frame = this.shadowRoot?.querySelector('.frame')?.getBoundingClientRect();
+    if (frame === undefined) return nothing;
+    const k = this.frameScale();
+
+    return html`${this.guides.map((g) => {
+      const from = frame.left + g.from * k;
+      const to = frame.left + g.to * k;
+      return g.axis === 'x'
+        ? html`<div
+            class="guide"
+            style="left:${frame.left + g.at * k}px;top:${frame.top + g.from * k}px;
+                   width:1px;height:${(g.to - g.from) * k}px"
+          ></div>`
+        : html`<div
+            class="guide"
+            style="left:${from}px;top:${frame.top + g.at * k}px;
+                   height:1px;width:${to - from}px"
+          ></div>`;
+    })}`;
+  }
+
   private bandOverlay() {
     const band = this.band;
     if (band === undefined) return nothing;

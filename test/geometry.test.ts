@@ -10,9 +10,12 @@ import {
   FINE,
   HANDLES,
   LEAST,
+  NEAR,
+  alignTo,
   angleFrom,
   cellsOf,
   intoFrame,
+  pullTo,
   resizedBy,
   snap,
 } from '../src/core/geometry.js';
@@ -233,5 +236,101 @@ describe('the whole-cell approximation core validates', () => {
       w: 1,
       h: 1,
     });
+  });
+});
+
+describe('guides — the third magnet (§14.1)', () => {
+  const neighbour = { x: 400, y: 50, w: 100, h: 300 };
+
+  it('pulls an edge onto a neighbour’s, which the grid alone cannot', () => {
+    // 397 is three from the neighbour's left at 400, and already on no grid
+    // the fine magnet would reach — it would land on 400 by luck here, so the
+    // neighbour is placed off-grid to make the two magnets distinguishable.
+    const off = { x: 401, y: 50, w: 100, h: 300 };
+    const got = alignTo({ x: 300, y: 500, w: 100, h: 40 }, [off]);
+    // Its right edge (400) caught the neighbour's left (401).
+    expect(got.rect.x).toBe(301);
+    expect(got.rect.y).toBe(500);
+  });
+
+  it('lines middles up as readily as edges', () => {
+    // "Centred on that" is as much an alignment as "flush with that", and a
+    // composition has more of the first than a grid ever did. The neighbour's
+    // middle is y=200; this card's is 198, two away, and its own edges are 7
+    // and 3 away from it — so the middles are what catch.
+    const got = alignTo({ x: 0, y: 193, w: 100, h: 10 }, [neighbour]);
+    expect(got.rect.y + got.rect.h / 2).toBe(200);
+    expect(got.rect.y).toBe(195);
+  });
+
+  it('decides each axis on its own', () => {
+    // Somebody arranging a row lines up with one neighbour's left edge and
+    // another's middle all the time.
+    const a = { x: 400, y: 0, w: 200, h: 10 };
+    const b = { x: 0, y: 700, w: 10, h: 200 };
+    const got = alignTo({ x: 403, y: 703, w: 50, h: 50 }, [a, b]);
+    expect(got.rect.x).toBe(400);
+    expect(got.rect.y).toBe(700);
+  });
+
+  it('leaves a card alone when nothing is near enough', () => {
+    const got = alignTo({ x: 50, y: 900, w: 40, h: 40 }, [neighbour]);
+    expect(got.rect).toEqual({ x: 50, y: 900, w: 40, h: 40 });
+    expect(got.guides).toEqual([]);
+  });
+
+  it('reports a line spanning both rectangles, so it says what lined up', () => {
+    // A line across the whole page says only that something happened.
+    const got = alignTo({ x: 397, y: 500, w: 100, h: 40 }, [neighbour]);
+    const guide = got.guides.find((g) => g.axis === 'x');
+    expect(guide).toBeDefined();
+    expect(guide?.at).toBe(400);
+    expect(guide?.from).toBe(50);
+    expect(guide?.to).toBe(540);
+  });
+
+  it('catches from closer than the grid step, or it would fire on every drag', () => {
+    expect(NEAR).toBeLessThan(FINE);
+  });
+});
+
+describe('a candidate beating the grid', () => {
+  it('prefers a nearby line to the nearest grid edge', () => {
+    // An edge that snapped to the 8-grid first would land *next* to its
+    // neighbour rather than on it, and those last pixels are exactly the ones
+    // a person cannot close by hand.
+    expect(pullTo(99, 8, [101])).toBe(101);
+  });
+
+  it('falls back to the grid when nothing is near', () => {
+    expect(pullTo(99, 8, [400])).toBe(96);
+    expect(pullTo(99, 8, [])).toBe(96);
+  });
+
+  it('takes the closest of several candidates', () => {
+    expect(pullTo(100, 8, [104, 102, 97])).toBe(102);
+  });
+});
+
+describe('resizing against the neighbours', () => {
+  const box2 = { x: 100, y: 100, w: 200, h: 100 };
+  const neighbour = { x: 401, y: 400, w: 100, h: 100 };
+
+  it('lands a pulled edge on a neighbour’s rather than on the grid', () => {
+    const got = resizedBy(box2, 'right', { dx: 99, dy: 0 }, { near: [neighbour] });
+    // The right edge went to 399, and the neighbour's left at 401 caught it.
+    expect(got.x + got.w).toBe(401);
+  });
+
+  it('still uses the fine grid where no neighbour is near', () => {
+    const got = resizedBy(box2, 'right', { dx: 3, dy: 0 }, { near: [neighbour] });
+    expect(got.x + got.w).toBe(304);
+  });
+
+  it('ignores guides for a rotated card, whose edges line up with nothing', () => {
+    // What would be matched is the unrotated footprint, which is nowhere a
+    // person can see.
+    const got = resizedBy(box2, 'right', { dx: 99, dy: 0 }, { near: [neighbour], angle: 45 });
+    expect(got.x + got.w).not.toBe(401);
   });
 });

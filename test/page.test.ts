@@ -18,6 +18,10 @@ async function mount(doc: DashboardDefinition, breakpoint = 'desktop'): Promise<
   return el;
 }
 
+/** A group-move spy that keeps its argument types, so the calls can be read. */
+type Moves = readonly { id: string; box: { x: number; y: number; w: number; h: number } }[];
+const groupSpy = () => vi.fn(async (_moves: Moves) => undefined);
+
 const base = (over: Partial<DashboardDefinition>): DashboardDefinition => ({
   id: 'd',
   name: 'D',
@@ -869,10 +873,6 @@ describe('picking more than one, and moving them together (§14.2)', () => {
     }
   };
 
-  /** A group-move spy that keeps its argument types, so the calls can be read. */
-  type Moves = readonly { id: string; box: { x: number; y: number; w: number; h: number } }[];
-  const groupSpy = () => vi.fn(async (_moves: Moves) => undefined);
-
   const pickedIn = (el: HcPage): string[] =>
     [...(el.shadowRoot?.querySelectorAll('[data-picked]') ?? [])].map(
       (e) => e.getAttribute('data-widget') ?? '',
@@ -1362,5 +1362,185 @@ describe('composing with eight handles and a turn (§14.1)', () => {
     );
     await el.updateComplete;
     expect(el.shadowRoot?.querySelector('[data-dragging]')).toBeNull();
+  });
+});
+
+describe('guides while composing (§14.1)', () => {
+  beforeEach(shimPointers);
+
+  /** Two cards: one to drag, one to line it up against. */
+  const page = (): DashboardDefinition =>
+    base({
+      widgets: [
+        { id: 'a', type: 'text', config: { text: 'a' } },
+        { id: 'b', type: 'text', config: { text: 'b' } },
+      ],
+      layouts: [
+        {
+          breakpoint: 'desktop',
+          columns: 12,
+          row_height: 120,
+          gap: 12,
+          flow: 'free',
+          frame: { width: 1240, height: 1248, fit: 'scroll' },
+          placements: [
+            { widget_id: 'a', x: 0, y: 0, w: 2, h: 1, rect: { x: 100, y: 500, w: 100, h: 40 } },
+            { widget_id: 'b', x: 0, y: 0, w: 2, h: 1, rect: { x: 401, y: 50, w: 100, h: 300 } },
+          ],
+        },
+      ],
+    });
+
+  const arranged = async (over: Partial<HcPage> = {}): Promise<HcPage> => {
+    const el = document.createElement('hc-page');
+    el.doc = page();
+    el.store = new DeviceStore();
+    el.onPlaceWidget = async () => undefined;
+    el.mode = 'edit';
+    Object.assign(el, over);
+    document.body.append(el);
+    await el.updateComplete;
+    return el;
+  };
+
+  const grabIn = (el: HcPage, id: string): Element => {
+    const card = [...(el.shadowRoot?.querySelectorAll('[data-widget]') ?? [])].find(
+      (e) => e.getAttribute('data-widget') === id,
+    );
+    return card?.querySelector('.grab') as Element;
+  };
+
+  const dragBy = (handle: Element, byX: number, byY: number): void => {
+    handle.dispatchEvent(
+      new FakePointerEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 0,
+        clientY: 0,
+        pointerId: 1,
+      }),
+    );
+    handle.dispatchEvent(
+      new FakePointerEvent('pointermove', { clientX: byX, clientY: byY, pointerId: 1 }),
+    );
+    handle.dispatchEvent(
+      new FakePointerEvent('pointerup', { clientX: byX, clientY: byY, pointerId: 1 }),
+    );
+  };
+
+  it('pulls a dragged card onto a neighbour’s edge', async () => {
+    // `a` starts at x=100 and is dragged 200 right, to 300 — three short of
+    // `b`'s off-grid left edge at 401 once its own right edge is counted. The
+    // fine grid alone would have left it at 300.
+    const placed = vi.fn(async () => undefined);
+    const el = await arranged({ onPlaceWidget: placed });
+    dragBy(grabIn(el, 'a'), 201, 0);
+    expect(placed).toHaveBeenCalledWith('a', { x: 301, y: 500, w: 100, h: 40 });
+  });
+
+  it('shows the line it lined up with, and takes it away afterwards', async () => {
+    const el = await arranged();
+    const handle = grabIn(el, 'a');
+    handle.dispatchEvent(
+      new FakePointerEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 0,
+        clientY: 0,
+        pointerId: 1,
+      }),
+    );
+    handle.dispatchEvent(
+      new FakePointerEvent('pointermove', { clientX: 201, clientY: 0, pointerId: 1 }),
+    );
+    await el.updateComplete;
+    expect(el.shadowRoot?.querySelectorAll('.guide').length).toBeGreaterThan(0);
+
+    handle.dispatchEvent(
+      new FakePointerEvent('pointerup', { clientX: 201, clientY: 0, pointerId: 1 }),
+    );
+    await el.updateComplete;
+    expect(el.shadowRoot?.querySelector('.guide')).toBeNull();
+  });
+
+  it('draws no guide when nothing is near enough', async () => {
+    const el = await arranged();
+    const handle = grabIn(el, 'a');
+    handle.dispatchEvent(
+      new FakePointerEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 0,
+        clientY: 0,
+        pointerId: 1,
+      }),
+    );
+    handle.dispatchEvent(
+      new FakePointerEvent('pointermove', { clientX: 600, clientY: 600, pointerId: 1 }),
+    );
+    await el.updateComplete;
+    expect(el.shadowRoot?.querySelector('.guide')).toBeNull();
+  });
+
+  it('does not line a card up with something it is carrying', async () => {
+    // A group dragged as one would otherwise match its own members on every
+    // edge from the first pixel, and be welded in place.
+    const many = vi.fn(async (_moves: Moves) => undefined);
+    const el = await arranged({ onPlaceWidgets: many });
+
+    // Pick both, then drag: the pull that would have happened is absent.
+    const surface = el.shadowRoot?.querySelector('.frame') as Element;
+    surface.dispatchEvent(
+      new FakePointerEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 0,
+        clientY: 0,
+        pointerId: 1,
+      }),
+    );
+    surface.dispatchEvent(
+      new FakePointerEvent('pointermove', { clientX: 2000, clientY: 2000, pointerId: 1 }),
+    );
+    surface.dispatchEvent(
+      new FakePointerEvent('pointerup', { clientX: 2000, clientY: 2000, pointerId: 1 }),
+    );
+    await el.updateComplete;
+
+    dragBy(grabIn(el, 'a'), 201, 0);
+    expect(many).toHaveBeenCalledTimes(1);
+    const moves = many.mock.calls[0]?.[0] ?? [];
+    // Moved by the raw 201, not pulled to 301 by the card travelling with it.
+    expect(moves.find((m) => m.id === 'a')?.box.x).toBe(301);
+  });
+
+  it('leaves a packed page to the cells, which have nothing finer to catch', async () => {
+    const placed = vi.fn(async () => undefined);
+    const el = document.createElement('hc-page');
+    el.doc = base({
+      widgets: [{ id: 't', type: 'text', config: { text: 'Hall' } }],
+      layouts: [
+        {
+          breakpoint: 'desktop',
+          columns: 12,
+          row_height: 100,
+          gap: 0,
+          placements: [{ widget_id: 't', x: 0, y: 0, w: 6, h: 2 }],
+        },
+      ],
+    });
+    el.store = new DeviceStore();
+    el.onPlaceWidget = placed;
+    el.mode = 'edit';
+    document.body.append(el);
+    await el.updateComplete;
+    Object.defineProperty(el.shadowRoot?.querySelector('.grid') as Element, 'clientWidth', {
+      value: 1200,
+      configurable: true,
+    });
+
+    dragBy(grabIn(el, 't'), 250, 0);
+    expect(placed).toHaveBeenCalledWith('t', { x: 3, y: 0, w: 6, h: 2 });
+    expect(el.shadowRoot?.querySelector('.guide')).toBeNull();
   });
 });

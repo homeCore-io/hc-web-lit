@@ -2279,10 +2279,13 @@ not a failure of it.
 - [ ] **Grid mode:** cell placement, the coarse magnet, one grip, no rotation
 - [ ] **Free mode:** `frame` + `rect` + `angle`, eight handles, the fine magnet,
       guides, lift above the grid, groups and group rotation. **`rect`, `angle`,
-      the eight handles and the fine magnet are in.** `angle` was declared in
-      the document and drawn by nobody until now, so a card could be stored
-      turned and would render square. Still open: guides, lift, groups and
-      group rotation
+      the eight handles, the fine magnet and the guides are in.** `angle` was
+      declared in the document and drawn by nobody until now, so a card could
+      be stored turned and would render square. Guides are the third magnet and
+      beat the grid where they catch, because an edge that snapped to the
+      8-grid first would land *next* to its neighbour rather than on it — both
+      edges and the middle, each axis decided on its own. Still open: lift
+      above the grid, groups and group rotation
 - [x] Transform geometry — written against the placement model, gestures working
       from the placement alone so a sandboxed element is transformable without
       being inspectable (§14.2). `core/geometry.ts`, pure and tested as such.

@@ -67,6 +67,124 @@ export function snap(value: number, step: number): number {
 }
 
 /**
+ * How close an edge has to come before a guide catches it, in frame units.
+ *
+ * Smaller than `FINE`, and that is the whole of the relationship between the
+ * two magnets: a guide has to be *reachable* past the grid the pointer is
+ * already being pulled to, and one that caught from further away than the grid
+ * step would fire on almost every drag.
+ */
+export const NEAR = 6;
+
+/**
+ * A line something lined up with, and the span worth drawing it over.
+ *
+ * The span reaches from the near edge of one rectangle to the far edge of the
+ * other, because a guide's job is to say *what* you lined up with. A line
+ * across the whole page says only that something happened.
+ */
+export interface Guide {
+  axis: 'x' | 'y';
+  at: number;
+  from: number;
+  to: number;
+}
+
+/**
+ * A value pulled to the nearest candidate, or failing that to the grid.
+ *
+ * **A candidate beats the grid**, which is what makes guides usable at all: an
+ * edge that snapped to the 8-grid first would land next to its neighbour
+ * rather than on it, and the last few pixels are exactly the ones a person
+ * cannot close by hand.
+ */
+export function pullTo(value: number, step: number, candidates: readonly number[]): number {
+  let best: number | undefined;
+  let closest = Infinity;
+  // **Strictly closer wins, so the first of an equal pair does.** Two lines the
+  // same distance away is ordinary — a card centred between two others has it
+  // on both axes — and "whichever was considered last" is an answer that moves
+  // when an unrelated widget is added to the page.
+  for (const candidate of candidates) {
+    const away = Math.abs(candidate - value);
+    if (away < closest) {
+      closest = away;
+      best = candidate;
+    }
+  }
+  return closest <= NEAR && best !== undefined ? best : snap(value, step);
+}
+
+/** The three lines a rectangle offers on one axis: both edges and the middle. */
+function linesOf(r: DashboardRect, axis: 'x' | 'y'): number[] {
+  return axis === 'x' ? [r.x, r.x + r.w / 2, r.x + r.w] : [r.y, r.y + r.h / 2, r.y + r.h];
+}
+
+/**
+ * Where a rectangle wants to sit, given what is already on the page.
+ *
+ * §14.1's third magnet: free mode snaps to the fine grid, to guides, and to
+ * other elements' edges — and this is the last two, which are the same thing.
+ * Each axis is decided on its own, so a card can line up with one neighbour's
+ * left edge and another's middle, which is what somebody arranging a row of
+ * things is usually trying to do.
+ *
+ * **Both edges and the middle**, because "centred on that" is as much an
+ * alignment as "flush with that", and a composition has more of the first than
+ * a grid ever did.
+ *
+ * The result is a whole rectangle rather than a delta, so a caller cannot
+ * apply it to the wrong one.
+ */
+export function alignTo(
+  moving: DashboardRect,
+  others: readonly DashboardRect[],
+): { rect: DashboardRect; guides: Guide[] } {
+  const guides: Guide[] = [];
+  let { x, y } = moving;
+
+  for (const axis of ['x', 'y'] as const) {
+    const mine = linesOf(moving, axis);
+    let best: { shift: number; at: number; other: DashboardRect } | undefined;
+    let closest = Infinity;
+
+    // Strictly closer wins, so the first of an equal pair does — see `pullTo`.
+    for (const other of others) {
+      for (const line of linesOf(other, axis)) {
+        for (const edge of mine) {
+          const away = Math.abs(line - edge);
+          if (away < closest) {
+            closest = away;
+            best = { shift: line - edge, at: line, other };
+          }
+        }
+      }
+    }
+    if (best === undefined || closest > NEAR) continue;
+
+    if (axis === 'x') x += best.shift;
+    else y += best.shift;
+
+    // The span covers both rectangles on the *other* axis, so the line drawn
+    // reaches from one to the other and says which two lined up.
+    const across = axis === 'x' ? ('y' as const) : ('x' as const);
+    const mineSpan = [moving[across], moving[across] + (across === 'y' ? moving.h : moving.w)];
+    const theirs = [
+      best.other[across],
+      best.other[across] + (across === 'y' ? best.other.h : best.other.w),
+    ];
+    guides.push({
+      axis,
+      at: best.at,
+      from: Math.min(...mineSpan, ...theirs),
+      to: Math.max(...mineSpan, ...theirs),
+    });
+  }
+
+  return { rect: { ...moving, x, y }, guides };
+}
+
+/**
  * A pointer delta turned into the element's own frame.
  *
  * **This is what makes resize-while-rotated work**, and it is the piece
@@ -94,6 +212,15 @@ export interface ResizeOptions {
   leastH?: number;
   /** Degrees clockwise the element is drawn at. */
   angle?: number;
+  /**
+   * What else is on the page, so a pulled edge can land on a neighbour's.
+   *
+   * The same magnet a move gets (`alignTo`), applied to the one edge under the
+   * pointer: sizing a card flush with the one beside it is the commonest thing
+   * anybody does in a composition, and the fine grid alone cannot close the
+   * last few pixels when the neighbour is off-grid.
+   */
+  near?: readonly DashboardRect[];
 }
 
 /**
@@ -116,30 +243,37 @@ export function resizedBy(
   by: { dx: number; dy: number },
   options: ResizeOptions = {},
 ): DashboardRect {
-  const { step = FINE, leastW = LEAST, leastH = LEAST, angle = 0 } = options;
+  const { step = FINE, leastW = LEAST, leastH = LEAST, angle = 0, near = [] } = options;
   const moves = EDGES[handle];
   const d = intoFrame(by.dx, by.dy, angle);
+
+  // A rotated card's edges do not line up with anything axis-aligned, so the
+  // guides are left out of that case rather than made to mean something they
+  // do not: what would be matched is the unrotated footprint, which is nowhere
+  // a person can see.
+  const alongX = angle === 0 ? near.flatMap((r) => linesOf(r, 'x')) : [];
+  const alongY = angle === 0 ? near.flatMap((r) => linesOf(r, 'y')) : [];
 
   const right = from.x + from.w;
   const bottom = from.y + from.h;
   let { x, y, w, h } = from;
 
   if (moves.left === true) {
-    const edge = snap(from.x + d.dx, step);
+    const edge = pullTo(from.x + d.dx, step, alongX);
     // Never past the edge being held still, or the card turns inside out.
     x = Math.min(edge, right - leastW);
     w = right - x;
   } else if (moves.right === true) {
-    const edge = snap(right + d.dx, step);
+    const edge = pullTo(right + d.dx, step, alongX);
     w = Math.max(leastW, edge - from.x);
   }
 
   if (moves.top === true) {
-    const edge = snap(from.y + d.dy, step);
+    const edge = pullTo(from.y + d.dy, step, alongY);
     y = Math.min(edge, bottom - leastH);
     h = bottom - y;
   } else if (moves.bottom === true) {
-    const edge = snap(bottom + d.dy, step);
+    const edge = pullTo(bottom + d.dy, step, alongY);
     h = Math.max(leastH, edge - from.y);
   }
 
