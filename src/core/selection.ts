@@ -67,12 +67,20 @@ const FACETS: Record<string, (d: DeviceState) => boolean> = {
   leaks: (d) => hint(d) === 'water_sensor' || hint(d) === 'rain_sensor',
   motion: (d) => hint(d) === 'motion_sensor' || hint(d) === 'occupancy_sensor',
   timers: (d) => hint(d) === 'timer',
-  // **The system's own hardware.** A Pico transmits and a VCRX is a relay
-  // panel: they are how the house is wired, not things a person came to a room
-  // page to look at. They stay on the page, gathered at the foot of it, rather
-  // than breaking a sensor list in half — a room that shows nothing of its own
-  // wiring is a room you cannot debug.
-  controls: (d) => ['keypad', 'pico_remote', 'vcrx', 'remote'].includes(hint(d) ?? ''),
+  // **Things with buttons on them that send.** A wall keypad, a Pico, a VCRX
+  // and whatever the next bridge calls its remote: hardware a person presses,
+  // which is not the same as hardware a page can press back — a keypad
+  // declares `press_button` and a Pico declares nothing, and both belong here
+  // (§1.1). Gathered at the foot of a room page rather than breaking a sensor
+  // list in half.
+  //
+  // **Named for what it holds and not for what it is about.** This was
+  // `controls`, under a heading about how a room is wired, and both were the
+  // same mistake pointed two ways: a switch is a control too, and a keypad is
+  // not wiring. A facet name is a convention this client owns and nothing
+  // defines (§5.3), which is a reason to be careful with one rather than
+  // casual.
+  keypads: (d) => ['keypad', 'pico_remote', 'vcrx', 'remote'].includes(hint(d) ?? ''),
   doors_windows: (d) =>
     ['door', 'window', 'garage', 'gate'].includes(d.ui_hint ?? '') ||
     d.device_type === 'contact_sensor',

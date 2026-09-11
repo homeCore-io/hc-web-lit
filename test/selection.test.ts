@@ -210,11 +210,11 @@ describe('the facets a room page sorts its sensors by', () => {
     expect(chosen('timers')).toEqual(['close']);
   });
 
-  it('gathers the house’s own wiring, and only that', () => {
-    // A Pico transmits and a VCRX is a relay panel. They stay on the page —
-    // a room that shows nothing of its own wiring is a room you cannot debug
-    // — but at the foot of it rather than through the middle of a sensor list.
-    expect(chosen('controls').sort()).toEqual(['pico', 'vcrx']);
+  it('gathers the things with buttons on them', () => {
+    // A wall keypad, a Pico, a VCRX. They stay on the page — a room that shows
+    // none of what presses it is a room you cannot debug — but at the foot of
+    // it rather than through the middle of a sensor list.
+    expect(chosen('keypads').sort()).toEqual(['pico', 'vcrx']);
   });
 
   it('leaves the catch-all catching what nothing else claimed', () => {
@@ -225,7 +225,7 @@ describe('the facets a room page sorts its sensors by', () => {
       {
         selection_mode: 'area',
         area_name: 'garage',
-        except: ['doors_windows', 'locks', 'motion', 'leaks', 'climate', 'timers', 'controls'],
+        except: ['doors_windows', 'locks', 'motion', 'leaks', 'climate', 'timers', 'keypads'],
       },
       garage,
     ).map((x) => x.device_id);
@@ -233,7 +233,7 @@ describe('the facets a room page sorts its sensors by', () => {
   });
 
   it('is a name the house knows, so a document can reference it', () => {
-    for (const name of ['leaks', 'motion', 'timers', 'controls']) {
+    for (const name of ['leaks', 'motion', 'timers', 'keypads']) {
       expect(knownFacets(), name).toContain(name);
     }
   });
