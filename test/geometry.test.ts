@@ -13,11 +13,13 @@ import {
   NEAR,
   alignTo,
   angleFrom,
+  boundsOf,
   cellsOf,
   intoFrame,
   pullTo,
   resizedBy,
   snap,
+  turnedAbout,
 } from '../src/core/geometry.js';
 
 const box = { x: 100, y: 100, w: 200, h: 100 };
@@ -332,5 +334,63 @@ describe('resizing against the neighbours', () => {
     // person can see.
     const got = resizedBy(box2, 'right', { dx: 99, dy: 0 }, { near: [neighbour], angle: 45 });
     expect(got.x + got.w).not.toBe(401);
+  });
+});
+
+describe('turning a group about its own centre (§14.1)', () => {
+  const a = { x: 0, y: 0, w: 100, h: 100 };
+  const b = { x: 200, y: 0, w: 100, h: 100 };
+
+  it('finds the box the cluster sits in', () => {
+    expect(boundsOf([a, b])).toEqual({ x: 0, y: 0, w: 300, h: 100 });
+    expect(boundsOf([])).toBeUndefined();
+  });
+
+  it('orbits each card as well as turning it', () => {
+    // The thing an element's own angle cannot express: a rotation that only
+    // added to each angle would spin the cards in place and leave five of them
+    // pointing somewhere new, still in a straight row.
+    const about = { x: 150, y: 50 };
+    const got = turnedAbout(a, 0, 90, about);
+    // `a`'s centre was 100 left of the pivot; a quarter turn clockwise puts it
+    // 100 above it.
+    expect(got.rect.x + got.rect.w / 2).toBeCloseTo(150, 6);
+    expect(got.rect.y + got.rect.h / 2).toBeCloseTo(-50, 6);
+    expect(got.angle).toBeCloseTo(90, 6);
+  });
+
+  it('keeps the cluster rigid, so the gap between members survives', () => {
+    const about = { x: 150, y: 50 };
+    const turnedA = turnedAbout(a, 0, 37, about);
+    const turnedB = turnedAbout(b, 0, 37, about);
+    const apart = (p: typeof a, q: typeof a): number =>
+      Math.hypot(p.x + p.w / 2 - (q.x + q.w / 2), p.y + p.h / 2 - (q.y + q.h / 2));
+    expect(apart(turnedA.rect, turnedB.rect)).toBeCloseTo(apart(a, b), 6);
+  });
+
+  it('adds to whatever angle a card was already at', () => {
+    // Which is what keeps a group of already-rotated cards rigid as it turns.
+    expect(turnedAbout(a, 30, 45, { x: 150, y: 50 }).angle).toBeCloseTo(75, 6);
+  });
+
+  it('keeps one spelling per angle', () => {
+    const got = turnedAbout(a, 350, 30, { x: 150, y: 50 });
+    expect(got.angle).toBeCloseTo(20, 6);
+    expect(got.angle).toBeGreaterThanOrEqual(0);
+    expect(got.angle).toBeLessThan(360);
+  });
+
+  it('leaves the size alone, because rect is the unrotated footprint', () => {
+    const got = turnedAbout(a, 0, 41, { x: 150, y: 50 });
+    expect(got.rect.w).toBe(a.w);
+    expect(got.rect.h).toBe(a.h);
+  });
+
+  it('is the ordinary rotation when a card is turned about itself', () => {
+    const centre = { x: a.x + a.w / 2, y: a.y + a.h / 2 };
+    const got = turnedAbout(a, 0, 90, centre);
+    expect(got.rect.x).toBeCloseTo(a.x, 6);
+    expect(got.rect.y).toBeCloseTo(a.y, 6);
+    expect(got.angle).toBeCloseTo(90, 6);
   });
 });

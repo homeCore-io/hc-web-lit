@@ -310,6 +310,34 @@ export function placeWidgets(
   breakpoint: DashboardBreakpoint,
   moves: ReadonlyMap<string, Box>,
 ): DashboardDefinition | undefined {
+  const changes = new Map<string, Change>();
+  for (const [id, box] of moves) changes.set(id, { box });
+  return transformWidgets(doc, breakpoint, changes);
+}
+
+/** A rectangle, an angle, or both — whatever one gesture actually changed. */
+export interface Change {
+  box?: Box;
+  angle?: number;
+}
+
+/**
+ * Move, resize and turn several widgets, in the layout that is on screen.
+ *
+ * **One function because a group rotation is one gesture that changes both.**
+ * Turning a cluster orbits every member *and* turns it, so a rect write and an
+ * angle write that were separate would be two documents and two undo steps for
+ * a thing somebody did once — with the half-turned arrangement in between as a
+ * state they could land on, which never existed.
+ *
+ * Everything `placeWidget` says about which layout an edit lands in applies
+ * unchanged.
+ */
+export function transformWidgets(
+  doc: DashboardDefinition,
+  breakpoint: DashboardBreakpoint,
+  changes: ReadonlyMap<string, Change>,
+): DashboardDefinition | undefined {
   const drawn = layoutToDraw(doc, breakpoint);
   if (drawn === undefined) return undefined;
 
@@ -318,11 +346,21 @@ export function placeWidgets(
   if (layout === undefined) return undefined;
 
   const placements = layout.placements ?? [];
-  if (!placements.some((p) => moves.has(p.widget_id))) return undefined;
+  if (!placements.some((p) => changes.has(p.widget_id))) return undefined;
 
   const move = (p: DashboardWidgetPlacement): DashboardWidgetPlacement => {
-    const box = moves.get(p.widget_id);
-    if (box === undefined) return p;
+    const change = changes.get(p.widget_id);
+    if (change === undefined) return p;
+
+    // An angle is a composed idea only: a packed card's position is cells, an
+    // angle is not expressible in them, and grid mode has no rotation (§14.1).
+    const turned =
+      layout.flow === 'free' && change.angle !== undefined
+        ? { angle: ((change.angle % 360) + 360) % 360 || null }
+        : {};
+
+    const box = change.box;
+    if (box === undefined) return { ...p, ...turned };
     if (layout.flow !== 'free') return { ...p, x: box.x, y: box.y, w: box.w, h: box.h };
 
     // **The cells follow the rectangle.** Core validates the cells and knows
@@ -334,9 +372,10 @@ export function placeWidgets(
     // page that is approximately right rather than blank.
     const rect = { ...(p.rect ?? {}), ...box };
     const frame = layout.frame;
-    if (frame == null) return { ...p, rect };
+    if (frame == null) return { ...p, ...turned, rect };
     return {
       ...p,
+      ...turned,
       rect,
       ...cellsOf(rect, {
         width: frame.width,

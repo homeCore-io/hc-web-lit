@@ -2276,8 +2276,12 @@ not a failure of it.
       a `fixed` child. What is left is `{ tx, ty, k }` itself — pan and zoom,
       which a width-fitted grid page has no use for and which belongs with the
       free-mode designer below
-- [ ] **Grid mode:** cell placement, the coarse magnet, one grip, no rotation
-- [ ] **Free mode:** `frame` + `rect` + `angle`, eight handles, the fine magnet,
+- [x] **Grid mode:** cell placement, the coarse magnet, one grip, no rotation.
+      The magnet is not a separate rule here — a cell *is* the unit, so
+      rounding the pixels to cells is the coarse magnet — and the single grip
+      is the whole of what a packed card needs, because it is anchored
+      top-left and only its extent is in question
+- [x] **Free mode:** `frame` + `rect` + `angle`, eight handles, the fine magnet,
       guides, lift above the grid, groups and group rotation. **`rect`, `angle`,
       the eight handles, the fine magnet and the guides are in.** `angle` was
       declared in the document and drawn by nobody until now, so a card could
@@ -2292,9 +2296,12 @@ not a failure of it.
       (`core/groups.ts`, ported from the Dart's `groups.dart`): the path *is*
       the identity, so nesting is free, orphans cannot happen, and grouping
       then ungrouping leaves the document byte-identical. One press holds the
-      cluster, a second press goes in, Escape steps out. Still open: group
-      rotation, which turns about the *group's* centre and is the one thing an
-      element's own `angle` cannot express
+      cluster, a second press goes in, Escape steps out. **Group rotation is
+      in**: holding more than one draws a frame round them with a turn handle
+      of its own, and turning it orbits every member about the frame's centre
+      as well as turning each one — which is the thing an element's own `angle`
+      cannot express, and why rectangles and angles are written together as a
+      single edit
 - [x] Transform geometry — written against the placement model, gestures working
       from the placement alone so a sandboxed element is transformable without
       being inspectable (§14.2). `core/geometry.ts`, pure and tested as such.

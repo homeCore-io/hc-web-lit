@@ -363,6 +363,62 @@ export function angleFrom(
 }
 
 /**
+ * The box a set of rectangles sits in.
+ *
+ * The group frame: what a selection of several looks like as one thing, and
+ * what a group rotation turns about. Absent for an empty set, because a box
+ * around nothing has no honest position.
+ */
+export function boundsOf(rects: readonly DashboardRect[]): DashboardRect | undefined {
+  if (rects.length === 0) return undefined;
+  let left = Infinity;
+  let top = Infinity;
+  let right = -Infinity;
+  let bottom = -Infinity;
+  for (const r of rects) {
+    left = Math.min(left, r.x);
+    top = Math.min(top, r.y);
+    right = Math.max(right, r.x + r.w);
+    bottom = Math.max(bottom, r.y + r.h);
+  }
+  return { x: left, y: top, w: right - left, h: bottom - top };
+}
+
+/**
+ * One element of a group, turned about the group's centre.
+ *
+ * **This is the thing an element's own angle cannot express** (§14.2). Turning
+ * a cluster is not turning each card where it stands: every card also *orbits*
+ * the point the group turns about, and a rotation that only added to each
+ * angle would spin the cards in place and leave the arrangement exactly where
+ * it was — five cards each pointing somewhere new, still in a straight row.
+ *
+ * So both halves move. The centre orbits, and the card turns by the same
+ * amount on top of whatever it was already at, which is what keeps a group of
+ * already-rotated cards rigid as it turns.
+ *
+ * The rectangle stays axis-aligned because that is what a rectangle plus an
+ * angle means here: `rect` is the unrotated footprint and `angle` says how it
+ * is drawn (§14.3).
+ */
+export function turnedAbout(
+  rect: DashboardRect,
+  angle: number,
+  by: number,
+  about: { x: number; y: number },
+): { rect: DashboardRect; angle: number } {
+  const centre = centreOf(rect);
+  const orbit = rotate({ x: centre.x - about.x, y: centre.y - about.y }, by);
+  const moved = { x: about.x + orbit.x, y: about.y + orbit.y };
+
+  return {
+    rect: { x: moved.x - rect.w / 2, y: moved.y - rect.h / 2, w: rect.w, h: rect.h },
+    // One spelling per angle, the same normalisation `angleFrom` applies.
+    angle: (((angle + by) % 360) + 360) % 360,
+  };
+}
+
+/**
  * The whole-cell approximation of a rectangle — **guaranteed legal for core**.
  *
  * Core rejects `x < 0`, `y < 0`, `w <= 0`, `h <= 0` and `x + w > columns`, and

@@ -22,6 +22,7 @@ import {
   placeWidget,
   placeWidgets,
   regroupWidgets,
+  transformWidgets,
   removeWidget,
   turnWidget,
   renamed,
@@ -661,6 +662,28 @@ export class HcApp extends LitElement {
 
     this.writePages(this.replacing(next), next.id);
     this.dropTool();
+    return Promise.resolve();
+  };
+
+  /**
+   * Turn a whole cluster on the page being shown (§14.1).
+   *
+   * Rectangles and angles in one document, because turning a group is one
+   * gesture that changes both: every member orbits the group's centre as well
+   * as turning on its own. Two writes would be two undo steps for one thing
+   * somebody did, with a half-turned arrangement in between that never existed.
+   */
+  private readonly turnWidgetsOnPage = async (
+    turns: readonly { id: string; box: Box; angle: number }[],
+  ): Promise<void> => {
+    const doc = this.current;
+    if (doc === undefined) throw new Error('No page to turn on.');
+
+    const changes = new Map(turns.map((t) => [t.id, { box: t.box, angle: t.angle }]));
+    const next = transformWidgets(doc, this.breakpoint, changes);
+    if (next === undefined) throw new Error('This layout has none of those widgets.');
+
+    this.writePages(this.replacing(next), next.id);
     return Promise.resolve();
   };
 
@@ -1812,6 +1835,7 @@ export class HcApp extends LitElement {
         .onPlaceWidget=${this.mayWriteDashboards() ? this.placeWidgetOnPage : undefined}
         .onPlaceWidgets=${this.mayWriteDashboards() ? this.placeWidgetsOnPage : undefined}
         .onTurnWidget=${this.mayWriteDashboards() ? this.turnWidgetOnPage : undefined}
+        .onTurnWidgets=${this.mayWriteDashboards() ? this.turnWidgetsOnPage : undefined}
         .onDrawWidget=${this.mayWriteDashboards() ? this.drawWidgetOnPage : undefined}
         .tool=${this.tool}
         mode=${this.editing ? 'edit' : 'view'}

@@ -1719,3 +1719,200 @@ describe('holding a cluster as one (§14.1)', () => {
     ]);
   });
 });
+
+describe('turning a cluster about its own centre (§14.1)', () => {
+  beforeEach(shimPointers);
+
+  /** Two cards in a row on a composed page, 300 units wide together. */
+  const page = (): DashboardDefinition =>
+    base({
+      widgets: [
+        { id: 'a', type: 'text', config: { text: 'a' } },
+        { id: 'b', type: 'text', config: { text: 'b' } },
+      ],
+      layouts: [
+        {
+          breakpoint: 'desktop',
+          columns: 12,
+          row_height: 120,
+          gap: 12,
+          flow: 'free',
+          frame: { width: 1240, height: 1248, fit: 'scroll' },
+          placements: [
+            { widget_id: 'a', x: 0, y: 0, w: 1, h: 1, rect: { x: 0, y: 0, w: 100, h: 100 } },
+            { widget_id: 'b', x: 0, y: 0, w: 1, h: 1, rect: { x: 200, y: 0, w: 100, h: 100 } },
+          ],
+        },
+      ],
+    });
+
+  type Turns = readonly {
+    id: string;
+    box: { x: number; y: number; w: number; h: number };
+    angle: number;
+  }[];
+  const turnSpy = () => vi.fn(async (_turns: Turns) => undefined);
+
+  const arranged = async (over: Partial<HcPage> = {}): Promise<HcPage> => {
+    const el = document.createElement('hc-page');
+    el.doc = page();
+    el.store = new DeviceStore();
+    el.onPlaceWidget = async () => undefined;
+    el.onTurnWidgets = turnSpy();
+    el.mode = 'edit';
+    Object.assign(el, over);
+    document.body.append(el);
+    await el.updateComplete;
+    return el;
+  };
+
+  /** Hold both, the way a sweep or a shift-press would. */
+  const holdBoth = async (el: HcPage): Promise<void> => {
+    const on = el.shadowRoot?.querySelector('.frame') as Element;
+    for (const [x, init] of [
+      [50, {}],
+      [250, { shiftKey: true }],
+    ] as [number, MouseEventInit][]) {
+      for (const cell of el.shadowRoot?.querySelectorAll('[data-widget]') ?? []) {
+        const id = cell.getAttribute('data-widget');
+        const left = id === 'a' ? 0 : 200;
+        cell.getBoundingClientRect = () =>
+          ({ left, right: left + 100, top: 0, bottom: 100 }) as DOMRect;
+      }
+      for (const type of ['pointerdown', 'pointerup']) {
+        on.dispatchEvent(
+          new FakePointerEvent(type, {
+            bubbles: true,
+            cancelable: true,
+            clientX: x,
+            clientY: 50,
+            pointerId: 1,
+            ...init,
+          }),
+        );
+      }
+      await el.updateComplete;
+    }
+  };
+
+  it('draws one frame round the cluster, with one turn handle on it', async () => {
+    const el = await arranged();
+    await holdBoth(el);
+    const frame = el.shadowRoot?.querySelector('.cluster') as HTMLElement;
+    expect(frame, 'no cluster frame').not.toBeNull();
+    expect(frame.style.left).toBe('0px');
+    expect(frame.style.width).toBe('300px');
+    expect(frame.querySelector('.turn')).not.toBeNull();
+  });
+
+  it('draws no frame round a single card, which has its own turn', async () => {
+    // A frame around one would be a second turn handle doing the same thing
+    // from a different place.
+    const el = await arranged();
+    await holdBoth(el);
+    const on = el.shadowRoot?.querySelector('.frame') as Element;
+    for (const type of ['pointerdown', 'pointerup']) {
+      on.dispatchEvent(
+        new FakePointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          clientX: 50,
+          clientY: 50,
+          pointerId: 1,
+        }),
+      );
+    }
+    await el.updateComplete;
+    expect(el.shadowRoot?.querySelector('.cluster')).toBeNull();
+  });
+
+  it('orbits every member as well as turning it', async () => {
+    // A write that only carried angles would spin the cards in place and leave
+    // the arrangement exactly where it was.
+    const turned = turnSpy();
+    const el = await arranged({ onTurnWidgets: turned });
+    await holdBoth(el);
+
+    // The cluster's centre is (150, 50) in frame units; jsdom reports the
+    // frame's own rect as zeros, so screen and frame coordinates coincide.
+    const handle = el.shadowRoot?.querySelector('.cluster .turn') as Element;
+    handle.dispatchEvent(
+      new FakePointerEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 250,
+        clientY: 50,
+        pointerId: 1,
+      }),
+    );
+    // Due east of the centre, carried to due south: a quarter turn.
+    handle.dispatchEvent(
+      new FakePointerEvent('pointerup', { clientX: 150, clientY: 150, pointerId: 1 }),
+    );
+
+    expect(turned).toHaveBeenCalledTimes(1);
+    const got = turned.mock.calls[0]?.[0] ?? [];
+    const a = got.find((t) => t.id === 'a');
+    const b = got.find((t) => t.id === 'b');
+    expect(a?.angle).toBeCloseTo(90, 6);
+    expect(b?.angle).toBeCloseTo(90, 6);
+    // `a` was 100 left of the pivot and is now 100 above it.
+    expect((a?.box.x ?? 0) + 50).toBeCloseTo(150, 6);
+    expect((a?.box.y ?? 0) + 50).toBeCloseTo(-50, 6);
+    // Still 200 apart, which is what rigid means.
+    expect(
+      Math.hypot((b?.box.x ?? 0) - (a?.box.x ?? 0), (b?.box.y ?? 0) - (a?.box.y ?? 0)),
+    ).toBeCloseTo(200, 6);
+  });
+
+  it('shows the cluster turning while the finger is down', async () => {
+    const el = await arranged();
+    await holdBoth(el);
+    const handle = el.shadowRoot?.querySelector('.cluster .turn') as Element;
+    handle.dispatchEvent(
+      new FakePointerEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 250,
+        clientY: 50,
+        pointerId: 1,
+      }),
+    );
+    handle.dispatchEvent(
+      new FakePointerEvent('pointermove', { clientX: 150, clientY: 150, pointerId: 1 }),
+    );
+    await el.updateComplete;
+
+    const cardA = [...(el.shadowRoot?.querySelectorAll('.placed') ?? [])].find(
+      (e) => e.getAttribute('data-widget') === 'a',
+    ) as HTMLElement;
+    expect(cardA.style.transform).toBe('rotate(90deg)');
+    expect(cardA.style.top).toBe('-100px');
+  });
+
+  it('writes nothing for a press that turned nothing', async () => {
+    const turned = turnSpy();
+    const el = await arranged({ onTurnWidgets: turned });
+    await holdBoth(el);
+    const handle = el.shadowRoot?.querySelector('.cluster .turn') as Element;
+    handle.dispatchEvent(
+      new FakePointerEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 250,
+        clientY: 50,
+        pointerId: 1,
+      }),
+    );
+    handle.dispatchEvent(
+      new FakePointerEvent('pointerup', { clientX: 250, clientY: 50, pointerId: 1 }),
+    );
+    expect(turned).not.toHaveBeenCalled();
+  });
+
+  it('offers no cluster turn to a host that cannot write one', async () => {
+    const el = await arranged({ onTurnWidgets: undefined });
+    await holdBoth(el);
+    expect(el.shadowRoot?.querySelector('.cluster')).toBeNull();
+  });
+});

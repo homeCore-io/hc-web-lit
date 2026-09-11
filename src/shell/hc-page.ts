@@ -27,7 +27,9 @@ import {
   HANDLES,
   alignTo,
   angleFrom,
+  boundsOf,
   resizedBy,
+  turnedAbout,
   type Guide,
   type Handle,
 } from '../core/geometry.js';
@@ -268,6 +270,20 @@ export class HcPage extends LitElement {
       position: absolute;
       box-sizing: border-box;
     }
+    /* The box around everything held, and the only place a group turn can be
+       taken hold of — a cluster has no card whose own handle means "all of
+       these". Not interactive itself, so a press inside it still reaches the
+       card under the pointer. */
+    .cluster {
+      position: absolute;
+      box-sizing: border-box;
+      z-index: 4;
+      border: 1px dashed var(--hc-stroke-focus, #7cc4ff);
+      pointer-events: none;
+    }
+    .cluster > .turn {
+      pointer-events: auto;
+    }
     /* Picked, for a gesture that acts on more than one. Inset rather than an
        outline, so a card at the very edge of the page still shows all four
        sides of its own selection. */
@@ -400,6 +416,17 @@ export class HcPage extends LitElement {
    */
   @property({ attribute: false }) onTurnWidget:
     ((widgetId: string, angle: number) => Promise<void>) | undefined;
+
+  /**
+   * Turn a whole cluster, as one edit (§14.1).
+   *
+   * Separate from `onTurnWidget` because it carries rectangles too: turning a
+   * group orbits every member as well as turning it, and a write that only
+   * carried angles would spin the cards in place and leave the arrangement
+   * exactly where it was.
+   */
+  @property({ attribute: false }) onTurnWidgets:
+    ((turns: readonly { id: string; box: Box; angle: number }[]) => Promise<void>) | undefined;
 
   /**
    * The widget type held, waiting to be drawn (§14.1).
@@ -589,7 +616,7 @@ export class HcPage extends LitElement {
         @pointerdown=${(e: PointerEvent) => this.onSurfacePress(e)}
         style="width:${frame.width}px;height:${frame.height}px;transform:scale(${scale})"
       >
-        ${this.drawPreview()}
+        ${this.drawPreview()} ${this.groupFrame()}
         ${items.map((item) => {
           const w = byId.get(item.id);
           const r = item.rect;
@@ -893,10 +920,124 @@ export class HcPage extends LitElement {
    */
   private guides: readonly Guide[] = [];
 
-  /** Where this widget should be drawn right now, drag included. */
+  /** Where this widget should be drawn right now, gesture included. */
   private previewOf(id: string, box: Box): Box {
+    const turn = this.turning;
+    if (turn?.held.has(id) === true) {
+      const was = turn.from.get(id);
+      if (was !== undefined) {
+        return turnedAbout(was, turn.angles.get(id) ?? 0, turn.by, turn.pivot).rect;
+      }
+    }
     return this.moving?.get(id) ?? box;
   }
+
+  /**
+   * The box around everything held, and the handle that turns it (§14.1).
+   *
+   * **Only for more than one.** A single card already has eight handles and a
+   * turn of its own; a frame around it would be a second turn handle doing the
+   * same thing from a different place.
+   *
+   * Drawn from the *previewed* rectangles, so the frame follows the cluster
+   * through the gesture rather than sitting where it used to be — a group
+   * frame that lagged its members is a box that says the selection is
+   * somewhere it is not.
+   */
+  private groupFrame() {
+    if (this.mode !== 'edit' || !this.free || this.picked.size < 2) return nothing;
+    if (this.onTurnWidgets === undefined) return nothing;
+
+    const box = boundsOf([...this.boxesOf(this.picked)].map(([id, b]) => this.previewOf(id, b)));
+    if (box === undefined) return nothing;
+
+    return html`<div
+      class="cluster"
+      style="left:${box.x}px;top:${box.y}px;width:${box.w}px;height:${box.h}px"
+    >
+      <div
+        class="turn"
+        part="action"
+        title="Turn these together"
+        @pointerdown=${(e: PointerEvent) => this.startGroupTurn(e, box)}
+      ></div>
+    </div>`;
+  }
+
+  /**
+   * Turn everything held, about the middle of what is held.
+   *
+   * Its own gesture rather than a `grip` on the drag state, because it carries
+   * something no single-element drag has: a pivot that is not any element's
+   * own centre, and a result that changes two fields per member rather than
+   * one (`turnedAbout`).
+   */
+  private startGroupTurn(e: PointerEvent, box: Box): void {
+    if (this.mode !== 'edit' || this.onTurnWidgets === undefined) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const target = e.currentTarget as HTMLElement;
+    try {
+      target.setPointerCapture(e.pointerId);
+    } catch {
+      // The same trade every gesture here makes: a lost capture costs a drag
+      // that leaves the handle, a throw costs the gesture (see `startDrag`).
+    }
+
+    const pivot = { x: box.x + box.w / 2, y: box.y + box.h / 2 };
+    const held = new Set(this.picked);
+    const from = this.boxesOf(held);
+    const angles = new Map<string, number>();
+    for (const item of this.itemsNow()?.items ?? []) {
+      if (held.has(item.id)) angles.set(item.id, item.angle ?? 0);
+    }
+
+    const start = { x: e.clientX, y: e.clientY };
+    const scale = this.frameScale();
+    const at = this.shadowRoot?.querySelector('.frame')?.getBoundingClientRect();
+    // The pivot is in frame units; the pointer is in screen ones.
+    const centre =
+      at === undefined ? start : { x: at.left + pivot.x * scale, y: at.top + pivot.y * scale };
+
+    const turnBy = (m: PointerEvent): number => angleFrom(centre, start, m, 0);
+
+    const move = (m: PointerEvent): void => {
+      this.turning = { held, pivot, from, angles, by: turnBy(m) };
+    };
+
+    const end = (up: PointerEvent): void => {
+      target.removeEventListener('pointermove', move);
+      target.removeEventListener('pointerup', end);
+      target.removeEventListener('pointercancel', end);
+      this.turning = undefined;
+
+      const by = turnBy(up);
+      // A press that turned nothing is a press.
+      if (by === 0) return;
+      void this.onTurnWidgets?.(
+        [...from].map(([id, b]) => {
+          const got = turnedAbout(b, angles.get(id) ?? 0, by, pivot);
+          return { id, box: got.rect, angle: got.angle };
+        }),
+      );
+    };
+
+    target.addEventListener('pointermove', move);
+    target.addEventListener('pointerup', end);
+    target.addEventListener('pointercancel', end);
+  }
+
+  /** A group turn in progress, so the cluster follows the finger. */
+  @state() private turning:
+    | {
+        held: ReadonlySet<string>;
+        pivot: { x: number; y: number };
+        from: ReadonlyMap<string, Box>;
+        angles: ReadonlyMap<string, number>;
+        by: number;
+      }
+    | undefined;
 
   /**
    * What angle this item is drawn at right now, turn in progress included.
@@ -907,6 +1048,14 @@ export class HcPage extends LitElement {
    * happening.
    */
   private angleOf(item: GridItem): number {
+    const turn = this.turning;
+    if (turn?.held.has(item.id) === true) {
+      const was = turn.from.get(item.id);
+      if (was !== undefined) {
+        return turnedAbout(was, turn.angles.get(item.id) ?? 0, turn.by, turn.pivot).angle;
+      }
+    }
+
     const drag = this.dragging;
     if (drag?.grip === 'turn' && drag.id === item.id && drag.centre && drag.grabbed) {
       return angleFrom(
