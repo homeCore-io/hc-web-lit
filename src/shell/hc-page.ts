@@ -430,11 +430,19 @@ export class HcPage extends LitElement {
     /* A frame that lays its members out in a column (§14.1). The container
        a positioned frame does not need to be: a member that grows pushes the
        ones below it down, which only happens if they are really inside it. */
+    /* **A container paints nothing.** It is a coordinate space and a layout,
+       and the ground under it belongs to the page — these documents lay a
+       shape element down for exactly that, deliberately, at the page's size.
+
+       A raised surface here was carried over from the first stacked frame and
+       it flattened the room page: every device row is the raised surface, so a
+       panel of the same colour behind them left them with nothing but a
+       hairline to be seen by, and the rules between sections vanished into it
+       as well. The household's words for it were that the widgets blend
+       together, and they were reading a page with two grounds on it. */
     .stack {
       position: absolute;
       box-sizing: border-box;
-      border-radius: var(--hc-radius-md, 14px);
-      background: var(--hc-surface-raised, #141922);
       z-index: 1;
     }
     /* A container that lays its children out in a column. One that does not
@@ -453,14 +461,6 @@ export class HcPage extends LitElement {
       top: auto;
       width: auto;
       flex: none;
-    }
-    /* **A nested container is a band, not a panel.** The surface belongs to
-       the frame somebody drew on the page; a band inside one is structure —
-       the row a colour wheel and two sliders sit on — and painting a raised
-       box behind each would draw furniture nobody asked for. */
-    .stack .stack {
-      background: none;
-      border-radius: 0;
     }
     /* In flow, so the stack decides where it sits. Everything else about a
        placement is unchanged, which is why one function draws both. */
