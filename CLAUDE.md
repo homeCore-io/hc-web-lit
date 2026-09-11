@@ -2117,9 +2117,26 @@ is something it can never do at all (§2).
       configures the widget. One thing an installer does not do: load the new
       extension into the running page, because a module that defines a custom
       element cannot be registered twice — it says "reload to use it".
-- [ ] Every dashboard in redb renders in hc-web-lit, including plugin widgets
-- [ ] Both authoring modes work (§14.1): grid placement, and free composition
-      with rotation, groups and decorative elements
+- [x] Every dashboard in redb renders in hc-web-lit — **audited against the
+      house on 2026-09-11, with one half of the claim untested.** All three
+      documents core holds are present here, 80 widgets over 18 types, and
+      every type is one this client draws: no placeholders anywhere. Ten
+      widgets on the Room page draw nothing and all ten are *told* to —
+      `hide_with: "@picked"` and `hide_unless`, and nine appear the moment a
+      dimmable lamp is picked. The tenth is a `scene_row` with
+      `hide_when_empty` and `skip_light_scenes`, and this house has no
+      non-light room scenes for any room, so it correctly hides.
+      **"Including plugin widgets" is unverified**: no page in this redb uses
+      `plugin_widget` (or `floor_plan`), so the renderer is exercised only by
+      core's conformance corpus (§4.6) and not by real authored content
+- [x] Both authoring modes work (§14.1): grid placement, and free composition
+      with rotation, groups and decorative elements. Grid: draw-to-create by
+      cell, one grip, the coarse magnet. Free: eight handles, the fine magnet,
+      guides, rotation per element and per group, lift, groups by path.
+      Decorative elements are not a separate feature and never needed to be —
+      `text`, `line` and `shape` are **52 of the 80 widgets on the household's
+      own pages**, they place from the palette with no device binding, and a
+      gesture is offered on them like anything else
 - [ ] A floorplan that renders from geometry rather than from a picture (§11.1)
 - [ ] Kiosk mode: no chrome, wake lock, auto-reconnect
 - [ ] The rule editor (§21), or an agreed decision that rules stay in the other
@@ -2366,7 +2383,19 @@ not a failure of it.
       name a person reads rather than by the id a `datalist` matches on, which
       is unverified — the native popup does not open under automation, so what
       Chrome filters on has not actually been established
-- [ ] Validate → diff → apply deployment flow
+- [ ] Validate → diff → apply deployment flow. **Obsolete as written, and
+      recorded rather than ticked.** It was designed when core stored
+      dashboards: you validated a document, saw what would change, and applied
+      it. §18.2 moved pages into this client's own store, so there is nothing
+      to deploy *to* — `Authored.saveDashboards` writes straight to
+      `server/store.ts` and every edit is already live. Verified rather than
+      assumed: nothing in `core/api.ts` writes a dashboard, and the only
+      apply-shaped operation left is `importDashboards`, which runs once.
+      What survives of it is a **page-level legality check** — `Engine.normalize`
+      already guarantees drawn-is-saveable for placements, and the panel flags
+      one widget's fields at a time, but nothing answers "could the other
+      client read this whole page?" while §18.2 says both clients are in use.
+      That is the honest successor and it is a different, smaller thing
 
 **Phase 11 — Ecosystem**
 - [ ] Extension install/uninstall UI
