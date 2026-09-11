@@ -2356,8 +2356,16 @@ not a failure of it.
       and dashboard pickers are `datalist` suggestions and have been since
       §4.4 — **open on purpose**, because a suggestion that also restricted
       would make a document naming something this build has not learned
-      unsaveable. Still open: a query picker, and searching a device list by
-      the name a person reads rather than by the id a `datalist` matches on
+      unsaveable. **The query builder is in too**: core stores `query` as a
+      string and defines no syntax for it (§5.3), so authoring one meant typing
+      JSON into a text box — the one thing §4.4 rules out. Rooms and kinds come
+      from what the house has, and it says what the query matches *right now*,
+      which is the thing worth having a builder for at all. Clauses it does not
+      offer — `attribute`, `not`, `role`, `sort` — are carried through
+      untouched and named on screen. Still open: searching a device list by the
+      name a person reads rather than by the id a `datalist` matches on, which
+      is unverified — the native popup does not open under automation, so what
+      Chrome filters on has not actually been established
 - [ ] Validate → diff → apply deployment flow
 
 **Phase 11 — Ecosystem**

@@ -51,6 +51,8 @@ import { knownRoles } from '../design/roles.js';
 import { markNames } from '../design/icons.js';
 import { assetUrl, type StoredAsset } from '../core/assets.js';
 import { compile, evaluate, isExpr, type ExprScope } from '../core/expr.js';
+import { parseQuery, runQuery } from '../core/query.js';
+import { mountChildren, type MountEnv } from '../shell/mount.js';
 import {
   paramNames,
   templateRef,
@@ -58,14 +60,6 @@ import {
   type WidgetTemplate,
 } from '../core/templates.js';
 
-/**
- * What an expression came to, in a line a person can read.
- *
- * `undefined` is spelled out rather than shown as an empty preview, because it
- * is the answer somebody most needs to see: an expression that compiles and
- * evaluates to nothing is the one that draws a blank card, and a preview that
- * showed nothing for it would look exactly like a preview that had not run.
- */
 /**
  * Whether a template's declared parameter type names a picker this build has.
  *
@@ -87,6 +81,14 @@ function isSuggest(type: string): type is Suggest {
   ).includes(type as Suggest);
 }
 
+/**
+ * What an expression came to, in a line a person can read.
+ *
+ * `undefined` is spelled out rather than shown as an empty preview, because it
+ * is the answer somebody most needs to see: an expression that compiles and
+ * evaluates to nothing is the one that draws a blank card, and a preview that
+ * showed nothing for it would look exactly like a preview that had not run.
+ */
 function shown(value: unknown): string {
   if (value === undefined) return 'nothing';
   if (value === null) return 'null';
@@ -100,7 +102,6 @@ function shown(value: unknown): string {
   }
   return String(value);
 }
-import { mountChildren, type MountEnv } from '../shell/mount.js';
 
 /** The three states of a confirmation, in the words the field uses. */
 const CONFIRM = [
@@ -214,6 +215,58 @@ export class HcPropertyPanel extends LitElement {
       flex: 1 1 100%;
       color: var(--hc-accent-warn, #ffc978);
       font-size: var(--hc-text-caption-size, 11px);
+    }
+    /* The query builder (§5.3). A query is a claim about the house, so the
+       house is right there underneath it. */
+    .query {
+      display: flex;
+      flex-direction: column;
+      gap: 0.375rem;
+      flex: 1 1 100%;
+      min-width: 0;
+    }
+    .qrow {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.375rem;
+    }
+    .qrow label {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      color: var(--hc-ink-muted, #8b95a4);
+      font-size: var(--hc-text-caption-size, 11px);
+    }
+    .qlabel {
+      color: var(--hc-ink-muted, #8b95a4);
+      font-size: var(--hc-text-caption-size, 11px);
+      min-width: 3.5rem;
+    }
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.25rem;
+      /* Capped rather than unbounded: a house with forty kinds would otherwise
+         push every other clause off the panel. */
+      max-height: 7rem;
+      overflow: auto;
+    }
+    /* A chip, not a multi-select: choosing two rooms out of nine in a native
+       multiple-select needs a modifier key nobody has on a tablet, and the
+       state of one is invisible without opening it. */
+    .chip {
+      padding: 0.2rem 0.5rem;
+      border: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
+      border-radius: var(--hc-radius-pill, 999px);
+      color: var(--hc-ink-muted, #8b95a4);
+      font-size: var(--hc-text-caption-size, 11px);
+      cursor: pointer;
+      user-select: none;
+    }
+    .chip.on {
+      border-color: var(--hc-accent-active, #ffc978);
+      color: var(--hc-accent-active, #ffc978);
     }
     .resolved {
       flex: 1 1 100%;
@@ -1048,6 +1101,187 @@ export class HcPropertyPanel extends LitElement {
     }
   }
 
+  /**
+   * Build a device query, and say what it currently matches (§5.3).
+   *
+   * **Every clause it does not offer is carried through untouched.** The same
+   * rule the panel follows for config keys it has never heard of: `attribute`,
+   * `not`, `role` and `sort` are real parts of the language, rarer than the
+   * four below, and a builder that dropped them would quietly delete the
+   * interesting half of somebody's query the first time they changed a room.
+   *
+   * The live count is the point of building it here rather than anywhere else.
+   * A query is a claim about the house, and the house is right there — "12 of
+   * 184" while you are choosing is worth more than any amount of syntax help.
+   */
+  private renderQuery(p: Property) {
+    const query = parseQuery(p.value) ?? {};
+    // Loosely typed on purpose: every setter below spells "no opinion" as
+    // `undefined`, and the clauses are stripped before this is written — but
+    // `exactOptionalPropertyTypes` will not let an explicit `undefined` be
+    // assigned to an optional field on the way through.
+    const write = (next: Record<string, unknown>): void => {
+      const clauses = Object.entries(next).filter(([, v]) => v !== undefined);
+      const value = clauses.length === 0 ? '' : JSON.stringify(Object.fromEntries(clauses));
+
+      // **Always the key, never its absence** — which is why this does not go
+      // through `withValue`. That drops an optional field set to an empty
+      // string, and here the two are not the same thing at all: an absent
+      // `query` in query mode parses to `undefined` and selects *nothing*,
+      // while an empty one is no predicate and selects the whole house
+      // (`core/selection.ts`). Clearing the last clause would otherwise empty
+      // the card rather than opening it up.
+      this.commit({ ...this.current, [p.name]: value });
+    };
+
+    // `total` is before the limit, which is what makes "12 of 184" honest: a
+    // query that matches ninety and shows four has done both things.
+    const { devices: matched, total } = runQuery(query, this.devices);
+    const untouched = ['attribute', 'not', 'role', 'sort'].filter(
+      (k) => (query as Record<string, unknown>)[k] !== undefined,
+    );
+
+    return html`<div class="query">
+      ${this.chips('Rooms', this.areaNames(), query.area ?? [], (picked) =>
+        write({ ...query, area: picked.length === 0 ? undefined : picked }),
+      )}
+      ${this.chips('Kinds', this.kindNames(), query.deviceType ?? [], (picked) =>
+        write({ ...query, deviceType: picked.length === 0 ? undefined : picked }),
+      )}
+      <div class="qrow">
+        <label
+          >Name contains
+          <input
+            part="select"
+            type="text"
+            aria-label="Name contains"
+            .value=${query.namePattern ?? ''}
+            @input=${(e: Event) => {
+              const v = (e.target as HTMLInputElement).value;
+              write({ ...query, namePattern: v === '' ? undefined : v });
+            }}
+          />
+        </label>
+        ${this.tri('State', query.on, ['On', 'Off'], (v) => write({ ...query, on: v }))}
+        ${this.tri('Reachable', query.available, ['Yes', 'No'], (v) =>
+          write({ ...query, available: v }),
+        )}
+        <label
+          >At most
+          <input
+            part="select"
+            type="number"
+            min="1"
+            aria-label="At most"
+            .value=${query.limit === undefined ? '' : String(query.limit)}
+            @input=${(e: Event) => {
+              const n = Number((e.target as HTMLInputElement).value);
+              write({ ...query, limit: Number.isFinite(n) && n > 0 ? n : undefined });
+            }}
+          />
+        </label>
+      </div>
+      <span class="resolved">
+        Matches ${total} of ${this.devices.length} right
+        now${
+          matched.length === 0
+            ? '.'
+            : `: ${matched
+                .slice(0, 4)
+                .map((d) => effectiveName(d))
+                .join(', ')}${matched.length > 4 ? '…' : ''}`
+        }
+      </span>
+      ${
+        untouched.length === 0
+          ? nothing
+          : html`<span class="resolved">
+              Kept as it is: ${untouched.join(', ')} — written by hand or another client.
+            </span>`
+      }
+    </div>`;
+  }
+
+  /** The rooms the house actually has, as a query would name them. */
+  private areaNames(): string[] {
+    const seen = new Set<string>();
+    for (const d of this.devices) {
+      const area = effectiveArea(d);
+      if (area !== undefined && area !== '') seen.add(area);
+    }
+    return [...seen].sort((a, b) => a.localeCompare(b));
+  }
+
+  /** The kinds the house actually has — `ui_hint` first, as a query matches. */
+  private kindNames(): string[] {
+    const seen = new Set<string>();
+    for (const d of this.devices) {
+      const kind = d.ui_hint ?? d.device_type;
+      if (typeof kind === 'string' && kind !== '') seen.add(kind);
+    }
+    return [...seen].sort((a, b) => a.localeCompare(b));
+  }
+
+  /**
+   * A row of things to include, none meaning "no opinion".
+   *
+   * Not a multi-select: choosing two rooms out of nine in a `<select multiple>`
+   * needs a modifier key nobody has on a tablet, and the state of one is
+   * invisible without opening it.
+   */
+  private chips(
+    label: string,
+    all: readonly string[],
+    picked: readonly string[],
+    onChange: (next: string[]) => void,
+  ) {
+    if (all.length === 0) return nothing;
+    return html`<div class="qrow">
+      <span class="qlabel">${label}</span>
+      <div class="chips">
+        ${all.map(
+          (name) =>
+            html`<label class="chip ${picked.includes(name) ? 'on' : ''}">
+              <input
+                type="checkbox"
+                hidden
+                .checked=${picked.includes(name)}
+                @change=${() =>
+                  onChange(
+                    picked.includes(name) ? picked.filter((x) => x !== name) : [...picked, name],
+                  )}
+              />${humanise(name)}
+            </label>`,
+        )}
+      </div>
+    </div>`;
+  }
+
+  /** Yes, no, or no opinion — which is what an absent clause means. */
+  private tri(
+    label: string,
+    value: boolean | undefined,
+    words: [string, string],
+    onChange: (v: boolean | undefined) => void,
+  ) {
+    return html`<label
+      >${label}
+      <select
+        part="select"
+        aria-label=${label}
+        data-value=${value === undefined ? '' : String(value)}
+        @change=${(e: Event) => {
+          const v = (e.target as HTMLSelectElement).value;
+          onChange(v === '' ? undefined : v === 'true');
+        }}
+      >
+        <option value="">Either</option>
+        <option value="true">${words[0]}</option>
+        <option value="false">${words[1]}</option>
+      </select>
+    </label>`;
+  }
+
   private datalist(kind: Suggest | undefined, id: string) {
     const options = this.suggestions(kind);
     if (options.length === 0) return nothing;
@@ -1303,6 +1537,11 @@ export class HcPropertyPanel extends LitElement {
   }
 
   private renderField(p: Property): TemplateResult | typeof nothing {
+    // A query is stored as a JSON string and core defines nothing about its
+    // syntax (§5.3), so the only way to write one was to type the JSON — which
+    // is the one thing §4.4 rules out. It gets a builder rather than a box.
+    if (p.name === 'query') return this.renderQuery(p);
+
     switch (p.form) {
       case 'toggle':
         return html`<input
