@@ -56,16 +56,37 @@ const num = (d: DeviceState, ...keys: string[]): number | undefined => {
  * a Sonos says `player_state: "PLAYING"`. Anything unrecognised is `unknown`
  * rather than `stopped`, because a card that says "stopped" about a device it
  * did not understand is inventing a fact.
+ *
+ * **A field that says "nothing" is not an answer, and this read one as one.**
+ * A Roku TV on an HDMI input publishes `player_state: "none"` — it has no
+ * media *session*, because the picture is coming from a box plugged into the
+ * back — while its own `state` says `playing`. Reading `player_state` first
+ * and stopping there called a television that was on and showing something
+ * "stopped", and the house page then left it out of PLAYING entirely.
+ *
+ * So the fields are read in order and the first one with something to say
+ * wins. `none`, `close` and `idle` are a player declining to answer, not a
+ * player at rest.
  */
+const NOTHING_TO_SAY = new Set(['none', 'close', 'closed', 'idle', '']);
+
 function transport(d: DeviceState): NowPlaying['state'] {
   if (d.attributes['on'] === false) return 'off';
-  const raw = str(d, 'player_state', 'state');
-  if (raw === undefined) return 'unknown';
-  const s = raw.toLowerCase();
-  if (s.startsWith('play')) return 'playing';
-  if (s.startsWith('paus')) return 'paused';
-  if (s.startsWith('stop') || s === 'idle' || s === 'none') return 'stopped';
-  return 'unknown';
+
+  for (const key of ['player_state', 'state'] as const) {
+    const raw = str(d, key);
+    if (raw === undefined) continue;
+    const s = raw.toLowerCase();
+    if (NOTHING_TO_SAY.has(s)) continue;
+    if (s.startsWith('play')) return 'playing';
+    if (s.startsWith('paus')) return 'paused';
+    if (s.startsWith('stop')) return 'stopped';
+    return 'unknown';
+  }
+
+  // Every field declined. A device that is on and showing an input is doing
+  // something; one that says nothing at all is simply not understood.
+  return d.attributes['on'] === true ? 'stopped' : 'unknown';
 }
 
 export function nowPlaying(d: DeviceState): NowPlaying {

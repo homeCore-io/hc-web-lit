@@ -244,3 +244,57 @@ describe('what a PLAYING section shows', () => {
     expect(await shown({}, house)).toHaveLength(3);
   });
 });
+
+describe('a television on an HDMI input', () => {
+  const roku = (over: Record<string, unknown>): DeviceState => ({
+    device_id: 'tv',
+    name: 'Office TV',
+    plugin_id: 'roku',
+    available: true,
+    device_type: 'media_player',
+    attributes: over,
+    last_seen: '2026-09-11T00:00:00Z',
+  });
+
+  it('is playing when its own state says so and it has no media session', () => {
+    // **A field that says "nothing" is not an answer.** A Roku on HDMI
+    // publishes `player_state: "none"` — no media *session*, because the
+    // picture comes from a box plugged into the back — while `state` says
+    // playing. Reading `player_state` first and stopping there called a
+    // television that was on and showing something "stopped", and the house
+    // page left it out of PLAYING entirely.
+    const tv = roku({
+      on: true,
+      power_mode: 'PowerOn',
+      state: 'playing',
+      player_state: 'none',
+      app_name: 'HDMI 1',
+    });
+    expect(nowPlaying(tv).state).toBe('playing');
+  });
+
+  it('still prefers the media session when it has one', () => {
+    // A Sonos says `player_state` and means it; the order is unchanged for
+    // every device that answers with its first field.
+    const sonos = roku({ player_state: 'PAUSED_PLAYBACK', state: 'playing' });
+    expect(nowPlaying(sonos).state).toBe('paused');
+  });
+
+  it('is off when the set is off, whatever else it says', () => {
+    expect(nowPlaying(roku({ on: false, state: 'stopped', source: 'Home' })).state).toBe('off');
+  });
+
+  it('is stopped for a device that is on and declines every field', () => {
+    // `close` is a player declining to answer, not a player at rest — but a
+    // device that is on is doing something, so it is not "unknown" either.
+    expect(nowPlaying(roku({ on: true, player_state: 'close', app_name: 'Native UI' })).state).toBe(
+      'stopped',
+    );
+  });
+
+  it('is unknown when nothing says anything at all', () => {
+    // A card that says "stopped" about a device it did not understand is
+    // inventing a fact.
+    expect(nowPlaying(roku({})).state).toBe('unknown');
+  });
+});
