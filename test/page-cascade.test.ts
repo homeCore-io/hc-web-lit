@@ -125,3 +125,17 @@ describe('density for a placement that has no drawn height', () => {
     );
   });
 });
+
+describe('what a container paints', () => {
+  it('paints nothing, so what is on it keeps its contrast', () => {
+    // Every device row is the raised surface. A container of the same colour
+    // behind them leaves them with only a hairline to be seen by, and takes
+    // the section rules with it. The page's ground is a shape the author drew.
+    expect(resolved('stack', 'background')).toBeUndefined();
+    expect(resolved('stack', 'background-color')).toBeUndefined();
+  });
+
+  it('is still a positioned box, or nothing inside it knows where it is', () => {
+    expect(resolved('stack', 'position')).toBe('absolute');
+  });
+});
