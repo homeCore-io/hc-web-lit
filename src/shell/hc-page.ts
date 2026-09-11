@@ -33,6 +33,7 @@ import {
   type Guide,
   type Handle,
 } from '../core/geometry.js';
+import { framesByPath, pageRectOf } from '../core/frames.js';
 import { clickTarget, groupOf, isUnder, membersOf, stepOut } from '../core/groups.js';
 import type { SelectionContext } from '../core/selection.js';
 import { isVisible } from '../core/visibility.js';
@@ -276,6 +277,19 @@ export class HcPage extends LitElement {
     .frame > .drawing {
       position: absolute;
       box-sizing: border-box;
+    }
+    /* A frame's body: the panel a frame draws under its contents. Inert, and
+       under everything, because the frame is a coordinate space first — its
+       members are ordinary placements drawn at resolved page positions, not
+       children in the DOM. */
+    .framebody {
+      position: absolute;
+      z-index: 0;
+      box-sizing: border-box;
+      border: 1px solid var(--hc-stroke-hairline, #262d38);
+      border-radius: var(--hc-radius-md, 14px);
+      background: var(--hc-surface-raised, #141922);
+      pointer-events: none;
     }
     /* The box around everything held, and the only place a group turn can be
        taken hold of — a cluster has no card whose own handle means "all of
@@ -632,7 +646,7 @@ export class HcPage extends LitElement {
         @pointerdown=${(e: PointerEvent) => this.onSurfacePress(e)}
         style="width:${frame.width}px;height:${frame.height}px;transform:scale(${scale})"
       >
-        ${this.drawPreview()} ${this.groupFrame()}
+        ${this.frameBodies(items)} ${this.drawPreview()} ${this.groupFrame()}
         ${items.map((item) => {
           const w = byId.get(item.id);
           const r = item.rect;
@@ -946,6 +960,39 @@ export class HcPage extends LitElement {
       }
     }
     return this.moving?.get(id) ?? box;
+  }
+
+  /**
+   * The frames on this layout, drawn as the bodies they are (§14.1).
+   *
+   * **Under everything, and inert.** A frame is a coordinate space first and a
+   * decoration second: its members are drawn as ordinary placements at the
+   * page positions `gridItems` already resolved, so the body is a backdrop
+   * behind them rather than a parent in the DOM. That keeps one render path
+   * for every element — a card inside a frame is mounted exactly like a card
+   * that is not — and it is why `pointer-events` is off: a press belongs to
+   * whatever is actually under it.
+   *
+   * `clip` is the one thing the body cannot express this way, and it is left
+   * for the gestures arc rather than faked: clipping a backdrop clips nothing.
+   */
+  private frameBodies(items: readonly GridItem[]) {
+    void items;
+    const layout =
+      this.doc === undefined ? undefined : layoutToDraw(this.doc, this.breakpoint)?.layout;
+    const boxes = layout?.groups ?? [];
+    if (boxes.length === 0) return nothing;
+
+    const frames = framesByPath(boxes);
+    return boxes.map((box) => {
+      const at = pageRectOf(box, frames);
+      if (at === undefined) return nothing;
+      return html`<div
+        class="framebody"
+        data-frame=${box.path}
+        style="left:${at.x}px;top:${at.y}px;width:${at.w}px;height:${at.h}px"
+      ></div>`;
+    });
   }
 
   /**

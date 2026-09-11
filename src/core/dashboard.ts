@@ -7,6 +7,8 @@
  * against the same live documents while one replaces the other (§18.2).
  */
 import type { DashboardFlow, DashboardRect, GridItem } from './layout.js';
+import { framesByPath, toPage } from './frames.js';
+import { groupOf } from './groups.js';
 
 export type DashboardBreakpoint = 'mobile' | 'tablet' | 'desktop' | 'tv';
 
@@ -162,6 +164,16 @@ export function gridItems(
     widgets.filter((w) => (w.config?.['layer'] ?? undefined) === 'free').map((w) => w.id),
   );
 
+  // **The read half of the frame seam** (`core/frames.ts`). A document states
+  // an element's rectangle in its frame's space; every gesture on the surface
+  // — drag, resize, marquee, guides — works in page coordinates and always
+  // has. So the conversion happens once, here, where placements become items,
+  // and nothing downstream has to know frames exist.
+  const frames = framesByPath(layout.groups);
+  const groupOfWidget = new Map(widgets.map((w) => [w.id, groupOf(w.config)]));
+  const placed = (id: string, rect: DashboardRect): DashboardRect =>
+    toPage(rect, groupOfWidget.get(id), frames);
+
   return (layout.placements ?? []).map((p) => ({
     id: p.widget_id,
     x: p.x,
@@ -169,7 +181,7 @@ export function gridItems(
     w: p.w,
     h: p.h,
     ...(lifted.has(p.widget_id) ? { floating: true } : {}),
-    ...(p.rect != null ? { rect: p.rect } : {}),
+    ...(p.rect != null ? { rect: placed(p.widget_id, p.rect) } : {}),
     ...(p.angle != null ? { angle: p.angle } : {}),
   }));
 }

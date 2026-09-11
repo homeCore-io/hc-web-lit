@@ -21,7 +21,8 @@ import type {
 } from './dashboard.js';
 import { layoutToDraw } from './dashboard.js';
 import { cellsOf } from './geometry.js';
-import { withGroup } from './groups.js';
+import { groupOf, withGroup } from './groups.js';
+import { framesByPath, toLocal } from './frames.js';
 
 /**
  * A page id from what somebody typed.
@@ -348,6 +349,9 @@ export function transformWidgets(
   const placements = layout.placements ?? [];
   if (!placements.some((p) => changes.has(p.widget_id))) return undefined;
 
+  // Which group each widget is in, for the frame-space conversion below.
+  const byId = new Map((doc.widgets ?? []).map((w) => [w.id, w.config]));
+
   const move = (p: DashboardWidgetPlacement): DashboardWidgetPlacement => {
     const change = changes.get(p.widget_id);
     if (change === undefined) return p;
@@ -370,7 +374,14 @@ export function transformWidgets(
     // talking about columns. This is the safety property of storing both
     // (§14.3): a client that has never heard of frames draws these and gets a
     // page that is approximately right rather than blank.
-    const rect = { ...(p.rect ?? {}), ...box };
+    // **The write half of the frame seam**, the exact inverse of the read in
+    // `gridItems`. Every gesture works in page coordinates; a document states
+    // a rectangle in its frame's space. One place converts, so no gesture has
+    // to know frames exist — and the round trip is what keeps a card inside a
+    // frame from leaping to the page origin the first time it is nudged.
+    const frames = framesByPath(layout.groups);
+    const local = toLocal({ ...(p.rect ?? {}), ...box }, groupOf(byId.get(p.widget_id)), frames);
+    const rect = { ...(p.rect ?? {}), ...local };
     const frame = layout.frame;
     if (frame == null) return { ...p, ...turned, rect };
     return {
