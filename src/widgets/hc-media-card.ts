@@ -72,40 +72,66 @@ export class HcMediaCard extends LitElement {
       opacity: 0.28;
       pointer-events: none;
     }
-    /* One row: what it is, what is on, and the one button worth pressing. */
-    .card.compact {
-      display: flex;
-      align-items: center;
-      gap: calc(var(--hc-space-unit, 8px) * 0.75);
-      padding: calc(var(--hc-space-unit, 8px) * 0.5) calc(var(--hc-space-unit, 8px));
-      min-height: 0;
-    }
-    .card.compact .art {
-      width: 1.25rem;
-      height: 1.25rem;
-      flex: none;
-    }
-    .card.compact .lines {
+    /* One row of a status list: where, what, and the one control. Rows are
+       held together by alignment and a hairline rather than by each being its
+       own box — seven bordered cards in a column read as seven objects when
+       the point is one list. */
+    .strip {
       display: flex;
       align-items: baseline;
-      gap: calc(var(--hc-space-unit, 8px) * 0.75);
-      min-width: 0;
-      flex: 1 1 auto;
-      overflow: hidden;
+      gap: calc(var(--hc-space-unit, 8px));
+      padding: calc(var(--hc-space-unit, 8px) * 0.75) 0;
+      border-bottom: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
+      color: var(--hc-ink, #e9edf2);
+      font-family: var(--hc-font-body, system-ui, sans-serif);
     }
-    /* The name stays whole and the track gives way — on a house page you are
-       looking for the room first and the song second. */
-    .card.compact .where {
+    :host(:last-of-type) .strip {
+      border-bottom: 0;
+    }
+    /* A dot, lit only while something is actually playing. A glyph that is
+       always there says nothing; the one piece of state worth a mark is
+       whether this one is making a noise. */
+    .pip {
       flex: none;
+      width: 0.4rem;
+      height: 0.4rem;
+      border-radius: 50%;
+      background: var(--hc-stroke-hairline, #262d38);
+      align-self: center;
     }
-    .card.compact .title {
-      white-space: nowrap;
+    .pip[data-on] {
+      background: var(--hc-accent-active, #ffc978);
+    }
+    /* The room first and the track second: on a house page you are looking for
+       where, and the name is what you scan. So the name keeps its width and
+       the track gives way. */
+    .who {
+      flex: none;
+      font-weight: 600;
+    }
+    .what {
+      flex: 1 1 auto;
+      min-width: 0;
       overflow: hidden;
+      white-space: nowrap;
       text-overflow: ellipsis;
       color: var(--hc-ink-muted, #8b95a4);
+      font-size: var(--hc-text-body-small-size, 12.5px);
     }
-    .card.compact .buttons {
+    /* Borderless: a boxed button per row is the same seven-objects problem the
+       card was, one element down. */
+    button.quiet {
       flex: none;
+      width: 1.75rem;
+      height: 1.75rem;
+      border: 0;
+      background: none;
+      color: var(--hc-ink-muted, #8b95a4);
+      align-self: center;
+    }
+    button.quiet:hover {
+      color: var(--hc-ink, #e9edf2);
+      background: none;
     }
     .head {
       position: relative;
@@ -321,15 +347,31 @@ export class HcMediaCard extends LitElement {
     // the bar and the volume, which are what a room page is for.
     if (this.config['compact'] === true) {
       const primary = transport.find((b) => b.primary) ?? transport[0];
-      return html`<div class="card compact" part="player">
-        <span class="art" part="indicator">
-          ${icon(n.state === 'playing' ? 'play' : 'media')}
-        </span>
-        <span class="lines">
-          <span class="where" part="state">${effectiveName(d)}</span>
-          <span class="title" part="name">${n.title ?? n.source ?? summary(n)}</span>
-        </span>
-        ${primary === undefined ? nothing : this.buttons(d, [{ ...primary, primary: false }])}
+      // Not `.card`: a card is a box with a border and a fill, and seven of
+      // them stacked is seven boxes. A status list is a list — the rows are
+      // held together by alignment and a hairline, not by each one being its
+      // own object.
+      return html`<div class="strip" part="player">
+        <span class="pip" ?data-on=${n.state === 'playing'}></span>
+        <span class="who" part="state">${effectiveName(d)}</span>
+        <span class="what" part="name">${n.title ?? n.source ?? summary(n)}</span>
+        ${
+          primary === undefined
+            ? nothing
+            : html`<button
+                class="quiet"
+                part="action"
+                title=${humanise(primary.id)}
+                aria-label=${humanise(primary.id)}
+                @click=${() =>
+                  this.onCommand?.({
+                    deviceId: d.device_id,
+                    action: { id: primary.id, params: {} },
+                  })}
+              >
+                ${icon(primary.mark)}
+              </button>`
+        }
       </div>`;
     }
 

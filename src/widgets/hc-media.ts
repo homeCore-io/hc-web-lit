@@ -16,7 +16,7 @@ import { LitElement, css, html } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import type { DeviceState } from '../core/device.js';
 import { selectDevices, type SelectionContext } from '../core/selection.js';
-import { isPlayer } from '../core/media.js';
+import { isPlayer, nowPlaying } from '../core/media.js';
 import type { CommandRequest } from '../core/widget.js';
 import { registerForDevice, registerWidget } from '../core/registry.js';
 import './hc-media-card.js';
@@ -52,7 +52,20 @@ export class HcMedia extends LitElement {
     // selects the whole house — the same emptiness that makes a device grid
     // show everything — and a set that drew an attic light as a player would
     // be right about the selection and wrong about the widget (§7.2).
-    const players = selectDevices(this.config, this.devices, this.context).filter(isPlayer);
+    let players = selectDevices(this.config, this.devices, this.context).filter(isPlayer);
+
+    // **Playing means playing.** A section headed PLAYING that lists a Roku on
+    // its home screen and four idle speakers is a list of the house's media
+    // devices, which is a different thing and one nobody asked to see there.
+    //
+    // Paused is not playing either, and that is not a judgement call: a Sonos
+    // has play/pause and no stop, so *idle* and *paused holding a track* are
+    // the same state to it. Counting paused as playing would make every Sonos
+    // in the house permanently "on".
+    if (this.config['only_playing'] === true) {
+      players = players.filter((d) => nowPlaying(d).state === 'playing');
+    }
+
     if (players.length === 0)
       return html`<div class="empty" part="empty">Nothing playing here.</div>`;
 

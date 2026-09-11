@@ -242,7 +242,6 @@ export class HcPage extends LitElement {
        and the canvas grows to hold whatever it reached. */
     .placed[data-fits] > .body {
       height: auto;
-      min-height: 100%;
       overflow: visible;
     }
     /* The handles, while the page is being arranged (§14.2). Over the widget
@@ -865,15 +864,18 @@ export class HcPage extends LitElement {
     if (r == null) return nothing;
     const z = w.config?.['z'];
     const at = this.previewOf(item.id, { x: r.x, y: r.y, w: r.w, h: r.h });
-    // A placement that says so is as tall as what is in it (§14.1). The rect
-    // stays the author's *minimum*: a card never shrinks below the box it was
-    // drawn in, it only grows past it when the alternative is hiding something.
+    // A placement that says so is as tall as what is in it (§14.1) — **both
+    // ways**. The drawn rect was a floor at first, and a section that is
+    // usually empty showed that to be wrong: a PLAYING frame with nothing
+    // playing held a 250px hole where one line would do. The name says the
+    // content decides, so the content decides; a height somebody wants kept is
+    // a placement that does not ask for this.
     const fits = fitsContent(w.config);
     // **Stored and, until now, never acted on.** §14.3 says core keeps `angle`
     // and has no opinion about it; a client that keeps it and does not draw it
     // is a client where turning a card does nothing.
     const turn = this.angleOf(item);
-    const height = fits ? `min-height:${at.h}px;` : `height:${at.h}px;`;
+    const height = fits ? '' : `height:${at.h}px;`;
 
     return html`<div
       class=${inStack ? 'placed inflow' : 'placed'}

@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import type { DeviceState } from '../src/core/device.js';
 import { clock, isPlayer, nowPlaying, progress, summary } from '../src/core/media.js';
 import '../src/widgets/hc-media-card.js';
+import '../src/widgets/hc-media.js';
 
 const dev = (
   attributes: Record<string, unknown>,
@@ -148,11 +149,29 @@ describe('a media card on a house page (§7.2)', () => {
     // bar is a page about the stereo.
     const el = await card({ compact: true });
     const root = el.shadowRoot!;
-    expect(root.querySelector('.card.compact')).not.toBeNull();
+    expect(root.querySelector('.strip')).not.toBeNull();
     expect(root.querySelectorAll('button')).toHaveLength(1);
     expect(root.querySelector('.progress')).toBeNull();
     expect(root.querySelector('.volume')).toBeNull();
     expect(root.querySelector('.wash')).toBeNull();
+  });
+
+  it('is a row in a list, not a card of its own', async () => {
+    // Seven bordered cards in a column read as seven objects when the point is
+    // one list.
+    const el = await card({ compact: true });
+    expect(el.shadowRoot?.querySelector('.card')).toBeNull();
+    expect(el.shadowRoot?.querySelector('button.quiet')).not.toBeNull();
+  });
+
+  it('lights its dot only while something is actually playing', async () => {
+    // A glyph that is always there says nothing.
+    const el = await card({ compact: true });
+    expect(el.shadowRoot?.querySelector('.pip')?.hasAttribute('data-on')).toBe(true);
+
+    el.device = player({ attributes: { state: 'paused', media_title: 'Blue Train' } });
+    await el.updateComplete;
+    expect(el.shadowRoot?.querySelector('.pip')?.hasAttribute('data-on')).toBe(false);
   });
 
   it('still says where and what, which is the point of it', async () => {
@@ -164,7 +183,8 @@ describe('a media card on a house page (§7.2)', () => {
 
   it('keeps the full card when nothing asked for compact', async () => {
     const el = await card({});
-    expect(el.shadowRoot?.querySelector('.card.compact')).toBeNull();
+    expect(el.shadowRoot?.querySelector('.strip')).toBeNull();
+    expect(el.shadowRoot?.querySelector('.card')).not.toBeNull();
     expect((el.shadowRoot?.querySelectorAll('button') ?? []).length).toBeGreaterThan(1);
   });
 
@@ -176,5 +196,51 @@ describe('a media card on a house page (§7.2)', () => {
     document.body.append(el);
     await el.updateComplete;
     expect(el.shadowRoot?.querySelectorAll('button')).toHaveLength(0);
+  });
+});
+
+describe('what a PLAYING section shows', () => {
+  const at = (state: string, title?: string): DeviceState => ({
+    device_id: `p-${state}-${title ?? ''}`,
+    name: state,
+    plugin_id: 'sonos',
+    available: true,
+    device_type: 'media_player',
+    attributes: { player_state: state, ...(title === undefined ? {} : { media_title: title }) },
+    last_seen: '2026-09-11T00:00:00Z',
+  });
+
+  const shown = async (config: Record<string, unknown>, devices: DeviceState[]) => {
+    const el = document.createElement('hc-media');
+    el.config = {
+      selection_mode: 'manual',
+      device_ids: devices.map((d) => d.device_id),
+      ...config,
+    };
+    el.devices = devices;
+    document.body.append(el);
+    await el.updateComplete;
+    return [...(el.shadowRoot?.querySelectorAll('hc-media-card') ?? [])].map((c) => c.device?.name);
+  };
+
+  it('shows only what is playing when asked', async () => {
+    // A section headed PLAYING that lists a Roku on its home screen and four
+    // idle speakers is a list of the house's media devices, which is a
+    // different thing.
+    const house = [at('playing', 'Blue Train'), at('stopped'), at('off'), at('unknown')];
+    expect(await shown({ only_playing: true }, house)).toEqual(['playing']);
+  });
+
+  it('does not count paused as playing', async () => {
+    // Not a judgement call: a Sonos has play/pause and no stop, so idle and
+    // paused-holding-a-track are the same state to it. Counting paused would
+    // make every Sonos in the house permanently on.
+    const house = [at('paused', 'Crazy Train'), at('paused')];
+    expect(await shown({ only_playing: true }, house)).toEqual([]);
+  });
+
+  it('shows every player when nothing asked', async () => {
+    const house = [at('playing', 'Blue Train'), at('paused'), at('off')];
+    expect(await shown({}, house)).toHaveLength(3);
   });
 });
