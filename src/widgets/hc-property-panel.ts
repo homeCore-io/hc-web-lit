@@ -53,33 +53,7 @@ import { assetUrl, type StoredAsset } from '../core/assets.js';
 import { compile, evaluate, isExpr, type ExprScope } from '../core/expr.js';
 import { parseQuery, runQuery } from '../core/query.js';
 import { mountChildren, type MountEnv } from '../shell/mount.js';
-import {
-  paramNames,
-  templateRef,
-  type TemplateStore,
-  type WidgetTemplate,
-} from '../core/templates.js';
-
-/**
- * Whether a template's declared parameter type names a picker this build has.
- *
- * §5.4 lists `room`, `device`, `asset`, `string`, `number`, `boolean`, and only
- * some of those are pickers — the rest are plain boxes. A type this build does
- * not recognise gets a plain box too rather than a guess, because a picker
- * offering the wrong list is worse than none: every value in it looks official
- * and selects nothing.
- */
-function pickerFor(type: string | undefined): Suggest | undefined {
-  if (type === undefined) return undefined;
-  const named = type === 'room' ? 'area' : type;
-  return isSuggest(named) ? named : undefined;
-}
-
-function isSuggest(type: string): type is Suggest {
-  return (
-    ['device', 'scene', 'area', 'attribute', 'role', 'icon', 'dashboard', 'facet', 'asset'] as const
-  ).includes(type as Suggest);
-}
+import { type TemplateStore } from '../core/templates.js';
 
 /**
  * What an expression came to, in a line a person can read.
@@ -357,18 +331,8 @@ export class HcPropertyPanel extends LitElement {
   @property({ attribute: false }) templates: TemplateStore | undefined;
   @property({ attribute: false }) onMakeTemplate:
     ((name: string, widgetId: string) => Promise<string>) | undefined;
-  @property({ attribute: false }) onDetachTemplate:
-    ((widgetId: string) => Promise<void>) | undefined;
-
   /** The name being typed for a new template, or absent when none is. */
   @state() private naming: string | undefined;
-
-  /** Which template is being edited, rather than the placement that names it. */
-  @state() private editingTemplate: string | undefined;
-
-  /** Write a template's subtree back, for every instance to follow (§5.4). */
-  @property({ attribute: false }) onSaveTemplate:
-    ((id: string, widget: WidgetSpec) => Promise<void>) | undefined;
 
   /** A household's own pictures, and how to add one (§9). */
   @property({ attribute: false }) assets: readonly StoredAsset[] = [];
@@ -598,16 +562,6 @@ export class HcPropertyPanel extends LitElement {
    * test still has something to edit.
    */
   private get subject(): WidgetSpec | undefined {
-    // **The template, when one is being edited.** Editing a template is the
-    // point of having made one — one edit landing everywhere — and it is a
-    // different subject from the placement that pointed here, which is why it
-    // is a mode rather than another field on the instance (§5.4).
-    const editing = this.editingTemplate;
-    if (editing !== undefined) {
-      const found = this.templates?.get(editing);
-      if (found !== undefined) return found.widget;
-    }
-
     const onPage = this.pageWidgets.find((w) => w.id === this.target);
     if (onPage !== undefined) return { type: onPage.type, config: onPage.config ?? {} };
 
@@ -626,12 +580,6 @@ export class HcPropertyPanel extends LitElement {
     const subject = this.subject;
     if (subject === undefined) return;
     const spec: WidgetSpec = { type: subject.type, config: next };
-    // A template edit goes to the template, not to the placement: the whole
-    // difference between a reference and a copy.
-    if (this.editingTemplate !== undefined) {
-      void this.onSaveTemplate?.(this.editingTemplate, spec);
-      return;
-    }
     this.onEditWidget?.(spec);
     // Composed, because the panel may be several shadow roots deep inside
     // whatever surface opened it, and the thing that persists is above all of
@@ -896,139 +844,20 @@ export class HcPropertyPanel extends LitElement {
   }
 
   /**
-   * The template row: make one, or say which one this is an instance of (§5.4).
+   * The template row (§5.4).
    *
-   * **An instance shows its parameters and nothing else.** The fields of a
-   * template instance are the template's, not this placement's — editing them
-   * here would be editing every instance, which is a thing to do deliberately
-   * and not by opening a panel. What belongs to *this* placement is the
-   * parameters it passes, so those are what it offers.
+   * **There is no "instance of" here, and that is the design.** A template is
+   * a starting point: placing one stamps out an independent copy, so a widget
+   * made from one is an ordinary widget and has nothing extra to say about
+   * itself. An earlier build showed a reference, its parameters and a way to
+   * edit the definition — the propagation model that was turned down, and
+   * every one of those rows existed only to manage a link that no longer
+   * exists.
    */
   private templateRow() {
-    // Editing the template itself: say so loudly, because every field below
-    // now belongs to every instance rather than to the one that was chosen.
-    const editing = this.editingTemplate;
-    if (editing !== undefined) {
-      return html`<div class="row" part="row">
-        <div class="name">Template</div>
-        <div class="field">
-          <span class="resolved">
-            Editing “${editing}” — every instance of it follows these fields.
-          </span>
-          <button
-            part="action"
-            @click=${() => {
-              this.editingTemplate = undefined;
-              this.draft = undefined;
-            }}
-          >
-            Done
-          </button>
-        </div>
-      </div>`;
-    }
-
     const target = this.target;
     if (target === '') return nothing;
-
-    const ref = templateRef(this.current);
-    if (ref === undefined) return this.makeRow(target);
-
-    const template = this.templates?.get(ref.template);
-    return html`<div class="row" part="row">
-        <div class="name">Instance of</div>
-        <div class="field">
-          <span class="resolved">${ref.template}</span>
-          ${
-            template === undefined
-              ? html`<span class="problem">No template by that name.</span>`
-              : nothing
-          }
-          ${
-            template === undefined || this.onSaveTemplate === undefined
-              ? nothing
-              : html`<button
-                  part="action"
-                  title="Edit the template itself — every instance follows"
-                  @click=${() => {
-                    this.editingTemplate = ref.template;
-                    this.draft = undefined;
-                  }}
-                >
-                  Edit the template
-                </button>`
-          }
-          ${
-            this.onDetachTemplate === undefined
-              ? nothing
-              : html`<button
-                  part="action"
-                  title="Give this one its own copy, no longer following the template"
-                  @click=${() => void this.detach(target)}
-                >
-                  Detach
-                </button>`
-          }
-        </div>
-      </div>
-      ${template === undefined ? nothing : this.paramRows(template, ref.params ?? {})}`;
-  }
-
-  /** One row per parameter the template's subtree actually reads. */
-  private paramRows(template: WidgetTemplate, given: Record<string, unknown>) {
-    const names = paramNames(template);
-    if (names.length === 0) {
-      return html`<div class="row" part="row">
-        <div class="name"></div>
-        <div class="field">
-          <span class="resolved">
-            This template takes no parameters — every instance draws the same thing.
-          </span>
-        </div>
-      </div>`;
-    }
-
-    return names.map((name) => {
-      const declared = (template.params ?? []).find((p) => p.name === name);
-      const picker = pickerFor(declared?.type);
-      return html`<div class="row" part="row">
-        <div class="name">${humanise(name)}</div>
-        <div class="field">
-          ${this.text(
-            {
-              name: `param_${name}`,
-              label: humanise(name),
-              form: 'text',
-              value: given[name],
-              required: false,
-              allowEmpty: false,
-              // A declared `type` is which picker §5.4 asks for; an undeclared
-              // parameter gets a plain box, because guessing would offer the
-              // wrong list and every value in it would look official.
-              // `room` is §5.4's word and `area` is this client's; the two
-              // are the same thing and a template author should not have to
-              // know which side of that seam they are on.
-              ...(picker === undefined ? {} : { suggest: picker }),
-            },
-            typeof given[name] === 'string' ? (given[name] as string) : '',
-            (v) => this.setParam(name, v),
-          )}
-          ${this.datalist(picker, `list-param_${name}`)}
-        </div>
-      </div>`;
-    });
-  }
-
-  /** Write one parameter of this instance, leaving the rest as they are. */
-  private setParam(name: string, value: string): void {
-    const ref = templateRef(this.current);
-    if (ref === undefined) return;
-    const params = { ...(ref.params ?? {}) };
-    // An empty parameter is no parameter, so the template's own default
-    // stands — the same rule `withValue` follows for an optional field.
-    if (value === '') delete params[name];
-    else params[name] = value;
-    this.commit({ template: ref.template, ...(Object.keys(params).length > 0 ? { params } : {}) });
+    return this.makeRow(target);
   }
 
   /** Offer to make a template of this widget, and take the name for it. */
@@ -1084,20 +913,11 @@ export class HcPropertyPanel extends LitElement {
     try {
       const id = await this.onMakeTemplate(name, widgetId);
       this.naming = undefined;
-      this.saved = `Made "${id}". This widget now follows it, and so will the next one.`;
+      // Nothing on the page changed: a template is a starting point, so this
+      // widget is untouched and the shape is now in the palette.
+      this.saved = `Saved "${id}". Draw it from the palette to place another.`;
     } catch (e) {
       this.trouble = `Not made: ${e instanceof Error ? e.message : String(e)}`;
-    }
-  }
-
-  private async detach(widgetId: string): Promise<void> {
-    if (this.onDetachTemplate === undefined) return;
-    this.trouble = '';
-    try {
-      await this.onDetachTemplate(widgetId);
-      this.saved = 'Detached. This one keeps what it drew and stops following the template.';
-    } catch (e) {
-      this.trouble = `Not detached: ${e instanceof Error ? e.message : String(e)}`;
     }
   }
 
@@ -1690,15 +1510,7 @@ export class HcPropertyPanel extends LitElement {
 
     const config = this.current;
     const spec = widgetSpec(this.vocabulary, subject.type);
-    // **An instance has no fields of its own.** What it carries is a
-    // reference and some parameters, both of which the template row above
-    // draws; what the widget *type* declares belongs to the template, and a
-    // control for it here would write a key `instantiate` then ignores —
-    // §5.11's "offered and refused", arrived at from an unusual direction.
-    // Editing the thing itself means editing the template, which is
-    // deliberate and not something opening a panel should do.
-    const instance = templateRef(config) !== undefined && this.editingTemplate === undefined;
-    const properties = instance ? [] : propertiesFor(spec, config);
+    const properties = propertiesFor(spec, config);
     const problems = properties.filter((p) => p.problem !== undefined).length;
 
     const preview =

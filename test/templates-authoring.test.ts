@@ -8,6 +8,8 @@ import { describe, expect, it } from 'vitest';
 import { Templates, instantiate, paramNames, templateId } from '../src/core/templates.js';
 import type { WidgetTemplate } from '../src/core/templates.js';
 import '../src/widgets/hc-property-panel.js';
+import fixture from './fixtures/vocabulary.json' with { type: 'json' };
+import { readVocabulary, type Vocabulary } from '../src/core/vocabulary.js';
 import type { HcPropertyPanel } from '../src/widgets/hc-property-panel.js';
 
 /** A panel pointed at one widget config, with a template store behind it. */
@@ -23,7 +25,8 @@ async function mountPanel(
   panel.devices = [];
   panel.templates = templates;
   panel.onMakeTemplate = async () => 'made';
-  panel.onDetachTemplate = async () => undefined;
+  // Core's real table, so the widget's own fields are described ones.
+  panel.vocabulary = readVocabulary(fixture) as Vocabulary;
   document.body.append(panel);
   await panel.updateComplete;
 
@@ -107,177 +110,52 @@ describe('what the derived parameters are for', () => {
   });
 });
 
-describe('the panel on a template instance', () => {
-  it('offers the parameters and hides the plumbing', async () => {
-    // An instance's own keys are `template` and `params`; the fields it draws
-    // are the template's, and editing those here would be editing every
-    // instance — deliberate, not something a panel does when opened.
-    const { panel, rows } = await mountPanel(
-      { template: 'room-tile', params: { room: 'kitchen' } },
-      new Templates([tile({ area_name: '{{ params.room }}' })]),
-    );
-    expect(rows(panel)).toContain('Instance of');
-    expect(rows(panel)).toContain('Room');
-    expect(rows(panel)).not.toContain('Template');
-    expect(rows(panel)).not.toContain('Params');
-  });
-
-  it('draws none of the widget type’s own fields', async () => {
-    // They belong to the template. A control for one here would write a key
-    // `instantiate` then ignores — offered and refused, from an unusual
-    // direction.
-    const { panel, rows } = await mountPanel(
-      { template: 'room-tile' },
-      new Templates([tile({ area_name: '{{ params.room }}' })]),
-    );
-    expect(rows(panel)).not.toContain('Selection mode');
-    expect(rows(panel)).not.toContain('Limit');
-    expect(rows(panel)).not.toContain('On tap');
-  });
-
-  it('says plainly when a template takes none', async () => {
-    const { panel, rows } = await mountPanel(
-      { template: 'room-tile' },
-      new Templates([tile({ area_name: 'kitchen' })]),
-    );
-    expect(rows(panel)).toContain('Instance of');
-    expect(panel.shadowRoot?.textContent).toContain('takes no parameters');
-  });
-
-  it('says so when the template it names is gone', async () => {
-    // A page silently drawing nothing is how a broken reference hides.
-    const { panel } = await mountPanel({ template: 'missing' }, new Templates([]));
-    expect(panel.shadowRoot?.querySelector('.problem')?.textContent).toContain('No template');
-  });
-
-  it('writes one parameter without disturbing the others', async () => {
-    const { panel } = await mountPanel(
-      { template: 'room-tile', params: { room: 'kitchen', kind: 'light' } },
-      new Templates([tile({ a: '{{ params.room }}', b: '{{ params.kind }}' })]),
-    );
-    let written: Record<string, unknown> | undefined;
-    panel.onEditWidget = (next) => {
-      written = next.config as Record<string, unknown>;
-    };
-
-    const input = [...(panel.shadowRoot?.querySelectorAll('input') ?? [])].find(
-      (i) => i.getAttribute('aria-label') === 'Room',
-    ) as HTMLInputElement;
-    input.value = 'hall';
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-
-    expect(written).toEqual({ template: 'room-tile', params: { room: 'hall', kind: 'light' } });
-  });
-
-  it('drops a parameter cleared to nothing, so the default stands', async () => {
-    const { panel } = await mountPanel(
-      { template: 'room-tile', params: { room: 'kitchen' } },
-      new Templates([tile({ a: '{{ params.room }}' })]),
-    );
-    let written: Record<string, unknown> | undefined;
-    panel.onEditWidget = (next) => {
-      written = next.config as Record<string, unknown>;
-    };
-
-    const input = [...(panel.shadowRoot?.querySelectorAll('input') ?? [])].find(
-      (i) => i.getAttribute('aria-label') === 'Room',
-    ) as HTMLInputElement;
-    input.value = '';
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-
-    expect(written).toEqual({ template: 'room-tile' });
-  });
-
-  it('offers to make a template of a widget that is not one', async () => {
+describe('a template is a starting point, not a link (§5.4)', () => {
+  it('offers to make one from an ordinary widget', async () => {
     const { panel, rows } = await mountPanel({ text: 'Hall' }, new Templates([]));
     expect(rows(panel)).toContain('Template');
+  });
+
+  it('says nothing about where a widget came from', async () => {
+    // **There is no "instance of" row, and that is the design.** Placing a
+    // template stamps out an independent copy, so a widget made from one is an
+    // ordinary widget with nothing extra to say about itself. The rows that
+    // used to be here — the reference, its parameters, detach, edit the
+    // definition — existed only to manage a link that no longer exists.
+    const { panel, rows } = await mountPanel(
+      { area_name: 'kitchen', limit: 4 },
+      new Templates([tile({ area_name: '{{ params.room }}' })]),
+    );
     expect(rows(panel)).not.toContain('Instance of');
+    expect(rows(panel)).toContain('Limit');
+  });
+
+  it('draws the widget’s own fields, because they are its own', async () => {
+    // Under the link model these were hidden: they belonged to the template
+    // and editing them here would have written keys `instantiate` ignored.
+    // A copy owns them.
+    const { panel, rows } = await mountPanel(
+      { area_name: 'kitchen', limit: 4 },
+      new Templates([tile({})]),
+    );
+    expect(rows(panel)).toContain('Limit');
   });
 });
 
-describe('editing the template itself', () => {
-  it('shows the template’s fields instead of the instance’s parameters', async () => {
-    const templates = new Templates([tile({ area_name: '{{ params.room }}', limit: 4 })]);
-    const { panel, rows } = await mountPanel({ template: 'room-tile' }, templates);
-    panel.onSaveTemplate = async () => undefined;
-    await panel.updateComplete;
-
-    const edit = [...(panel.shadowRoot?.querySelectorAll('button') ?? [])].find(
-      (b) => b.textContent?.trim() === 'Edit the template',
-    ) as HTMLButtonElement;
-    expect(edit, 'no way to edit the template').not.toBeUndefined();
-    edit.click();
-    await panel.updateComplete;
-
-    // The type's own fields are exactly what is wanted now.
-    expect(rows(panel)).toContain('Limit');
-    expect(rows(panel)).not.toContain('Instance of');
-    expect(panel.shadowRoot?.textContent).toContain('every instance of it follows');
+describe('what placing a template produces', () => {
+  it('is a plain config with the parameters already substituted', async () => {
+    // "Applied, and then yours": the copy is wired and independent from the
+    // moment it lands, and nothing in the document records the template.
+    const t = tile({ area_name: '{{ params.room }}', limit: 4 });
+    const stamped = instantiate(t, { room: 'kitchen' });
+    expect(stamped.config).toEqual({ area_name: 'kitchen', limit: 4 });
+    expect(stamped.config?.['template']).toBeUndefined();
   });
 
-  it('writes to the template, not to the placement that named it', async () => {
-    // The whole difference between a reference and a copy.
-    const templates = new Templates([tile({ area_name: '{{ params.room }}', limit: 4 })]);
-    const { panel } = await mountPanel({ template: 'room-tile' }, templates);
-    const saved: { id: string; config: unknown }[] = [];
-    const edits: unknown[] = [];
-    panel.onSaveTemplate = async (id, widget) => {
-      saved.push({ id, config: widget.config });
-    };
-    panel.onEditWidget = (next) => edits.push(next);
-    await panel.updateComplete;
-
-    (
-      [...(panel.shadowRoot?.querySelectorAll('button') ?? [])].find(
-        (b) => b.textContent?.trim() === 'Edit the template',
-      ) as HTMLButtonElement
-    ).click();
-    await panel.updateComplete;
-
-    const limit = [...(panel.shadowRoot?.querySelectorAll('input') ?? [])].find(
-      (i) => i.getAttribute('aria-label') === 'Limit',
-    ) as HTMLInputElement;
-    limit.value = '2';
-    limit.dispatchEvent(new Event('input', { bubbles: true }));
-
-    expect(saved.at(-1)?.id).toBe('room-tile');
-    expect((saved.at(-1)?.config as Record<string, unknown>)['limit']).toBe(2);
-    // And nothing was written to the placement.
-    expect(edits).toHaveLength(0);
-  });
-
-  it('goes back to the instance when it is done', async () => {
-    const templates = new Templates([tile({ area_name: '{{ params.room }}' })]);
-    const { panel, rows } = await mountPanel({ template: 'room-tile' }, templates);
-    panel.onSaveTemplate = async () => undefined;
-    await panel.updateComplete;
-
-    (
-      [...(panel.shadowRoot?.querySelectorAll('button') ?? [])].find(
-        (b) => b.textContent?.trim() === 'Edit the template',
-      ) as HTMLButtonElement
-    ).click();
-    await panel.updateComplete;
-    (
-      [...(panel.shadowRoot?.querySelectorAll('button') ?? [])].find(
-        (b) => b.textContent?.trim() === 'Done',
-      ) as HTMLButtonElement
-    ).click();
-    await panel.updateComplete;
-
-    expect(rows(panel)).toContain('Instance of');
-    expect(rows(panel)).toContain('Room');
-  });
-
-  it('offers no way in where the host cannot write templates', async () => {
-    // §5.11 again: not offered rather than offered and refused.
-    const templates = new Templates([tile({ area_name: '{{ params.room }}' })]);
-    const { panel } = await mountPanel({ template: 'room-tile' }, templates);
-    panel.onSaveTemplate = undefined;
-    await panel.updateComplete;
-    const edit = [...(panel.shadowRoot?.querySelectorAll('button') ?? [])].find(
-      (b) => b.textContent?.trim() === 'Edit the template',
-    );
-    expect(edit).toBeUndefined();
+  it('leaves the template alone when the copy is edited', async () => {
+    const t = tile({ area_name: '{{ params.room }}', limit: 4 });
+    const stamped = instantiate(t, { room: 'kitchen' });
+    (stamped.config as Record<string, unknown>)['limit'] = 99;
+    expect(t.widget.config?.['limit']).toBe(4);
   });
 });

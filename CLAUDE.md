@@ -649,15 +649,24 @@ apart here, because conflating them is the easy mistake:
 | Name | What it is | Semantics | Status |
 |---|---|---|---|
 | **Dashboard template** | a whole page you start from | **copy** — the two have nothing to do with each other afterwards | ships: `DashboardDefinition.template` |
-| **Widget template** | a widget subtree with parameters | **by reference** | this section |
-| **Rule template** | a rule with parameters (§21.4) | **by reference** | not built |
+| **Widget template** | a widget subtree with parameters | **copy** — corrected 2026-09-11 | this section |
+| **Rule template** | a rule with parameters (§21.4) | open | not built |
 
-Copy is right for a starting point and reference is right for the other two, for
-opposite reasons. A page you began from is not a thing you want changing under
-you later — *"template are starting points"* — and that decision is what keeps
-it one boolean rather than an instance model, with nothing to re-sync and no
-question about who wins. A `room-tile` used in twelve rooms is the exact
-opposite case: one edit landing everywhere is the whole point.
+**All of them are copies, and the paragraph that used to argue otherwise was
+wrong.** It said reference was right for a widget template because "one edit
+landing everywhere is the whole point". It is not: *"template are starting
+points"*, said three separate times against three separate proposals, and
+`hc-web-flutter`'s own plan records the same call —
+
+> The thing this plan got most wrong was the shape of the answer. Four of the
+> six phases were drawn as propagation — edit the definition, the copies follow
+> — and none of them shipped that way. A template, a saved look and a repeat are
+> all *applied and then yours*.
+> — "From Cards to Frames", 3 September 2026
+
+Copy deletes everything expensive with it: no instances, no overrides, no
+re-sync, and nobody has to decide who wins when a definition changes under a
+page made from it.
 
 A **widget template** is a widget subtree with named parameters, stored
 server-side and instantiated many times.
@@ -680,9 +689,16 @@ server-side and instantiated many times.
 }
 ```
 
-Instantiation is by reference, not copy — editing the template updates every
-instance. Combined with P2, a whole dashboard generates from a room list, which
-is the single highest-leverage capability on this list for real users.
+Instantiation is by **copy**: placing one substitutes the parameters and stamps
+out an ordinary widget, independent from that moment. Nothing in the document
+records where it came from, which is what makes it an ordinary widget rather
+than a thing with a link to manage. Combined with P2, a whole dashboard still
+generates from a room list — the leverage is in the stamping, not in the link.
+
+This client shipped the by-reference model on 2026-09-11 and reversed it the
+same day. The reversal is recorded rather than erased because the reasoning is
+worth keeping: the link is not more powerful, it is more expensive, and it asks
+a question — who wins — that nobody wanted to answer.
 
 Widget templates are also an extension kind (`provides.templates`), so an
 extension can ship a curated arrangement, not just widgets. An extension that
@@ -2198,7 +2214,7 @@ not a failure of it.
 - [x] **P2** device query type, live client-side maintenance — `/api/query` is
       **not built and not needed**: the whole house fits in the store, so a
       query resolved there is live by construction (§17)
-- [x] **P3** template storage, parameter substitution, by-reference instantiation
+- [x] **P3** template storage, parameter substitution, instantiation — **by copy**, not by reference (§5.4, corrected 2026-09-11)
 - [x] **P4** slot model + chrome suppression rules
 - [x] **P5** overlay stack: sheet, dialog, toast, confirm — **no popover**, which
       nothing has asked for: every case so far wanted the sheet, and a popover
@@ -2248,7 +2264,7 @@ not a failure of it.
 
 **Phase 5 — Dashboards & PWA**
 - [ ] Dashboard document schema v1 + migration harness
-- [ ] Per-breakpoint layouts; template instances by reference
+- [ ] Per-breakpoint layouts; templates stamped out as copies (§5.4)
 - [ ] PWA shell caching, stale-state indicator
 - [ ] Kiosk mode (no chrome, wake lock, auto-reconnect)
 
@@ -2360,13 +2376,15 @@ not a failure of it.
       on every key of every config. The toggle follows the renderer rather than
       a vocabulary that has not been written; offering it nowhere would have
       meant a feature that works everywhere and is reachable from nowhere
-- [x] Template authoring UI. P3 has had the whole mechanism since it landed —
+- [x] Template authoring UI (**built by reference, reversed to copy the same
+      day** — §5.4). P3 has had the whole mechanism since it landed —
       substitution, by-reference instantiation, a store behind an interface —
       and nothing could make a template, so §5.4's "highest-leverage capability
       on the primitive list" was unreachable. Make one out of a widget on the
-      page, place instances from the palette, edit the template once and every
-      instance follows. **The parameters are derived from the subtree**, not
-      declared in a second editor: a person writes `{{ params.room }}` (or
+      page and draw it again from the palette; what lands is an ordinary widget
+      with the parameters already substituted, independent from that moment.
+      **The parameters are derived from the subtree**, not declared in a second
+      editor: a person writes `{{ params.room }}` (or
       `params.room` through the `ƒx` toggle, since substitution is P1's
       language) and the template's inputs are whatever they wrote — a declared
       list that can disagree with the subtree is one that eventually does
