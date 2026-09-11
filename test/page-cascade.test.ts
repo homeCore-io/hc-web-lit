@@ -139,3 +139,24 @@ describe('what a container paints', () => {
     expect(resolved('stack', 'position')).toBe('absolute');
   });
 });
+
+describe('what the surface does with pointer events while arranging', () => {
+  const clean = css.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  it('takes them before the widget sees them', () => {
+    // §14.2. Dragging a card that contains a slider moves the card; it does
+    // not set brightness — and pressing the toggle in a device row while the
+    // page was being arranged switched a real outlet.
+    expect(clean).toMatch(
+      /\.frame\[data-editing\] \.body,\s*\n?\s*\.grid\[data-editing\] \.body\s*\{[^}]*pointer-events:\s*none/,
+    );
+  });
+
+  it('leaves the handles alone, which are not in the body', () => {
+    // The move grip, the eight resize grips and the turn are siblings of the
+    // body inside the placement, which is why the rule is on the body and not
+    // on the placement.
+    expect(resolved('grab', 'pointer-events')).toBeUndefined();
+    expect(resolved('grip', 'pointer-events')).toBeUndefined();
+  });
+});

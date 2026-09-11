@@ -5,6 +5,7 @@ import type { DeviceState } from '../src/core/device.js';
 import '../src/widgets/hc-controls.js';
 import '../src/widgets/hc-device-card.js';
 import '../src/widgets/hc-keypad.js';
+import '../src/shell/hc-app.js';
 import type { HcControls } from '../src/widgets/hc-controls.js';
 
 const light = (attrs: Record<string, unknown>): DeviceState => ({
@@ -312,5 +313,79 @@ describe('a keypad and a remote, from one widget', () => {
     expect(el.shadowRoot?.querySelectorAll('button.key')).toHaveLength(0);
     expect(el.shadowRoot?.querySelectorAll('.key')).toHaveLength(3);
     expect(el.shadowRoot?.textContent).toContain('Sends only');
+  });
+});
+
+describe('what may actuate while a page is being arranged', () => {
+  // §14.2's second half. The first — the surface taking pointer events before
+  // the widget sees them — is asserted in `page-cascade.test.ts`; this is the
+  // one that holds when a widget gets an event anyway.
+  const outlet: DeviceState = {
+    device_id: 'plug',
+    name: 'Outlet',
+    plugin_id: 'yolink',
+    available: true,
+    attributes: { on: true },
+    last_seen: '2026-09-11T00:00:00Z',
+    schema: { attributes: { on: { kind: 'bool', writable: true } } },
+  };
+
+  const shell = async (editing: boolean) => {
+    const el = document.createElement('hc-app');
+    const sent: unknown[] = [];
+    const api = new HcApi({ baseUrl: 'http://localhost', token: 'k' });
+    api.commandDevice = async (id: string, patch: Record<string, unknown>) => {
+      sent.push({ id, patch });
+    };
+    api.callAction = async (id: string, action: string, params: unknown) => {
+      sent.push({ id, action, params });
+    };
+    document.body.append(el);
+    await el.updateComplete;
+    (el as unknown as { api: HcApi }).api = api;
+    (el as unknown as { editing: boolean }).editing = editing;
+    // Past the Connect button, or the shell draws a note and none of the page
+    // — the overlay stack included, which is where a refusal has to be said.
+    (el as unknown as { phase: string }).phase = 'live';
+    (el as unknown as { store: { reset: (d: DeviceState[]) => void } }).store.reset([outlet]);
+    await el.updateComplete;
+    return { el, sent };
+  };
+
+  it('nothing does', async () => {
+    // A toggle in a device list switched a real outlet while somebody was
+    // moving the card it sat in.
+    const { el, sent } = await shell(true);
+    await (el as unknown as { command: (r: unknown) => Promise<void> }).command({
+      deviceId: 'plug',
+      patch: { on: false },
+    });
+    expect(sent).toEqual([]);
+  });
+
+  it('and it says so rather than doing nothing quietly', async () => {
+    // A control that silently does nothing is the worst kind — the same rule
+    // the safety refusal already keeps. The overlay is the app's own element,
+    // so this watches the real one rather than substituting for it.
+    const { el } = await shell(true);
+    const stack = el.renderRoot.querySelector('hc-overlay') as HTMLElement & {
+      toast: (m: string, o?: unknown) => void;
+    };
+    const said: string[] = [];
+    stack.toast = (m: string) => said.push(m);
+    await (el as unknown as { command: (r: unknown) => Promise<void> }).command({
+      deviceId: 'plug',
+      patch: { on: false },
+    });
+    expect(said.join(' ')).toMatch(/arrang/i);
+  });
+
+  it('everything that did before, the moment arranging stops', async () => {
+    const { el, sent } = await shell(false);
+    await (el as unknown as { command: (r: unknown) => Promise<void> }).command({
+      deviceId: 'plug',
+      patch: { on: false },
+    });
+    expect(sent).toEqual([{ id: 'plug', patch: { on: false } }]);
   });
 });

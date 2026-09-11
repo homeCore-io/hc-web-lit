@@ -292,6 +292,22 @@ export class HcPage extends LitElement {
        holds the handles: free mode's turn handle sits *above* the card, and a
        clip on the box around it deleted the handle rather than the overflow.
        The two things want opposite treatment, so they are two elements. */
+    /* **The surface takes pointer events before the widget sees them**
+       (§14.2). Dragging a card that contains a slider moves the card; it does
+       not set brightness — and pressing the toggle in a device row while the
+       page is being arranged switched a real outlet, which is what this is
+       really about.
+
+       On the body rather than on the placement, because the placement also
+       holds the handles: the move grip, the eight resize grips and the turn
+       are siblings of this and stay live. And the press still reaches the
+       surface, which picks by hit test rather than by event target — so a
+       card is selected by pressing it exactly as before, and what changed is
+       only that the widget underneath no longer hears it. */
+    .frame[data-editing] .body,
+    .grid[data-editing] .body {
+      pointer-events: none;
+    }
     .body {
       width: 100%;
       height: 100%;
@@ -873,6 +889,7 @@ export class HcPage extends LitElement {
       <div
         class="frame"
         ?data-armed=${this.armed}
+        ?data-editing=${this.mode === 'edit'}
         @pointerdown=${(e: PointerEvent) => this.onSurfacePress(e)}
         style="width:${frame.width}px;height:${tall}px;transform:scale(${scale})"
       >
@@ -2325,6 +2342,7 @@ export class HcPage extends LitElement {
       <div
         class="grid"
         ?data-armed=${this.armed}
+        ?data-editing=${this.mode === 'edit'}
         @pointerdown=${(e: PointerEvent) => this.onSurfacePress(e)}
         style="grid-template-columns:repeat(${columns},1fr);
                grid-auto-rows:${rowHeight}px;

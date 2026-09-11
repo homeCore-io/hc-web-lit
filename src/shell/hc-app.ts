@@ -1106,6 +1106,22 @@ export class HcApp extends LitElement {
     const device = this.store.get(r.deviceId);
     if (api === undefined || device === undefined) return;
 
+    // **Nothing actuates while the page is being arranged** (§14.2). The
+    // surface takes pointer events before a widget sees them, which is the
+    // half that makes arranging feel right; this is the half that makes it
+    // true. A widget that gets an event anyway — one drawn by an extension,
+    // one with a control the surface cannot cover, a keyboard press — still
+    // cannot turn anything on, because the decision is the host's and not the
+    // widget's, in exactly the sense §5.10 means for the safety policy.
+    //
+    // It was neither, and both halves were unticked in Phase 10: a toggle in
+    // a device list switched a real outlet while somebody was moving the card
+    // it sat in.
+    if (this.editing) {
+      this.overlay?.toast('Not while you are arranging the page.', { kind: 'warn' });
+      return;
+    }
+
     const verdict =
       r.action !== undefined ? checkAction(device, r.action.id) : check(device, r.patch ?? {});
 
