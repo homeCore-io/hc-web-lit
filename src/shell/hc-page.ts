@@ -11,7 +11,7 @@
  * rejects the whole dashboard on the first illegal placement, so what is drawn
  * has to be what would be saved (§5.7).
  */
-import { LitElement, css, html, nothing } from 'lit';
+import { LitElement, css, html, nothing, unsafeCSS } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type {
   DashboardBreakpoint,
@@ -34,6 +34,7 @@ import {
   type Handle,
 } from '../core/geometry.js';
 import { framesByPath, pageRectOf } from '../core/frames.js';
+import { deriveDensity } from '../design/tokens.js';
 import { clickTarget, groupOf, isUnder, membersOf, stepOut } from '../core/groups.js';
 import type { SelectionContext } from '../core/selection.js';
 import { isVisible } from '../core/visibility.js';
@@ -54,6 +55,36 @@ import { mountWidget, specFor, type MountEnv, type MountTarget } from './mount.j
  * two, and on a wall panel every press would otherwise be a tiny drag.
  */
 const NUDGE = 4;
+
+/**
+ * The dense step of the skin's own scale, and when to use it.
+ *
+ * Taken from `deriveDensity` rather than written out, so there is one place
+ * the numbers live and a skin that redefines compact redefines this too.
+ */
+const COMPACT = deriveDensity('compact');
+
+/** Air under the lowest grown placement, so a page does not end flush. */
+const GROWN_MARGIN = 24;
+
+/** Three comfortable rows: below this a box is a strip, not a page. */
+const COMPACT_BELOW = deriveDensity('comfortable').rowHeight * 3;
+
+/**
+ * Whether a placement is as tall as what is in it.
+ *
+ * **Opt-in, and it rides in the widget's config** like `layer` and `group` do
+ * (§14.1) — core stores the object verbatim, so this needs nothing from the
+ * schema and absent means exactly what it has always meant.
+ *
+ * Opt-in rather than automatic because a composed page is a design: a
+ * photograph cropped to a band, a shape sized to a gap, a heading given room
+ * beneath it are all placements whose height is the point. Growing every one of
+ * them to fit would rearrange somebody's page to fix four cards.
+ */
+function fitsContent(config: Record<string, unknown> | undefined): boolean {
+  return config?.['fit'] === 'content';
+}
 
 /** How many empty rows a grid offers to draw into, below what is on it. */
 const SPARE = 3;
@@ -123,6 +154,14 @@ export class HcPage extends LitElement {
       display: block;
       color: var(--hc-ink, #e9edf2);
       font-family: var(--hc-font-body, system-ui, sans-serif);
+      /* **The skin's own body size, which nothing was using.** The type scale
+         defines body at 13px and scales it per skin, and this surface set no
+         font-size at all — so every widget that did not name a role inherited
+         the browser's 16px. A mode chip came out 162px wide on a 320px strip,
+         two of them wrapped, and the strip clipped the second row. The scale
+         was right; nothing was reading it. */
+      font-size: var(--hc-text-body-size, 13px);
+      line-height: var(--hc-text-body-height, 1.4);
     }
     .frame {
       position: relative;
@@ -144,6 +183,44 @@ export class HcPage extends LitElement {
     .cell {
       min-width: 0;
     }
+    /* **Density follows the box the author drew** (§14.1's rule, applied to
+       size rather than to overflow: "a placement is the size the author drew,
+       and a widget does not get to disagree").
+
+       One density for every surface is what made the house page wrong. The
+       skin is the comfortable step — a 52px row, a 44px tap target — which is
+       right for a wall panel and much too big for a composed page whose rects
+       were drawn against a denser rendering: two mode chips wrapped to 98px in
+       a 56px box, and a row of light pills at 52px did not fit the 44px it was
+       given.
+
+       So a short box gets the compact step of the same scale. The tokens are
+       custom properties and a widget reads them through inheritance, so this
+       needs no change in any widget — and it is automatic, which matters
+       because nobody is going to set a density per placement.
+
+       Three comfortable rows is the threshold: below that the box is being
+       used for a strip or a short list, and above it there is room to breathe. */
+    .placed:not([data-fits]),
+    .cell {
+      /* **Not on a placement that fits its content**, and this is not a
+         detail: a size container is size-contained, so its children stop
+         contributing to its height. On a box with a drawn height that is
+         exactly right, and it is what makes the query answerable. On a box
+         that grows to hold a list it is fatal — the list rendered 1169px
+         inside a placement that stayed 250px and clipped it, which is the bug
+         this whole change exists to fix, reintroduced one rule later. A box
+         with no fixed height has no height to query anyway. */
+      container-type: size;
+    }
+    @container (max-height: ${unsafeCSS(COMPACT_BELOW)}px) {
+      .body {
+        --hc-density-row-height: ${unsafeCSS(COMPACT.rowHeight)}px;
+        --hc-density-control-height: ${unsafeCSS(COMPACT.controlHeight)}px;
+        --hc-density-min-tap: ${unsafeCSS(COMPACT.minTapTarget)}px;
+        --hc-density-card-padding: ${unsafeCSS(COMPACT.cardPadding)}px;
+      }
+    }
     /* A placement is the size the author drew, and a widget does not get to
        disagree. A device set of twelve full cards in a short box escaped its
        rect and drew over three neighbours — which is not a widget that needs
@@ -159,6 +236,14 @@ export class HcPage extends LitElement {
       height: 100%;
       min-width: 0;
       overflow: hidden;
+    }
+    /* A placement that fits its content is not clipped by it — that is the
+       whole difference. It keeps the drawn rect as a floor and grows past it,
+       and the canvas grows to hold whatever it reached. */
+    .placed[data-fits] > .body {
+      height: auto;
+      min-height: 100%;
+      overflow: visible;
     }
     /* The handles, while the page is being arranged (§14.2). Over the widget
        rather than around it: a page that reflowed when the handles appeared
@@ -621,6 +706,16 @@ export class HcPage extends LitElement {
   private moving: ReadonlyMap<string, Box> | undefined;
 
   /**
+   * How far the tallest content-fitting placement reaches, in frame units.
+   *
+   * Measured after a render rather than computed before one, because the
+   * question is what the browser laid out — a list of seven media players is
+   * as tall as seven of them are, and nothing upstream of layout knows that.
+   * Held as state so the measurement feeds the next frame's canvas height.
+   */
+  @state() private grown = 0;
+
+  /**
    * A composed page, at the size its author drew it.
    *
    * `frame.fit` is the document's own answer to "what happens on a narrower
@@ -639,12 +734,16 @@ export class HcPage extends LitElement {
     const fit = frame.fit ?? 'scroll';
     const room = this.fitWidth > 0 ? this.fitWidth : this.clientWidth;
     const scale = fit === 'scroll' || room <= 0 ? 1 : room / frame.width;
+    // **The page grows to hold what grew.** A placement that fits its content
+    // can end up taller than the canvas it was drawn on, and a frame that kept
+    // its stated height would simply clip it again one level up.
+    const tall = Math.max(frame.height, this.grown);
     return html`
       <div
         class="frame"
         ?data-armed=${this.armed}
         @pointerdown=${(e: PointerEvent) => this.onSurfacePress(e)}
-        style="width:${frame.width}px;height:${frame.height}px;transform:scale(${scale})"
+        style="width:${frame.width}px;height:${tall}px;transform:scale(${scale})"
       >
         ${this.frameBodies(items)} ${this.drawPreview()} ${this.groupFrame()}
         ${items.map((item) => {
@@ -653,6 +752,11 @@ export class HcPage extends LitElement {
           if (w === undefined || r == null) return nothing;
           const z = w.config?.['z'];
           const at = this.previewOf(item.id, { x: r.x, y: r.y, w: r.w, h: r.h });
+          // A placement that says so is as tall as what is in it (§14.1). The
+          // rect stays the author's *minimum*: a card never shrinks below the
+          // box it was drawn in, it only grows past it when the alternative is
+          // hiding something.
+          const fits = fitsContent(w.config);
           // **Stored and, until now, never acted on.** §14.3 says core keeps
           // `angle` and has no opinion about it; a client that keeps it and
           // does not draw it is a client where turning a card does nothing.
@@ -662,9 +766,10 @@ export class HcPage extends LitElement {
             data-widget=${item.id}
             ?data-picked=${this.mode === 'edit' && this.picked.has(item.id)}
             ?data-dragging=${this.dragging?.with.has(item.id) === true}
-            style="left:${at.x}px;top:${at.y}px;width:${at.w}px;height:${at.h}px;${
-              turn === 0 ? '' : `transform:rotate(${turn}deg);`
-            }${typeof z === 'number' ? `z-index:${z}` : ''}"
+            ?data-fits=${fits}
+            style="left:${at.x}px;top:${at.y}px;width:${at.w}px;${
+              fits ? `min-height:${at.h}px;` : `height:${at.h}px;`
+            }${turn === 0 ? '' : `transform:rotate(${turn}deg);`}${typeof z === 'number' ? `z-index:${z}` : ''}"
           >
             <div class="body">${this.draw(w)}</div>
             ${this.handles(item.id, { x: r.x, y: r.y, w: r.w, h: r.h }, item.angle ?? 0)}
@@ -1246,6 +1351,8 @@ export class HcPage extends LitElement {
    * will not read documentation to discover.
    */
   override updated(changed: Map<string, unknown>): void {
+    this.measureGrowth();
+
     // The shell renders the Group and Ungroup buttons and does the writing, so
     // it has to know what is in hand. An event rather than a callback because
     // the selection is the page's (§14.2) and this is it reporting, not the
@@ -1258,6 +1365,30 @@ export class HcPage extends LitElement {
         detail: { ids: [...this.picked], inside: this.inside },
       }),
     );
+  }
+
+  /**
+   * How far the content-fitting placements actually reach.
+   *
+   * After layout, because that is the only moment the answer exists: a list is
+   * as tall as its rows turned out to be. Written back only when it changed,
+   * or the render it triggers would measure again and never settle.
+   */
+  private measureGrowth(): void {
+    const frame = this.shadowRoot?.querySelector<HTMLElement>('.frame');
+    if (frame === null || frame === undefined) {
+      if (this.grown !== 0) this.grown = 0;
+      return;
+    }
+
+    let reach = 0;
+    for (const el of frame.querySelectorAll<HTMLElement>('.placed[data-fits]')) {
+      reach = Math.max(reach, el.offsetTop + el.offsetHeight);
+    }
+    // A little air under the lowest thing, so a grown page does not end flush
+    // against the last row of a list.
+    const want = reach === 0 ? 0 : reach + GROWN_MARGIN;
+    if (Math.abs(want - this.grown) > 1) this.grown = want;
   }
 
   private pick(id: string, extend: boolean): void {

@@ -22,13 +22,45 @@ const css = [HcPage.styles].flat().map(String).join('\n');
  */
 function resolved(className: string, property: string): string | undefined {
   let value: string | undefined;
-  for (const match of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
-    const selectors = (match[1] ?? '').split(',').map((s) => s.trim());
-    if (!selectors.some((s) => s === `.${className}` || s.endsWith(` .${className}`))) continue;
-    for (const decl of (match[2] ?? '').split(';')) {
-      const [name, given] = decl.split(':').map((x) => x.trim());
-      if (name === property && given !== undefined) value = given;
+  let depth = 0;
+  let selector = '';
+  let body = '';
+  let inBody = false;
+
+  // Comments first: a block comment sitting above a rule would otherwise be
+  // swallowed into its selector, and `/* … */ .cell` matches no class name.
+  const clean = css.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  // Hand-walked rather than matched, because a naive `{...}` regex mis-parses
+  // the first nested at-rule and then everything after it. Only rules at the
+  // top level count: an `@container` override is a condition, not what the
+  // class resolves to by default, and the conditional cases are asserted on
+  // their own below.
+  for (const ch of clean) {
+    if (ch === '{') {
+      depth++;
+      if (depth === 1) inBody = true;
+      else if (inBody) body += ch;
+      continue;
     }
+    if (ch === '}') {
+      depth--;
+      if (depth === 0) {
+        const names = selector.split(',').map((x) => x.trim());
+        if (names.some((n) => n === `.${className}`)) {
+          for (const decl of body.split(';')) {
+            const [name, given] = decl.split(':').map((x) => x.trim());
+            if (name === property && given !== undefined) value = given;
+          }
+        }
+        selector = '';
+        body = '';
+        inBody = false;
+      } else if (inBody) body += ch;
+      continue;
+    }
+    if (depth === 0) selector += ch;
+    else if (inBody) body += ch;
   }
   return value;
 }
@@ -54,5 +86,11 @@ describe('a composed placement', () => {
 
   it('keeps the frame a containing block for what it positions', () => {
     expect(resolved('frame', 'position')).toBe('relative');
+  });
+
+  it('lets a placement that fits its content out of the clip', () => {
+    // The exception, asserted as one: a card told to be as tall as what is in
+    // it is the one thing the body must not cut off.
+    expect(css).toMatch(/\.placed\[data-fits\]\s*>\s*\.body\s*\{[^}]*overflow:\s*visible/);
   });
 });

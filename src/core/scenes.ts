@@ -46,13 +46,17 @@ function isLightScene(d: DeviceState): boolean {
  *   about the whole house, not every scene in it.
  * - `room` — scenes whose area matches, once both sides are normalised. 41 of
  *   58 scenes in the reference house carry an area.
- * - `device` — scenes a particular device provides.
+ * - `device` — the scenes that drive this device, with `@picked` resolved
+ *   against the surface's selection. A scene is bound to a light
+ *   *group* rather than to a bulb, so this is the light scenes of the room it
+ *   is in, unless a plugin declared `parent_device_id` and meant it.
  * - explicit `scene_ids` — exactly those, in the order written.
  */
 export function scenesInScope(
   config: SceneRowConfig,
   devices: readonly DeviceState[],
   room?: string,
+  picked?: string,
 ): DeviceState[] {
   const scenes = devices.filter(isScene);
 
@@ -79,8 +83,42 @@ export function scenesInScope(
         want === '' ? [] : scenes.filter((d) => normalizeAreaName(effectiveArea(d)) === want);
       break;
     case 'device': {
-      const id = config.device_id;
-      chosen = id === undefined ? [] : scenes.filter((d) => d.parent_device_id === id);
+      // **A scene is bound to a light *group*, not to a bulb.** This asked for
+      // `parent_device_id` and nothing else, and not one of the 58 scenes in
+      // the reference house carries one — so a device row rendered "No scenes
+      // here." beside ten scenes that drive the very lamp that was selected.
+      // It was not a house without the data; it was a lookup on the wrong
+      // field.
+      //
+      // What the data does have is the group: a Hue scene publishes
+      // `group_rid`, `group_kind` and the area the group is in, and a light
+      // publishes its area. So a light scene belongs to a device when they
+      // are in the same room — which is what "this lamp's scenes" means to a
+      // person, and the closest relation the plugins actually give.
+      //
+      // `parent_device_id` is still honoured first, because a plugin that does
+      // declare one means it exactly and should not be second-guessed.
+      // **`@picked` is resolved here, like `@room` is.** The placement seam
+      // hands a widget the token and the surface's answer to it (§14.1), and
+      // this branch read the token straight through — so it looked for a
+      // device literally called "@picked", found none, and reported no scenes
+      // however many the selected lamp had.
+      const id = config.device_id === '@picked' ? picked : config.device_id;
+      if (id === undefined) {
+        chosen = [];
+        break;
+      }
+      const declared = scenes.filter((d) => d.parent_device_id === id);
+      if (declared.length > 0) {
+        chosen = declared;
+        break;
+      }
+      const device = devices.find((d) => d.device_id === id);
+      const area = device === undefined ? '' : normalizeAreaName(effectiveArea(device));
+      chosen =
+        area === ''
+          ? []
+          : scenes.filter((d) => isLightScene(d) && normalizeAreaName(effectiveArea(d)) === area);
       break;
     }
     default:

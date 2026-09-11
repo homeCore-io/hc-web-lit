@@ -70,3 +70,101 @@ describe('scenesInScope', () => {
     expect(got.map((s) => s.device_id)).toEqual(['house_a']);
   });
 });
+
+describe('the scenes that drive one device', () => {
+  const scene = (over: Partial<DeviceState> & { device_id: string }): DeviceState => ({
+    name: over.device_id,
+    plugin_id: 'plugin.hue',
+    available: true,
+    attributes: {},
+    last_seen: '2026-09-11T00:00:00Z',
+    schema: { actions: [{ id: 'activate', label: 'Activate' }] },
+    ...over,
+  });
+
+  const lamp = scene({
+    device_id: 'lamp',
+    name: 'Office Desk Lamp',
+    area: 'office',
+    device_type: 'light',
+    attributes: { on: true },
+    schema: {},
+  });
+  const officeScene = scene({
+    device_id: 's1',
+    name: 'Concentrate',
+    area: 'office',
+    attributes: { group_rid: 'g-office', group_kind: 'room' },
+  });
+  const elsewhere = scene({
+    device_id: 's2',
+    name: 'Relax',
+    area: 'living_room',
+    attributes: { group_rid: 'g-living', group_kind: 'room' },
+  });
+  const lutron = scene({
+    device_id: 's3',
+    name: 'Movie',
+    area: 'office',
+    plugin_id: 'plugin.lutron',
+    attributes: { on: true },
+  });
+
+  const house = [lamp, officeScene, elsewhere, lutron];
+
+  it('finds the light scenes of the room the device is in', () => {
+    // **A scene is bound to a light group, not to a bulb.** This asked for
+    // `parent_device_id` and nothing else, and not one of the 58 scenes in the
+    // reference house carries one — so the row rendered "No scenes here."
+    // beside ten scenes that drive the very lamp that was selected.
+    const got = scenesInScope({ scope: 'device', device_id: 'lamp' }, house);
+    expect(got.map((d) => d.name)).toEqual(['Concentrate']);
+  });
+
+  it('leaves out a room scene that is not a light scene', () => {
+    // A Lutron room scene is the room's, not this lamp's — which is the same
+    // line `skip_light_scenes` draws from the other side.
+    const got = scenesInScope({ scope: 'device', device_id: 'lamp' }, house);
+    expect(got.map((d) => d.name)).not.toContain('Movie');
+  });
+
+  it('believes a plugin that does declare a parent', () => {
+    // A plugin that says so means it exactly and should not be second-guessed.
+    const owned = scene({
+      device_id: 's4',
+      name: 'Only mine',
+      parent_device_id: 'lamp',
+      attributes: {},
+    });
+    const got = scenesInScope({ scope: 'device', device_id: 'lamp' }, [...house, owned]);
+    expect(got.map((d) => d.name)).toEqual(['Only mine']);
+  });
+
+  it('is nothing for a device with no area to match on', () => {
+    const loose = scene({ device_id: 'loose', device_type: 'light', attributes: {}, schema: {} });
+    expect(scenesInScope({ scope: 'device', device_id: 'loose' }, [loose, officeScene])).toEqual(
+      [],
+    );
+  });
+
+  it('is nothing when the device is not in the house at all', () => {
+    expect(scenesInScope({ scope: 'device', device_id: 'gone' }, house)).toEqual([]);
+  });
+
+  it('is still nothing without a device to ask about', () => {
+    expect(scenesInScope({ scope: 'device' }, house)).toEqual([]);
+  });
+
+  it('resolves @picked against what the surface has selected', () => {
+    // The placement seam hands a widget the token and the surface's answer to
+    // it. This branch read the token straight through, so it looked for a
+    // device literally called "@picked" and reported no scenes however many
+    // the selected lamp had.
+    const got = scenesInScope({ scope: 'device', device_id: '@picked' }, house, undefined, 'lamp');
+    expect(got.map((d) => d.name)).toEqual(['Concentrate']);
+  });
+
+  it('is nothing when nothing is picked', () => {
+    expect(scenesInScope({ scope: 'device', device_id: '@picked' }, house)).toEqual([]);
+  });
+});

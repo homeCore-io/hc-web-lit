@@ -43,14 +43,14 @@ export class HcSceneRow extends LitElement {
 
   @property({ attribute: false }) config: Record<string, unknown> = {};
   @property({ attribute: false }) devices: readonly DeviceState[] = [];
-  @property({ attribute: false }) context: { room?: string } = {};
+  @property({ attribute: false }) context: { room?: string; picked?: string } = {};
   @property({ attribute: false }) onCommand: ((r: CommandRequest) => void) | undefined;
 
   /** The scene just fired, for as long as the acknowledgment lasts. */
   @state() private fired: string | undefined;
 
   override render() {
-    const scenes = scenesInScope(this.config, this.devices, this.context.room);
+    const scenes = scenesInScope(this.config, this.devices, this.context.room, this.context.picked);
     const heading = typeof this.config['heading'] === 'string' ? this.config['heading'] : undefined;
 
     if (scenes.length === 0) {
