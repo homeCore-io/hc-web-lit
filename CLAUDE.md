@@ -2118,7 +2118,14 @@ is something it can never do at all (§2).
       extension into the running page, because a module that defines a custom
       element cannot be registered twice — it says "reload to use it".
 - [x] Every dashboard in redb renders in hc-web-lit — **audited against the
-      house on 2026-09-11, with one half of the claim untested.** All three
+      house on 2026-09-11, and the first audit was wrong.** It counted DOM
+      nodes and passed while every composed page was in fact drawing as one
+      stacked column under a full-page background shape, because a later CSS
+      rule naming `.placed` for the drag handles had overridden its
+      `position: absolute` since the handles landed. A household looking at the
+      screen found it in a second. Counting mounted elements is not looking;
+      `test/page-cascade.test.ts` now reads what the stylesheet *resolves* to
+      rather than what it mentions. With that fixed:** All three
       documents core holds are present here, 80 widgets over 18 types, and
       every type is one this client draws: no placeholders anywhere. Ten
       widgets on the Room page draw nothing and all ten are *told* to —

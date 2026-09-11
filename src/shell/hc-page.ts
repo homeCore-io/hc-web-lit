@@ -161,9 +161,16 @@ export class HcPage extends LitElement {
     }
     /* The handles, while the page is being arranged (§14.2). Over the widget
        rather than around it: a page that reflowed when the handles appeared
-       would be a page you arrange in a shape it does not have. */
-    .cell,
-    .placed {
+       would be a page you arrange in a shape it does not have.
+
+       **Only the cell.** This rule used to name the composed placement too,
+       and being the later rule it won — so every placement on a composed page
+       became relatively positioned, fell back into document flow, and the page
+       drew as one tall column of stacked boxes with the largest shape over the
+       top of everything. A composed page positions by rect and has to be
+       absolute; an absolutely positioned box is already a containing block for
+       its own handles, so it never needed this. */
+    .cell {
       position: relative;
     }
     .grab,
