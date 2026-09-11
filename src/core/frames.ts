@@ -158,3 +158,98 @@ export function pageRectOf(
 export function spaceOfBox(path: string): string | undefined {
   return parentOf(path);
 }
+
+/**
+ * The frames that render as real containers rather than as backdrops.
+ *
+ * A positioned frame can be drawn *behind* its members, because they know
+ * where they are. A **stacked** frame cannot: it decides where its members
+ * are, and a member that grows has to push the ones below it down, which only
+ * happens if they are really its children in the DOM.
+ *
+ * That property is inherited downward, and this is the function that says so.
+ * A frame nested inside a container is itself a container — a block in its
+ * parent's column, holding its own members — because the alternative is a
+ * frame whose *position* comes from the flow and whose *contents* are
+ * absolutely positioned somewhere else on the page. That was the state of
+ * things before this: `stacks()` collected member widgets and knew nothing
+ * about member frames, so a column could hold a list of cards and could not
+ * hold a band of four controls with a colour wheel in it. The household's Room
+ * page is exactly that shape, which is how the gap was found.
+ *
+ * Note what is *not* inherited: `stack`. A container that does not stack lays
+ * its members out at their stored rectangles, which are already stated in its
+ * own space (`originOf`), so nothing has to be translated — it is the same
+ * arithmetic the page does, one level in.
+ */
+export function flowFrames(
+  boxes: readonly DashboardGroupBox[] | undefined,
+): Map<string, DashboardGroupBox> {
+  const frames = framesByPath(boxes);
+  const flow = new Map<string, DashboardGroupBox>();
+  // Shallowest first, so a box's parent is already decided when it is asked
+  // about. Sorting by depth rather than by document order, because a document
+  // is free to list a child before its parent and this must not depend on it.
+  const ordered = [...frames.values()].sort(
+    (a, b) => segmentsOf(a.path).length - segmentsOf(b.path).length,
+  );
+  for (const box of ordered) {
+    if (box.stack === true || nearestIn(parentOf(box.path), flow) !== undefined) {
+      flow.set(box.path, box);
+    }
+  }
+  return flow;
+}
+
+/** The nearest ancestor-or-self of a path that is in a set of boxes. */
+function nearestIn(
+  path: string | undefined,
+  boxes: ReadonlyMap<string, DashboardGroupBox>,
+): string | undefined {
+  if (path === undefined) return undefined;
+  const parts = segmentsOf(path);
+  for (let i = parts.length; i >= 1; i--) {
+    const at = parts.slice(0, i).join(SEPARATOR);
+    if (boxes.has(at)) return at;
+  }
+  return undefined;
+}
+
+/**
+ * The container that lays out whatever sits at this path, if any.
+ *
+ * Ancestor-*or-self*: a frame is laid out by the container it is in, and a
+ * widget whose own group is a container is laid out by that container. Both
+ * callers want the same walk, and separating them produced an off-by-one the
+ * first time round.
+ */
+export function containerOf(
+  path: string | undefined,
+  flow: ReadonlyMap<string, DashboardGroupBox>,
+): string | undefined {
+  return nearestIn(path, flow);
+}
+
+/** The container a frame's own box sits in — its parent's, never its own. */
+export function containerOfBox(
+  box: DashboardGroupBox,
+  flow: ReadonlyMap<string, DashboardGroupBox>,
+): string | undefined {
+  return nearestIn(parentOf(box.path), flow);
+}
+
+/**
+ * The containers held directly by one container, `undefined` meaning the page.
+ *
+ * Ordered by where their author drew them — top to bottom — because a stacked
+ * container's column order is the order the page reads in, and a document's
+ * array order is whatever an editor happened to append in.
+ */
+export function framesIn(
+  path: string | undefined,
+  flow: ReadonlyMap<string, DashboardGroupBox>,
+): DashboardGroupBox[] {
+  return [...flow.values()]
+    .filter((b) => containerOfBox(b, flow) === path)
+    .sort((a, b) => (a.rect?.y ?? 0) - (b.rect?.y ?? 0));
+}

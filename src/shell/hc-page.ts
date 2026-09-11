@@ -16,6 +16,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import type {
   DashboardBreakpoint,
   DashboardDefinition,
+  DashboardGroupBox,
   DashboardLayout,
   DashboardWidget,
 } from '../core/dashboard.js';
@@ -33,9 +34,16 @@ import {
   type Guide,
   type Handle,
 } from '../core/geometry.js';
-import { framesByPath, isFrame, pageRectOf } from '../core/frames.js';
+import {
+  containerOf,
+  flowFrames,
+  framesByPath,
+  framesIn,
+  pageRectOf,
+  toLocal,
+} from '../core/frames.js';
 import { deriveDensity } from '../design/tokens.js';
-import { clickTarget, groupOf, isUnder, membersOf, segmentsOf, stepOut } from '../core/groups.js';
+import { clickTarget, groupOf, isUnder, membersOf, stepOut } from '../core/groups.js';
 import type { SelectionContext } from '../core/selection.js';
 import { isVisible } from '../core/visibility.js';
 import type { DeviceStore } from '../core/store.js';
@@ -84,6 +92,23 @@ const COMPACT_BELOW = deriveDensity('comfortable').rowHeight * 3;
  */
 function fitsContent(config: Record<string, unknown> | undefined): boolean {
   return config?.['fit'] === 'content';
+}
+
+/**
+ * Whether a placement reaches the bottom of the page, however tall it becomes.
+ *
+ * The other half of the same idea, for the furniture a page is drawn *on*: the
+ * ground a composed page is painted over, and the hairline down the middle of
+ * two columns. Both are sized to the page rather than to anything in
+ * themselves, and both were a number typed once — so the moment a column grew
+ * past it, the ground stopped and left an unpainted strip under the last card
+ * and the divider stopped short of it.
+ *
+ * `content` and `page` are the same refusal to hard-code a height, pointed at
+ * the two different things that can answer instead.
+ */
+function fitsPage(config: Record<string, unknown> | undefined): boolean {
+  return config?.['fit'] === 'page';
 }
 
 /** How many empty rows a grid offers to draw into, below what is on it. */
@@ -145,6 +170,20 @@ interface Drag {
   centre?: { x: number; y: number };
   /** Where the turn was grabbed, so it is a delta and not a jump. */
   grabbed?: { x: number; y: number };
+}
+
+/**
+ * One thing a container draws: a widget, or a nested container.
+ *
+ * `y` is where its author put its top, in the container's own space, and it is
+ * the only field the two kinds share — which is all a column needs to order
+ * them by. A positioned container ignores it and places everything by
+ * coordinate.
+ */
+interface Row {
+  y: number;
+  item?: GridItem;
+  box?: DashboardGroupBox;
 }
 
 @customElement('hc-page')
@@ -220,6 +259,28 @@ export class HcPage extends LitElement {
         --hc-density-min-tap: ${unsafeCSS(COMPACT.minTapTarget)}px;
         --hc-density-card-padding: ${unsafeCSS(COMPACT.cardPadding)}px;
       }
+    }
+    /* **And a placement in a column that fits its content is compact.**
+
+       The rule above reads the box an author drew. A placement that fits its
+       content no longer has one — that is the whole point of it — so the
+       query has nothing to answer with and every such list quietly fell back
+       to the comfortable step. Two lists side by side on the room page then
+       disagreed about how tall a row is, which is the visible failure and the
+       reason this is not left to chance.
+
+       What is left of the author's intent is the column they put it in, and a
+       column on a composed page is a dense surface by construction: several
+       of them across 1240px, each a section of a page somebody reads at a
+       desk. So the container answers where the box no longer can — which is
+       the household's own instruction, "follow the box it is in", applied to
+       the box that still exists. A wall panel states its density in the skin
+       and is not composed this way. */
+    .stack .placed[data-fits] > .body {
+      --hc-density-row-height: ${unsafeCSS(COMPACT.rowHeight)}px;
+      --hc-density-control-height: ${unsafeCSS(COMPACT.controlHeight)}px;
+      --hc-density-min-tap: ${unsafeCSS(COMPACT.minTapTarget)}px;
+      --hc-density-card-padding: ${unsafeCSS(COMPACT.cardPadding)}px;
     }
     /* A placement is the size the author drew, and a widget does not get to
        disagree. A device set of twelve full cards in a short box escaped its
@@ -372,12 +433,34 @@ export class HcPage extends LitElement {
     .stack {
       position: absolute;
       box-sizing: border-box;
-      display: flex;
-      flex-direction: column;
-      align-items: stretch;
       border-radius: var(--hc-radius-md, 14px);
       background: var(--hc-surface-raised, #141922);
       z-index: 1;
+    }
+    /* A container that lays its children out in a column. One that does not
+       places them at their own rectangles instead, and needs only to be a
+       containing block for them, which being positioned already makes it. */
+    .stack[data-column] {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+    }
+    /* A container inside a container: placed by its parent, so in flow when
+       the parent is a column and at its stored rectangle when it is not. */
+    .stack.inflow {
+      position: relative;
+      left: auto;
+      top: auto;
+      width: auto;
+      flex: none;
+    }
+    /* **A nested container is a band, not a panel.** The surface belongs to
+       the frame somebody drew on the page; a band inside one is structure —
+       the row a colour wheel and two sliders sit on — and painting a raised
+       box behind each would draw furniture nobody asked for. */
+    .stack .stack {
+      background: none;
+      border-radius: 0;
     }
     /* In flow, so the stack decides where it sits. Everything else about a
        placement is unchanged, which is why one function draws both. */
@@ -723,6 +806,20 @@ export class HcPage extends LitElement {
     return html`${scene}${this.bandOverlay()}${this.guideOverlay()}`;
   }
 
+  /**
+   * How tall the page has turned out to be, in frame units.
+   *
+   * The canvas asks so it can be that tall; a placement drawn to the page asks
+   * so it can reach the foot of it. Two answers to that would be a ground that
+   * ends somewhere other than the page does, so there is one.
+   */
+  private pageFoot(drawn?: number): number {
+    const layout =
+      this.doc === undefined ? undefined : layoutToDraw(this.doc, this.breakpoint)?.layout;
+    const height = drawn ?? layout?.frame?.height ?? 0;
+    return Math.max(height, this.grown);
+  }
+
   /** Where each carried widget is going this frame. Derived, not state. */
   private moving: ReadonlyMap<string, Box> | undefined;
 
@@ -758,7 +855,7 @@ export class HcPage extends LitElement {
     // **The page grows to hold what grew.** A placement that fits its content
     // can end up taller than the canvas it was drawn on, and a frame that kept
     // its stated height would simply clip it again one level up.
-    const tall = Math.max(frame.height, this.grown);
+    const tall = this.pageFoot(frame.height);
     return html`
       <div
         class="frame"
@@ -767,12 +864,12 @@ export class HcPage extends LitElement {
         style="width:${frame.width}px;height:${tall}px;transform:scale(${scale})"
       >
         ${this.frameBodies(items)} ${this.drawPreview()} ${this.groupFrame()}
-        ${this.stacks(items, byId)}
+        ${this.containers(items, byId, undefined)}
         ${items.map((item) => {
           const w = byId.get(item.id);
           if (w === undefined || item.rect == null) return nothing;
-          // A member of a stacked frame is drawn by the stack, in flow, and
-          // must not also be drawn here at its stored coordinates.
+          // A member of a container is drawn by that container, and must not
+          // also be drawn here at its stored coordinates.
           if (this.stackedIn(w) !== undefined) return nothing;
           return this.placement(item, w);
         })}
@@ -781,75 +878,185 @@ export class HcPage extends LitElement {
   }
 
   /**
-   * The frames on this layout that lay their members out in a column (§14.1).
+   * The frames on this layout that render as real containers (§14.1).
    *
    * **A real container, not a backdrop.** A positioned frame can be drawn
    * behind its members because they know where they are; a *stacked* one
    * decides where they are, and the whole point is that a member which grows
    * pushes the ones below it down. That only happens if they are actually in
-   * it — so a stacked frame renders as a flow container with its members as
-   * children, and nothing about their stored rectangles decides their tops.
+   * it — so a container renders as an element with its members as children,
+   * and on a stacked one nothing about their stored rectangles decides their
+   * tops.
    *
    * Their widths come from the column rather than from their rects, because a
    * stack is "these, one under another" and a column of things at four
    * different widths is not what anybody means by that. Their heights are
    * still their own: a drawn height is a height, and `fit: content` is how one
    * says otherwise.
+   *
+   * **And a container holds containers.** This used to collect member widgets
+   * and nothing else, which made a column a list of cards and no more — so the
+   * household's Room page, whose left column is a heading, a grid, a rule, a
+   * *band of four controls*, and two lists, could not be one. A nested frame
+   * is a block in its parent's column, holding its own members at their own
+   * rectangles, which `core/frames.ts` already gave the coordinates for: a
+   * member's rect is stated in the space of its nearest framed ancestor, so
+   * inside that frame's element it is simply where the member goes.
    */
-  private stacks(items: readonly GridItem[], byId: Map<string, DashboardWidget>) {
+  private containers(
+    items: readonly GridItem[],
+    byId: Map<string, DashboardWidget>,
+    within: string | undefined,
+  ): unknown {
     const layout =
       this.doc === undefined ? undefined : layoutToDraw(this.doc, this.breakpoint)?.layout;
-    const boxes = (layout?.groups ?? []).filter((b) => b.stack === true && isFrame(b));
-    if (boxes.length === 0) return nothing;
+    const flow = flowFrames(layout?.groups);
+    if (flow.size === 0) return nothing;
+    return framesIn(within, flow).map((box) => this.container(items, byId, box, within, flow));
+  }
 
-    const frames = framesByPath(layout?.groups);
-    return boxes.map((box) => {
-      const at = pageRectOf(box, frames);
-      if (at === undefined) return nothing;
+  /** One container, and everything it holds. */
+  private container(
+    items: readonly GridItem[],
+    byId: Map<string, DashboardWidget>,
+    box: DashboardGroupBox,
+    within: string | undefined,
+    flow: ReadonlyMap<string, DashboardGroupBox>,
+  ): unknown {
+    const rect = box.rect;
+    if (rect == null) return nothing;
+    const layout =
+      this.doc === undefined ? undefined : layoutToDraw(this.doc, this.breakpoint)?.layout;
+    // A root container sits on the page, so it is placed where the page says
+    // it is; a nested one is placed by its parent — in flow when the parent is
+    // a column, and at its own stored rectangle when it is not.
+    const at = within === undefined ? pageRectOf(box, framesByPath(layout?.groups)) : rect;
+    if (at === undefined) return nothing;
 
-      const mine = items.filter((i) => {
-        const w = byId.get(i.id);
-        return w !== undefined && this.stackedIn(w) === box.path;
-      });
-      const pad = box.padding ?? 0;
-      const gap = box.stack_gap ?? 0;
-      const grows = box.frame === true && box.clip !== true;
-
-      return html`<div
-        class="stack"
-        data-frame=${box.path}
-        style="left:${at.x}px;top:${at.y}px;width:${at.w}px;${
-          grows ? `min-height:${at.h}px;` : `height:${at.h}px;`
-        }padding:${pad}px;gap:${gap}px"
-      >
-        ${mine.map((item) => {
-          const w = byId.get(item.id);
-          return w === undefined ? nothing : this.placement(item, w, true);
-        })}
-      </div>`;
+    const mine = items.filter((i) => {
+      const w = byId.get(i.id);
+      return w !== undefined && this.stackedIn(w) === box.path;
     });
+    // **A container with nothing in it takes no room.** The room page's SETS
+    // band is a colour wheel, a warmth axis and two sliders, every one of them
+    // bound to `@picked` — so until a lamp is touched there is nothing for any
+    // of them to aim at and all four hide themselves (`core/visibility.ts`).
+    // The band went on holding the 132px they were drawn in, which put a hole
+    // under the lights in every room where nobody had picked anything: a
+    // container that kept its size for contents that are not there.
+    if (!this.holdsAnything(items, byId, box, flow)) return nothing;
+    const pad = box.padding ?? 0;
+    const gap = box.stack_gap ?? 0;
+    const stacks = box.stack === true;
+    // **A column is as tall as what is in it.** Its drawn height is what its
+    // author saw on the day, not a measurement of this room — and keeping it
+    // as a floor is precisely the thing the household called "not dynamic":
+    // a scene row with no scenes in it left a 180px hole, and a media column
+    // in a busy room was cut off at the bottom of a number somebody typed
+    // once. `clip` is how a container says it wants the size it was drawn.
+    // A positioned container keeps its height either way, because its members
+    // are placed by coordinate and growing would move none of them.
+    const grows = stacks && box.clip !== true;
+    const inFlow = within !== undefined && this.stacksAt(within);
+
+    const place = inFlow ? '' : `left:${at.x}px;top:${at.y}px;width:${at.w}px;`;
+    const size = grows ? '' : `height:${at.h}px;${box.clip === true ? 'overflow:hidden;' : ''}`;
+
+    // Ordering only means something in a column. A positioned container places
+    // everything by coordinate, so its children may render in any order — and
+    // they stay in document order there, so a `z` on one means what it says.
+    const children: Row[] = stacks
+      ? this.inColumn(mine, box.path, flow, byId)
+      : [
+          ...mine.map((item) => ({ y: 0, item })),
+          ...framesIn(box.path, flow).map((b) => ({ y: 0, box: b })),
+        ];
+
+    return html`<div
+      class=${inFlow ? 'stack inflow' : 'stack'}
+      data-frame=${box.path}
+      ?data-column=${stacks}
+      style="${place}${size}padding:${pad}px;${stacks ? `gap:${gap}px` : ''}"
+    >
+      ${children.map((c) => {
+        if (c.box !== undefined) return this.container(items, byId, c.box, box.path, flow);
+        if (c.item === undefined) return nothing;
+        const w = byId.get(c.item.id);
+        return w === undefined ? nothing : this.placement(c.item, w, box.path);
+      })}
+    </div>`;
   }
 
   /**
-   * The stacked frame this widget is laid out by, if any.
+   * A container's children in the order they are drawn down the column.
    *
-   * Its own group, or the nearest ancestor of it that stacks — a card in
-   * `Wall/Lights` is stacked by `Wall` when `Wall` is the one that says so.
+   * Widgets and nested frames interleave, ordered by the top their author gave
+   * them — which is the only thing the two kinds have in common and the only
+   * thing a column needs from them. A widget's stored top is in the space of
+   * this container (`toLocal`); a nested frame's rectangle already is.
+   */
+  private inColumn(
+    mine: readonly GridItem[],
+    path: string,
+    flow: ReadonlyMap<string, DashboardGroupBox>,
+    byId: Map<string, DashboardWidget>,
+  ): Row[] {
+    const layout =
+      this.doc === undefined ? undefined : layoutToDraw(this.doc, this.breakpoint)?.layout;
+    const frames = framesByPath(layout?.groups);
+    const rows: Row[] = [];
+    for (const item of mine) {
+      const w = byId.get(item.id);
+      const r = item.rect;
+      const local = r == null ? undefined : toLocal(r, groupOf(w?.config), frames);
+      rows.push({ y: local?.y ?? 0, item });
+    }
+    for (const box of framesIn(path, flow)) rows.push({ y: box.rect?.y ?? 0, box });
+    return rows.sort((a, b) => a.y - b.y);
+  }
+
+  /**
+   * Whether anything inside a container is actually on the page.
+   *
+   * Recursive, because a band of bands is empty exactly when all of them are,
+   * and the question a column asks about a nested container is the same one
+   * the page asks about a column.
+   */
+  private holdsAnything(
+    items: readonly GridItem[],
+    byId: Map<string, DashboardWidget>,
+    box: DashboardGroupBox,
+    flow: ReadonlyMap<string, DashboardGroupBox>,
+  ): boolean {
+    const devices = this.store?.list() ?? [];
+    for (const item of items) {
+      const w = byId.get(item.id);
+      if (w === undefined || this.stackedIn(w) !== box.path) continue;
+      if (isVisible(w.config ?? {}, devices, this.context)) return true;
+    }
+    return framesIn(box.path, flow).some((b) => this.holdsAnything(items, byId, b, flow));
+  }
+
+  /** Whether the container at this path lays its children out in a column. */
+  private stacksAt(path: string): boolean {
+    const layout =
+      this.doc === undefined ? undefined : layoutToDraw(this.doc, this.breakpoint)?.layout;
+    return (layout?.groups ?? []).some((b) => b.path === path && b.stack === true);
+  }
+
+  /**
+   * The container that lays this widget out, if any.
+   *
+   * Its own group, or the nearest ancestor of it that is a container — a card
+   * in `Wall/Lights` is laid out by `Wall` when `Wall` is the container and
+   * `Lights` is only a tag.
    */
   private stackedIn(w: DashboardWidget): string | undefined {
     const path = groupOf(w.config);
     if (path === undefined) return undefined;
     const layout =
       this.doc === undefined ? undefined : layoutToDraw(this.doc, this.breakpoint)?.layout;
-    const stacked = new Set(
-      (layout?.groups ?? []).filter((b) => b.stack === true && isFrame(b)).map((b) => b.path),
-    );
-    const parts = segmentsOf(path);
-    for (let i = parts.length; i >= 1; i--) {
-      const at = parts.slice(0, i).join('/');
-      if (stacked.has(at)) return at;
-    }
-    return undefined;
+    return containerOf(path, flowFrames(layout?.groups));
   }
 
   /**
@@ -859,9 +1066,14 @@ export class HcPage extends LitElement {
    * handles, the selection, the turn, the clip, the fit — is the same wherever
    * its top came from, and two copies of that is two places to fix a bug in.
    */
-  private placement(item: GridItem, w: DashboardWidget, inStack = false) {
+  private placement(item: GridItem, w: DashboardWidget, within?: string) {
     const r = item.rect;
     if (r == null) return nothing;
+    // In a column the container decides the top and the width; in a positioned
+    // container the member's own rectangle does, and it is already stated in
+    // that container's space — which is what `toLocal` gives back, the inverse
+    // of the conversion `gridItems` did on the way in.
+    const inColumn = within !== undefined && this.stacksAt(within);
     const z = w.config?.['z'];
     const at = this.previewOf(item.id, { x: r.x, y: r.y, w: r.w, h: r.h });
     // A placement that says so is as tall as what is in it (§14.1) — **both
@@ -871,19 +1083,28 @@ export class HcPage extends LitElement {
     // content decides, so the content decides; a height somebody wants kept is
     // a placement that does not ask for this.
     const fits = fitsContent(w.config);
+    const toFoot = fitsPage(w.config);
     // **Stored and, until now, never acted on.** §14.3 says core keeps `angle`
     // and has no opinion about it; a client that keeps it and does not draw it
     // is a client where turning a card does nothing.
     const turn = this.angleOf(item);
-    const height = fits ? '' : `height:${at.h}px;`;
+    // A placement drawn to the page reaches the page's foot wherever that has
+    // ended up, and never comes up shorter than it was drawn.
+    const height = fits
+      ? ''
+      : `height:${toFoot ? Math.max(at.h, this.pageFoot() - at.y) : at.h}px;`;
+    const layout =
+      this.doc === undefined ? undefined : layoutToDraw(this.doc, this.breakpoint)?.layout;
+    const spot =
+      within === undefined ? at : toLocal(at, groupOf(w.config), framesByPath(layout?.groups));
 
     return html`<div
-      class=${inStack ? 'placed inflow' : 'placed'}
+      class=${inColumn ? 'placed inflow' : 'placed'}
       data-widget=${item.id}
       ?data-picked=${this.mode === 'edit' && this.picked.has(item.id)}
       ?data-dragging=${this.dragging?.with.has(item.id) === true}
       ?data-fits=${fits}
-      style="${inStack ? '' : `left:${at.x}px;top:${at.y}px;width:${at.w}px;`}${height}${
+      style="${inColumn ? '' : `left:${spot.x}px;top:${spot.y}px;width:${spot.w}px;`}${height}${
         turn === 0 ? '' : `transform:rotate(${turn}deg);`
       }${typeof z === 'number' ? `z-index:${z}` : ''}"
     >
@@ -1202,10 +1423,12 @@ export class HcPage extends LitElement {
     if (boxes.length === 0) return nothing;
 
     const frames = framesByPath(boxes);
+    const flow = flowFrames(boxes);
     return boxes.map((box) => {
-      // A stacked frame draws its own body — it is a real container, and a
-      // backdrop behind it would be a second box in the same place.
-      if (box.stack === true) return nothing;
+      // A container draws its own body — it is a real element, and a backdrop
+      // behind it would be a second box in the same place, at page coordinates
+      // its contents left the moment their parent started deciding them.
+      if (flow.has(box.path)) return nothing;
       const at = pageRectOf(box, frames);
       if (at === undefined) return nothing;
       return html`<div
@@ -1497,9 +1720,25 @@ export class HcPage extends LitElement {
       return;
     }
 
+    // **Measured against the frame, not against an offset parent.** A member
+    // of a container has that container as its `offsetParent`, so `offsetTop`
+    // answers a different and much smaller question than the one being asked —
+    // how far down the *page* the thing reaches. It went unnoticed while every
+    // grown card was well inside a canvas taller than it; a nested column put
+    // one near the bottom and the page stopped growing to hold it.
+    const base = frame.getBoundingClientRect();
+    const scale = this.frameScale();
     let reach = 0;
+    const bottom = (el: HTMLElement): number =>
+      (el.getBoundingClientRect().bottom - base.top) / (scale === 0 ? 1 : scale);
     for (const el of frame.querySelectorAll<HTMLElement>('.placed[data-fits]')) {
-      reach = Math.max(reach, el.offsetTop + el.offsetHeight);
+      reach = Math.max(reach, bottom(el));
+    }
+    // And the columns themselves: a container grows when something inside it
+    // does, and what ends up lowest is whatever the growth pushed down — which
+    // is usually not the thing that grew.
+    for (const el of frame.querySelectorAll<HTMLElement>('.stack[data-column]')) {
+      reach = Math.max(reach, bottom(el));
     }
     // A little air under the lowest thing, so a grown page does not end flush
     // against the last row of a list.

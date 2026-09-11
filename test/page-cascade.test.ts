@@ -94,3 +94,34 @@ describe('a composed placement', () => {
     expect(css).toMatch(/\.placed\[data-fits\]\s*>\s*\.body\s*\{[^}]*overflow:\s*visible/);
   });
 });
+
+describe('density for a placement that has no drawn height', () => {
+  const clean = css.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  it('keeps size containment off the placements that grow', () => {
+    // A size container is size-contained, so its children stop contributing to
+    // its height — fatal on the very boxes that exist to be as tall as their
+    // contents. Asserted on the selector because that is where it was got
+    // wrong, and because jsdom lays nothing out to catch it afterwards.
+    expect(clean).toMatch(
+      /\.placed:not\(\[data-fits\]\),\s*\n?\s*\.cell\s*\{[^}]*container-type:\s*size/,
+    );
+  });
+
+  it('gives one an answer anyway, from the column it is in', () => {
+    // With no box to query, every grown list fell back to the comfortable step
+    // and two lists side by side disagreed about how tall a row is.
+    const rule = /\.stack \.placed\[data-fits\] > \.body\s*\{([^}]*)\}/.exec(clean);
+    expect(rule, 'no compact rule for a grown placement in a column').not.toBeNull();
+    expect(rule?.[1]).toContain('--hc-density-row-height');
+    expect(rule?.[1]).toContain('--hc-density-min-tap');
+  });
+
+  it('says it after the query, so it is the one that wins', () => {
+    // Same specificity is not the question — one is inside a condition and one
+    // is not — but a reader has to be able to see which came last.
+    expect(clean.indexOf('.stack .placed[data-fits] > .body')).toBeGreaterThan(
+      clean.indexOf('@container (max-height:'),
+    );
+  });
+});
