@@ -553,6 +553,23 @@ describe('a placement drawn to the page', () => {
     const plain = el.shadowRoot?.querySelector('[data-widget="plain"]') as HTMLElement;
     expect(plain.style.height).toBe('50px');
   });
+
+  it('is left out of the measurement that decides where the foot is', async () => {
+    // A ground drawn to the foot of the page would set the height it reads,
+    // and the two would chase each other up the screen a margin at a time. The
+    // attribute is how the measurement knows to skip it.
+    const el = await mount();
+    expect(
+      (el.shadowRoot?.querySelector('[data-widget="ground"]') as HTMLElement).hasAttribute(
+        'data-page',
+      ),
+    ).toBe(true);
+    expect(
+      (el.shadowRoot?.querySelector('[data-widget="plain"]') as HTMLElement).hasAttribute(
+        'data-page',
+      ),
+    ).toBe(false);
+  });
 });
 
 describe('a section, which is a heading and a set', () => {
@@ -636,5 +653,41 @@ describe('a section, which is a heading and a set', () => {
     // sections rather than about headings.
     const el = await mount();
     expect(el.shadowRoot?.querySelector('.stack[data-frame="Left/head"]')).not.toBeNull();
+  });
+});
+
+describe('a container as tall as what is in it', () => {
+  // The house's footer: a modes block beside a scenes block, side by side and
+  // so not a column — and absolutely positioned children give their parent no
+  // height at all, so it held a number somebody typed once.
+  const foot: DashboardGroupBox = {
+    path: 'Foot',
+    rect: { x: 0, y: 600, w: 1240, h: 176 },
+    frame: true,
+    padding: 18,
+    fit: 'content',
+  };
+
+  it('is a container, because a height is a measurement of its members', () => {
+    // A box whose members are drawn somewhere else on the page has none to
+    // measure — which is why this and not only `stack` makes one.
+    const flow = flowFrames([foot]);
+    expect(flow.has('Foot')).toBe(true);
+  });
+
+  it('lays them out by coordinate all the same', () => {
+    // `stack` is not implied by it: a footer is a row, not a column.
+    expect(foot.stack).toBeUndefined();
+  });
+
+  it('leaves an ordinary positioned frame a backdrop', () => {
+    // Nothing else changes: a frame that states a height and does not ask to
+    // be measured keeps drawing behind its members, where they are.
+    const plain: DashboardGroupBox = {
+      path: 'Panel',
+      rect: { x: 0, y: 0, w: 100, h: 100 },
+      frame: true,
+    };
+    expect(flowFrames([plain]).has('Panel')).toBe(false);
   });
 });

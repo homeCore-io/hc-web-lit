@@ -181,6 +181,11 @@ export function spaceOfBox(path: string): string | undefined {
  * its members out at their stored rectangles, which are already stated in its
  * own space (`originOf`), so nothing has to be translated — it is the same
  * arithmetic the page does, one level in.
+ *
+ * The house's footer is the case that is neither: a modes block beside a
+ * scenes block, so not a column, and not nested in anything — but it asks to
+ * be as tall as what is in it, and that is a measurement of its members. A box
+ * whose members are drawn somewhere else on the page has none to measure.
  */
 export function flowFrames(
   boxes: readonly DashboardGroupBox[] | undefined,
@@ -194,7 +199,16 @@ export function flowFrames(
     (a, b) => segmentsOf(a.path).length - segmentsOf(b.path).length,
   );
   for (const box of ordered) {
-    if (box.stack === true || nearestIn(parentOf(box.path), flow) !== undefined) {
+    // A column, anything nested in a container, and **anything that asks to be
+    // as tall as its contents** — because that is a measurement of its
+    // members, and a box whose members are drawn somewhere else on the page
+    // has no members to measure. The frame model puts them at the right place
+    // either way; holding them is what makes the height answerable.
+    if (
+      box.stack === true ||
+      box.fit === 'content' ||
+      nearestIn(parentOf(box.path), flow) !== undefined
+    ) {
       flow.set(box.path, box);
     }
   }

@@ -28,6 +28,21 @@ export interface DashboardGroupBox {
   frame?: boolean;
   stack?: boolean;
   stack_gap?: number;
+  /**
+   * A container as tall as what is in it.
+   *
+   * A column gets this for nothing — its members are in flow and push it down
+   * — but a container that places its members by coordinate has no height of
+   * its own, because absolutely positioned children contribute none. So the
+   * page measures one after layout, which is the only moment the answer
+   * exists: the house's footer band holds a scene row that wraps to however
+   * many rows the house has scenes for.
+   *
+   * The same word `fit: "content"` carries on a widget's config (§14.1), and
+   * deliberately: it is one idea about who decides a height, asked of the two
+   * kinds of thing that can be asked.
+   */
+  fit?: 'content' | null;
 }
 
 export interface DashboardWidgetPlacement {

@@ -817,7 +817,11 @@ export class HcPage extends LitElement {
     const layout =
       this.doc === undefined ? undefined : layoutToDraw(this.doc, this.breakpoint)?.layout;
     const height = drawn ?? layout?.frame?.height ?? 0;
-    return Math.max(height, this.grown);
+    // The drawn canvas until there is a measurement, and the measurement after
+    // — in both directions. A page that could only grow left every room but
+    // the busiest ending in a screenful of ground, because the number its
+    // author drew was a guess about one room and the rest paid for it.
+    return this.grown > 0 ? this.grown : height;
   }
 
   /** Where each carried widget is going this frame. Derived, not state. */
@@ -832,6 +836,15 @@ export class HcPage extends LitElement {
    * Held as state so the measurement feeds the next frame's canvas height.
    */
   @state() private grown = 0;
+
+  /**
+   * How tall each content-fitting container turned out to be, by path.
+   *
+   * The same measure-after-layout as `grown`, one level in. Held as state so
+   * the measurement feeds the next frame's height, and written only when it
+   * moved, or the render it triggers would measure again and never settle.
+   */
+  @state() private fitted: ReadonlyMap<string, number> = new Map();
 
   /**
    * A composed page, at the size its author drew it.
@@ -959,8 +972,12 @@ export class HcPage extends LitElement {
     const grows = stacks && box.clip !== true;
     const inFlow = within !== undefined && this.stacksAt(within);
 
+    // A container that places its members by coordinate has no height of its
+    // own — absolutely positioned children contribute none — so one that asks
+    // to fit its content is measured after layout, like the page is.
+    const tall = box.fit === 'content' && !grows ? (this.fitted.get(box.path) ?? at.h) : at.h;
     const place = inFlow ? '' : `left:${at.x}px;top:${at.y}px;width:${at.w}px;`;
-    const size = grows ? '' : `height:${at.h}px;${box.clip === true ? 'overflow:hidden;' : ''}`;
+    const size = grows ? '' : `height:${tall}px;${box.clip === true ? 'overflow:hidden;' : ''}`;
 
     // Ordering only means something in a column. A positioned container places
     // everything by coordinate, so its children may render in any order — and
@@ -975,6 +992,7 @@ export class HcPage extends LitElement {
     return html`<div
       class=${inFlow ? 'stack inflow' : 'stack'}
       data-frame=${box.path}
+      ?data-fits=${box.fit === 'content' && !grows}
       ?data-column=${stacks}
       style="${place}${size}padding:${pad}px;${stacks ? `gap:${gap}px` : ''}"
     >
@@ -1124,6 +1142,7 @@ export class HcPage extends LitElement {
       ?data-picked=${this.mode === 'edit' && this.picked.has(item.id)}
       ?data-dragging=${this.dragging?.with.has(item.id) === true}
       ?data-fits=${fits}
+      ?data-page=${toFoot}
       style="${inColumn ? '' : `left:${spot.x}px;top:${spot.y}px;width:${spot.w}px;`}${height}${
         turn === 0 ? '' : `transform:rotate(${turn}deg);`
       }${typeof z === 'number' ? `z-index:${z}` : ''}"
@@ -1749,21 +1768,76 @@ export class HcPage extends LitElement {
     const base = frame.getBoundingClientRect();
     const scale = this.frameScale();
     let reach = 0;
+
     const bottom = (el: HTMLElement): number =>
       (el.getBoundingClientRect().bottom - base.top) / (scale === 0 ? 1 : scale);
-    for (const el of frame.querySelectorAll<HTMLElement>('.placed[data-fits]')) {
+    // **Everything on the page, not only what grew.** The canvas was a floor,
+    // so a sparse room ended in four hundred pixels of empty ground under its
+    // last section — the same complaint as a frame that would not grow,
+    // pointed the other way. The page is as tall as what is on it.
+    //
+    // Except what is measured *from* the page: a ground drawn to the foot of
+    // it would set the height it reads, and the two would chase each other up
+    // the screen a margin at a time.
+    for (const el of frame.querySelectorAll<HTMLElement>('.placed:not([data-page])')) {
       reach = Math.max(reach, bottom(el));
     }
-    // And the columns themselves: a container grows when something inside it
-    // does, and what ends up lowest is whatever the growth pushed down — which
-    // is usually not the thing that grew.
-    for (const el of frame.querySelectorAll<HTMLElement>('.stack[data-column]')) {
+    // And the containers themselves: one grows when something inside it does,
+    // and what ends up lowest is whatever the growth pushed down — which is
+    // usually not the thing that grew.
+    for (const el of frame.querySelectorAll<HTMLElement>('.stack')) {
       reach = Math.max(reach, bottom(el));
     }
     // A little air under the lowest thing, so a grown page does not end flush
     // against the last row of a list.
     const want = reach === 0 ? 0 : reach + GROWN_MARGIN;
     if (Math.abs(want - this.grown) > 1) this.grown = want;
+
+    this.measureContainers(frame, base, scale);
+  }
+
+  /**
+   * How tall each container that asked to fit its content turned out to be.
+   *
+   * A column needs none of this: its members are in flow and push it down. A
+   * container that places its members by coordinate is the case — the house's
+   * footer band is a modes block beside a scenes block, side by side and so
+   * not a column, and absolutely positioned children give their parent no
+   * height at all. It held a number somebody typed once, 176px for about 74px
+   * of chips, which is the last hard-coded height on the page.
+   *
+   * Measured from the members rather than from `scrollHeight`, because the
+   * container is exactly as tall as this says and asking it how tall its
+   * content is would be asking it about the height this sets.
+   */
+  private measureContainers(frame: HTMLElement, base: DOMRect, scale: number): void {
+    const boxes = frame.querySelectorAll<HTMLElement>('.stack[data-fits]');
+    if (boxes.length === 0) {
+      if (this.fitted.size > 0) this.fitted = new Map();
+      return;
+    }
+
+    const k = scale === 0 ? 1 : scale;
+    const next = new Map<string, number>();
+    for (const box of boxes) {
+      const path = box.dataset['frame'];
+      if (path === undefined) continue;
+      const top = box.getBoundingClientRect().top;
+      let reach = 0;
+      for (const child of box.children) {
+        reach = Math.max(reach, (child.getBoundingClientRect().bottom - top) / k);
+      }
+      // The padding is on the box, so the bottom one has to be added back: a
+      // child's bottom is inside it.
+      next.set(path, Math.round(reach + (Number(box.style.paddingTop.replace('px', '')) || 0)));
+    }
+
+    // Written only when something moved, or this render triggers the next one
+    // and the page never settles.
+    const same =
+      next.size === this.fitted.size &&
+      [...next].every(([path, h]) => Math.abs((this.fitted.get(path) ?? -1) - h) <= 1);
+    if (!same) this.fitted = next;
   }
 
   private pick(id: string, extend: boolean): void {
