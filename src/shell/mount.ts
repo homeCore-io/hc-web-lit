@@ -62,6 +62,11 @@ export type MountTarget = HTMLElement & {
   /** A household's own pictures, and how to add one (§9). */
   assets?: MountEnv['assets'];
   onUploadAsset?: MountEnv['onUploadAsset'];
+  /** Widget templates, and how to make one out of what is on the page (§5.4). */
+  templates?: MountEnv['templates'];
+  onMakeTemplate?: MountEnv['onMakeTemplate'];
+  onDetachTemplate?: MountEnv['onDetachTemplate'];
+  onSaveTemplate?: MountEnv['onSaveTemplate'];
   /** Move or resize one, and the layout it is being placed in. */
   onPlaceWidget?: MountEnv['onPlaceWidget'];
   pagePlacements?: MountEnv['pagePlacements'];
@@ -183,6 +188,10 @@ export function mountWidget(el: MountTarget, w: WidgetSpec, env: MountEnv): void
     give(el, 'onInstallExtension', env.onInstallExtension);
   }
   if (env.assets !== undefined) give(el, 'assets', env.assets);
+  if (env.templates !== undefined) give(el, 'templates', env.templates);
+  if (env.onMakeTemplate !== undefined) give(el, 'onMakeTemplate', env.onMakeTemplate);
+  if (env.onDetachTemplate !== undefined) give(el, 'onDetachTemplate', env.onDetachTemplate);
+  if (env.onSaveTemplate !== undefined) give(el, 'onSaveTemplate', env.onSaveTemplate);
   if (env.onUploadAsset !== undefined) give(el, 'onUploadAsset', env.onUploadAsset);
   if (env.pagePlacements !== undefined) give(el, 'pagePlacements', env.pagePlacements);
   if (env.scopes !== undefined) give(el, 'scopes', env.scopes);

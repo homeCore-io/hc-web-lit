@@ -2336,7 +2336,16 @@ not a failure of it.
       on every key of every config. The toggle follows the renderer rather than
       a vocabulary that has not been written; offering it nowhere would have
       meant a feature that works everywhere and is reachable from nowhere
-- [ ] Template authoring UI
+- [x] Template authoring UI. P3 has had the whole mechanism since it landed —
+      substitution, by-reference instantiation, a store behind an interface —
+      and nothing could make a template, so §5.4's "highest-leverage capability
+      on the primitive list" was unreachable. Make one out of a widget on the
+      page, place instances from the palette, edit the template once and every
+      instance follows. **The parameters are derived from the subtree**, not
+      declared in a second editor: a person writes `{{ params.room }}` (or
+      `params.room` through the `ƒx` toggle, since substitution is P1's
+      language) and the template's inputs are whatever they wrote — a declared
+      list that can disagree with the subtree is one that eventually does
 - [ ] Device/query picker, asset picker, room picker, extension browser.
       **The asset picker is in**, which is the one of the four that had
       nothing at all: the store could hold a file and serve it back long

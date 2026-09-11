@@ -37,6 +37,7 @@ import {
   regrouped,
   ungrouped,
 } from '../core/groups.js';
+import { instantiate, templateId, templateRef } from '../core/templates.js';
 import { knownTypes } from '../core/registry.js';
 import { humanise } from '../core/text.js';
 import { EventStream } from '../core/events.js';
@@ -116,6 +117,15 @@ import '../widgets/hc-plugin-widget.js';
 import '../widgets/hc-extensions.js';
 
 type Phase = 'idle' | 'connecting' | 'ready' | 'failed';
+
+/**
+ * How the palette says "this tool is a template, not a widget type".
+ *
+ * A prefix rather than a second control: the two are the same gesture — pick a
+ * thing, drag it out — and a household that made a template called `toggle`
+ * should not have that shadow the widget type of the same name.
+ */
+const TEMPLATE_TOOL = 'template:';
 
 /** A group name placed under where the surface is standing. */
 const joinIn = (inside: string | undefined, name: string): string =>
@@ -677,7 +687,26 @@ export class HcApp extends LitElement {
     const doc = this.current;
     if (doc === undefined) throw new Error('No page to draw on.');
 
-    const { doc: added, id } = addWidget(doc, type);
+    // A template tool places an *instance*: the widget's type is the
+    // template's own, and its config is the reference. Placing a widget of
+    // type `template:room-tile` would be placing something nothing can draw.
+    const template = type.startsWith(TEMPLATE_TOOL)
+      ? this.authored.templates().get(type.slice(TEMPLATE_TOOL.length))
+      : undefined;
+    if (type.startsWith(TEMPLATE_TOOL) && template === undefined) {
+      throw new Error(`No template "${type.slice(TEMPLATE_TOOL.length)}".`);
+    }
+
+    const { doc: added, id } = addWidget(doc, template?.widget.type ?? type);
+    if (template !== undefined) {
+      const withRef = withWidgetConfig(added, id, { template: template.id });
+      if (withRef !== undefined) {
+        const placed = placeWidget(withRef, this.breakpoint, id, box) ?? withRef;
+        this.writePages(this.replacing(placed), placed.id);
+        this.dropTool();
+        return Promise.resolve();
+      }
+    }
     // A placement the layout does not have is not a failure here the way it is
     // for a move: `addWidget` just made it. Falling back to the added document
     // keeps the widget rather than losing it to a layout lookup.
@@ -826,6 +855,90 @@ export class HcApp extends LitElement {
     const byId = new Map((this.current?.widgets ?? []).map((w) => [w.id, groupOf(w.config)]));
     return commonGroup(this.held.ids.map((id) => byId.get(id)));
   }
+
+  /**
+   * Turn a widget on the page into a template, and this placement into an
+   * instance of it (§5.4).
+   *
+   * **By reference, and that is the whole point.** The widget's config becomes
+   * the template's subtree and the placement is replaced by `{ template: id }`,
+   * so the next instance placed and this one are the same definition — one
+   * edit landing everywhere is what §5.4 calls the highest-leverage capability
+   * on the primitive list.
+   *
+   * The template and the page are written together, because half of this is
+   * not a state worth being able to undo to: a template nothing references, or
+   * a placement pointing at a template that does not exist yet.
+   */
+  private readonly makeTemplate = async (name: string, widgetId: string): Promise<string> => {
+    const doc = this.current;
+    if (doc === undefined) throw new Error('No page to take a widget from.');
+
+    const widget = (doc.widgets ?? []).find((w) => w.id === widgetId);
+    if (widget === undefined) throw new Error(`This page has no widget "${widgetId}".`);
+    if (templateRef(widget.config) !== undefined) {
+      throw new Error('That is already an instance of a template.');
+    }
+
+    const id = templateId(
+      name,
+      this.authored
+        .templates()
+        .list()
+        .map((t) => t.id),
+    );
+    this.authored.saveTemplate({
+      id,
+      widget: { type: widget.type, config: { ...(widget.config ?? {}) } },
+    });
+
+    const next = withWidgetConfig(doc, widgetId, { template: id });
+    if (next === undefined) throw new Error(`This page has no widget "${widgetId}".`);
+    this.writePages(this.replacing(next), next.id);
+    return id;
+  };
+
+  /**
+   * Give an instance back its own copy of the widget (§5.4).
+   *
+   * The way out of a reference, and the reason taking one is safe to try: a
+   * placement that should have stayed its own thing is one press from being
+   * so, with whatever the template currently draws as its starting point.
+   */
+  private readonly detachTemplate = async (widgetId: string): Promise<void> => {
+    const doc = this.current;
+    if (doc === undefined) throw new Error('No page to detach on.');
+
+    const widget = (doc.widgets ?? []).find((w) => w.id === widgetId);
+    const ref = templateRef(widget?.config);
+    if (widget === undefined || ref === undefined) throw new Error('That is not an instance.');
+
+    const template = this.authored.templates().get(ref.template);
+    if (template === undefined) throw new Error(`No template "${ref.template}".`);
+
+    const next = withWidgetConfig(doc, widgetId, instantiate(template, ref.params).config ?? {});
+    if (next === undefined) throw new Error(`This page has no widget "${widgetId}".`);
+    this.writePages(this.replacing(next), next.id);
+    return Promise.resolve();
+  };
+
+  /**
+   * Write a template's subtree back (§5.4).
+   *
+   * Not through `writePages`, and deliberately: a template is not a page, so
+   * it does not belong in the page history — and undoing a page edit must not
+   * quietly revert a template that twelve other placements are following.
+   */
+  private readonly saveTemplate = async (
+    id: string,
+    widget: { type: string; config?: Record<string, unknown> },
+  ): Promise<void> => {
+    const found = this.authored.templates().get(id);
+    if (found === undefined) throw new Error(`No template "${id}".`);
+    this.authored.saveTemplate({ ...found, widget });
+    this.requestUpdate();
+    return Promise.resolve();
+  };
 
   private readonly removeWidgetFromPage = async (widgetId: string): Promise<void> => {
     const doc = this.current;
@@ -1014,6 +1127,13 @@ export class HcApp extends LitElement {
       mode: this.editing ? 'edit' : 'view',
       extensions: this.extensions,
       assets: this.assets,
+      ...(this.mayWriteDashboards()
+        ? {
+            onMakeTemplate: this.makeTemplate,
+            onDetachTemplate: this.detachTemplate,
+            onSaveTemplate: this.saveTemplate,
+          }
+        : {}),
       ...(this.mayWriteDashboards() ? { onInstallExtension: this.installExtension } : {}),
       ...(this.mayWriteDashboards() ? { onUploadAsset: this.uploadAsset } : {}),
       ...(this.mayWriteDashboards()
@@ -1685,6 +1805,15 @@ export class HcApp extends LitElement {
     >
       <option value="">Draw…</option>
       ${knownTypes().map((t) => html`<option value=${t}>${humanise(t)}</option>`)}
+      ${
+        // Templates alongside the types, because placing a second instance is
+        // the point of having made the first (§5.4). Prefixed so a template
+        // called `toggle` cannot be mistaken for the widget type.
+        this.authored
+          .templates()
+          .list()
+          .map((t) => html`<option value=${`${TEMPLATE_TOOL}${t.id}`}>Template · ${t.id}</option>`)
+      }
     </select>`;
   }
 
@@ -1872,6 +2001,9 @@ export class HcApp extends LitElement {
         .extensions=${this.extensions}
         .onInstallExtension=${this.mayWriteDashboards() ? this.installExtension : undefined}
         .assets=${this.assets}
+        .onMakeTemplate=${this.mayWriteDashboards() ? this.makeTemplate : undefined}
+        .onDetachTemplate=${this.mayWriteDashboards() ? this.detachTemplate : undefined}
+        .onSaveTemplate=${this.mayWriteDashboards() ? this.saveTemplate : undefined}
         .onUploadAsset=${this.mayWriteDashboards() ? this.uploadAsset : undefined}
         .scopes=${this.panelScopes}
         .templates=${this.authored.templates()}

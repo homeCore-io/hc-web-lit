@@ -460,6 +460,11 @@ export class HcPage extends LitElement {
   @property({ attribute: false }) assets: MountEnv['assets'];
   @property({ attribute: false }) onUploadAsset: MountEnv['onUploadAsset'];
 
+  /** Make a template out of a widget on this page, or take one apart (§5.4). */
+  @property({ attribute: false }) onMakeTemplate: MountEnv['onMakeTemplate'];
+  @property({ attribute: false }) onDetachTemplate: MountEnv['onDetachTemplate'];
+  @property({ attribute: false }) onSaveTemplate: MountEnv['onSaveTemplate'];
+
   /**
    * Viewing or arranging (§14.2).
    *
@@ -1773,6 +1778,9 @@ export class HcPage extends LitElement {
       mode: this.mode,
       ...(this.extensions !== undefined ? { extensions: this.extensions } : {}),
       ...(this.assets !== undefined ? { assets: this.assets } : {}),
+      ...(this.onMakeTemplate !== undefined ? { onMakeTemplate: this.onMakeTemplate } : {}),
+      ...(this.onDetachTemplate !== undefined ? { onDetachTemplate: this.onDetachTemplate } : {}),
+      ...(this.onSaveTemplate !== undefined ? { onSaveTemplate: this.onSaveTemplate } : {}),
       ...(this.onUploadAsset !== undefined ? { onUploadAsset: this.onUploadAsset } : {}),
       ...(this.onInstallExtension !== undefined
         ? { onInstallExtension: this.onInstallExtension }

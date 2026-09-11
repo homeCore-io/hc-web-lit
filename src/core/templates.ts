@@ -128,6 +128,75 @@ export function instantiate(
 }
 
 /**
+ * Which parameters a template's subtree actually reads.
+ *
+ * **Derived rather than declared**, which is what lets a template be authored
+ * without a second editor for its signature: a person writes
+ * `{{ params.room }}` into a field — or `params.room` through the `ƒx` toggle,
+ * since substitution is P1's expression language (§6) — and the template's
+ * inputs are whatever they wrote. A declared list that could disagree with the
+ * subtree is a list that eventually does, and the failure is an instance
+ * offering a parameter nothing reads.
+ *
+ * `params` declared with defaults still count, because a default is a
+ * parameter whose value somebody chose not to require.
+ */
+export function paramNames(template: WidgetTemplate): string[] {
+  const found = new Set((template.params ?? []).map((p) => p.name));
+  walk(template.widget.config, found);
+  return [...found].sort((a, b) => a.localeCompare(b));
+}
+
+/** Every `params.x` an interpolation or an expression reaches for. */
+const READS = /\bparams\s*\.\s*([A-Za-z_$][\w$]*)/g;
+
+function walk(value: unknown, into: Set<string>): void {
+  if (typeof value === 'string') {
+    if (hasInterpolation(value)) collect(value, into);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const v of value) walk(v, into);
+    return;
+  }
+  if (isExpr(value)) {
+    collect(value.$expr, into);
+    return;
+  }
+  if (typeof value === 'object' && value !== null) {
+    for (const v of Object.values(value as Record<string, unknown>)) walk(v, into);
+  }
+}
+
+function collect(source: string, into: Set<string>): void {
+  for (const m of source.matchAll(READS)) {
+    if (m[1] !== undefined) into.add(m[1]);
+  }
+}
+
+/**
+ * A template id from what somebody typed.
+ *
+ * The same rule page ids follow: an id is an address — a placement names one —
+ * so it is tidy even when the name is not, and a collision gets a number
+ * rather than a silent overwrite of somebody else's template.
+ */
+export function templateId(name: string, taken: readonly string[]): string {
+  const base =
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 48) || 'template';
+
+  if (!taken.includes(base)) return base;
+  for (let n = 2; ; n++) {
+    const tried = `${base}-${n}`;
+    if (!taken.includes(tried)) return tried;
+  }
+}
+
+/**
  * The templates a client knows about.
  *
  * An interface rather than a fetch, because *where* they are stored is an open

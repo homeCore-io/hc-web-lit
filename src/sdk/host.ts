@@ -45,6 +45,27 @@ export interface MountEnv {
   onAction?: (a: ActionConfig) => void;
   /** Where widget templates come from (§5.4). Absent means none are defined. */
   templates?: TemplateStore;
+  /**
+   * Turn a widget on the page into a template, and the placement into an
+   * instance of it (§5.4).
+   *
+   * The host's, because both halves are its: the template goes in the store
+   * beside the icon rules, and the page is rewritten to point at it. A widget
+   * that did this itself would be a widget writing the page it is on.
+   */
+  onMakeTemplate?: (name: string, widgetId: string) => Promise<string>;
+  /** Give an instance back its own copy of the widget, detached (§5.4). */
+  onDetachTemplate?: (widgetId: string) => Promise<void>;
+  /**
+   * Write a template's subtree back, for every instance to follow (§5.4).
+   *
+   * The edit that makes a reference worth having: one definition changed and
+   * twelve rooms redrawn, with no migration and nothing to keep in step.
+   */
+  onSaveTemplate?: (
+    id: string,
+    widget: { type: string; config?: Record<string, unknown> },
+  ) => Promise<void>;
 
   /**
    * Build a child widget, for `ctx.child` (§5.5).
