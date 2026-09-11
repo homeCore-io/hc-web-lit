@@ -21,11 +21,21 @@ import {
   newPage,
   placeWidget,
   placeWidgets,
+  regroupWidgets,
   removeWidget,
   turnWidget,
   renamed,
   type Box,
 } from '../core/pages.js';
+import {
+  commonGroup,
+  freshName,
+  groupOf,
+  membersOf,
+  namesIn,
+  regrouped,
+  ungrouped,
+} from '../core/groups.js';
 import { knownTypes } from '../core/registry.js';
 import { humanise } from '../core/text.js';
 import { EventStream } from '../core/events.js';
@@ -105,6 +115,10 @@ import '../widgets/hc-extensions.js';
 
 type Phase = 'idle' | 'connecting' | 'ready' | 'failed';
 
+/** A group name placed under where the surface is standing. */
+const joinIn = (inside: string | undefined, name: string): string =>
+  inside === undefined ? name : `${inside}/${name}`;
+
 /**
  * How long since the house said anything, in words rather than a timestamp.
  *
@@ -168,6 +182,10 @@ export class HcApp extends LitElement {
       color: var(--hc-ink, #e9edf2);
       font: inherit;
       max-width: 40vw;
+    }
+    header .inside {
+      color: var(--hc-ink-muted, #8b95a4);
+      font-size: var(--hc-text-caption-size, 11px);
     }
     header button.armed,
     header select.armed {
@@ -704,6 +722,65 @@ export class HcApp extends LitElement {
     return Promise.resolve();
   };
 
+  /**
+   * Hold what is selected as one thing (§14.1).
+   *
+   * The new group is named for where the surface is standing, not globally:
+   * sibling names have to be unique because the name *is* the address, and two
+   * siblings sharing one would merge them.
+   *
+   * Anything already grouped below where you stand keeps its own grouping
+   * underneath the new one, so putting a loose card beside a cluster does not
+   * dissolve the cluster.
+   */
+  private readonly groupHeld = (): void => {
+    const doc = this.current;
+    const ids = this.held.ids;
+    if (doc === undefined || ids.length < 2) return;
+
+    const inside = this.held.inside;
+    const all = (doc.widgets ?? []).map((w) => groupOf(w.config));
+    const path = regrouped(undefined, joinIn(inside, freshName(namesIn(all, inside))), inside);
+
+    const paths = new Map<string, string | undefined>();
+    for (const w of doc.widgets ?? []) {
+      if (!ids.includes(w.id)) continue;
+      paths.set(w.id, regrouped(groupOf(w.config), path, inside));
+    }
+    this.writePages(this.replacing(regroupWidgets(doc, paths)), doc.id);
+  };
+
+  /**
+   * Take the group in hand apart.
+   *
+   * **The group dissolved is the one they share**, not each card's innermost:
+   * holding `Wall` and ungrouping must leave `Wall/Lights` standing as
+   * `Lights`, or ungrouping the thing in hand would take apart something else.
+   *
+   * Every member of that group goes, not only the ones selected — a group
+   * half-dissolved is two groups with one name, which is not a thing anybody
+   * asked for.
+   */
+  private readonly ungroupHeld = (): void => {
+    const doc = this.current;
+    if (doc === undefined) return;
+
+    const byId = new Map<string, string | undefined>();
+    for (const w of doc.widgets ?? []) byId.set(w.id, groupOf(w.config));
+    const shared = commonGroup(this.held.ids.map((id) => byId.get(id)));
+    if (shared === undefined) return;
+
+    const paths = new Map<string, string | undefined>();
+    for (const id of membersOf(byId, shared)) paths.set(id, ungrouped(byId.get(id), shared));
+    this.writePages(this.replacing(regroupWidgets(doc, paths)), doc.id);
+  };
+
+  /** The group the held elements share, when there is one to act on. */
+  private heldGroup(): string | undefined {
+    const byId = new Map((this.current?.widgets ?? []).map((w) => [w.id, groupOf(w.config)]));
+    return commonGroup(this.held.ids.map((id) => byId.get(id)));
+  }
+
   private readonly removeWidgetFromPage = async (widgetId: string): Promise<void> => {
     const doc = this.current;
     if (doc === undefined) throw new Error('No page to remove from.');
@@ -750,6 +827,17 @@ export class HcApp extends LitElement {
 
   /** Whether the page's name is being typed rather than shown. */
   @state() private renaming = false;
+
+  /**
+   * What the page has in hand, as it last reported (§14.1's groups).
+   *
+   * A mirror rather than the truth: the selection belongs to the surface that
+   * made it, and this exists so the chrome can offer to group it. Reaching
+   * into `hc-page` for it would make the shell the second place that decides
+   * what is selected, and two answers to that is how a button acts on
+   * something other than what is highlighted.
+   */
+  @state() private held: { ids: readonly string[]; inside?: string } = { ids: [] };
 
   /**
    * Arranging the page, rather than using it (§14.2).
@@ -970,7 +1058,15 @@ export class HcApp extends LitElement {
    * the one thing Escape means everywhere: never mind.
    */
   private readonly onKey = (e: KeyboardEvent): void => {
-    if (e.key === 'Escape') this.dropTool();
+    if (e.key !== 'Escape') return;
+    // One layer at a time, outermost gesture first: a held tool is the most
+    // recent thing somebody did, and stepping out of a group while still
+    // holding a tool would drop them somewhere they did not ask to be.
+    if (this.tool !== undefined) {
+      this.dropTool();
+      return;
+    }
+    this.renderRoot.querySelector('hc-page')?.stepOutOfGroup();
   };
 
   /**
@@ -1539,6 +1635,40 @@ export class HcApp extends LitElement {
     </select>`;
   }
 
+  /**
+   * Group and ungroup what the page has in hand (§14.1).
+   *
+   * Offered only when there is something to do: two or more elements to hold
+   * as one, or a group in hand to take apart. A button that is always there
+   * and usually inert is a button people stop reading.
+   */
+  private groupControls() {
+    if (!this.editing) return nothing;
+    const shared = this.heldGroup();
+    const canGroup = this.held.ids.length >= 2;
+    if (!canGroup && shared === undefined) return nothing;
+
+    return html`${
+      canGroup
+        ? html`<button title="Hold these as one" @click=${this.groupHeld}>Group</button>`
+        : nothing
+    }
+    ${
+      shared === undefined
+        ? nothing
+        : html`<button title=${`Take "${shared}" apart`} @click=${this.ungroupHeld}>
+            Ungroup
+          </button>`
+    }
+    ${
+      this.held.inside === undefined
+        ? nothing
+        : html`<span class="inside" title="Press Escape to step out">
+            in ${this.held.inside}
+          </span>`
+    }`;
+  }
+
   private pageControls() {
     if (!this.mayWriteDashboards()) return nothing;
     const id = this.current?.id;
@@ -1562,7 +1692,7 @@ export class HcApp extends LitElement {
       />`;
     }
 
-    return html`${this.palette()}
+    return html`${this.palette()}${this.groupControls()}
       <button
         title="Undo the last change"
         ?disabled=${!this.undoStack.canUndo}
@@ -1660,6 +1790,9 @@ export class HcApp extends LitElement {
       }
       <hc-page
         @hc-open-room=${(e: CustomEvent<{ room: string; page?: string }>) => this.openRoom(e)}
+        @hc-picked=${(e: CustomEvent<{ ids: string[]; inside?: string }>) => {
+          this.held = e.detail;
+        }}
         .doc=${this.current}
         .store=${this.store}
         .onCommand=${this.command}

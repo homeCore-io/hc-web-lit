@@ -2288,7 +2288,13 @@ not a failure of it.
       as a `Layer` choice in the property panel: `gridItems` has always
       resolved the engine's `floating` from `config.layer === "free"`, and
       nothing could write it — so a lifted card could only be made by hand in
-      another editor. Still open: groups and group rotation
+      another editor. **Groups are in**, as a path in the widget's config
+      (`core/groups.ts`, ported from the Dart's `groups.dart`): the path *is*
+      the identity, so nesting is free, orphans cannot happen, and grouping
+      then ungrouping leaves the document byte-identical. One press holds the
+      cluster, a second press goes in, Escape steps out. Still open: group
+      rotation, which turns about the *group's* centre and is the one thing an
+      element's own `angle` cannot express
 - [x] Transform geometry — written against the placement model, gestures working
       from the placement alone so a sandboxed element is transformable without
       being inspectable (§14.2). `core/geometry.ts`, pure and tested as such.

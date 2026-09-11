@@ -1544,3 +1544,178 @@ describe('guides while composing (§14.1)', () => {
     expect(el.shadowRoot?.querySelector('.guide')).toBeNull();
   });
 });
+
+describe('holding a cluster as one (§14.1)', () => {
+  beforeEach(shimPointers);
+
+  /** Two cards in a group, one loose, laid out in a row. */
+  const page = (): DashboardDefinition =>
+    base({
+      widgets: [
+        { id: 'a', type: 'text', config: { text: 'a', group: 'Wall' } },
+        { id: 'b', type: 'text', config: { text: 'b', group: 'Wall/Lights' } },
+        { id: 'c', type: 'text', config: { text: 'c' } },
+      ],
+      layouts: [
+        {
+          breakpoint: 'desktop',
+          columns: 12,
+          row_height: 100,
+          gap: 0,
+          placements: [
+            { widget_id: 'a', x: 0, y: 0, w: 2, h: 1 },
+            { widget_id: 'b', x: 2, y: 0, w: 2, h: 1 },
+            { widget_id: 'c', x: 8, y: 0, w: 2, h: 1 },
+          ],
+        },
+      ],
+    });
+
+  const arranged = async (): Promise<HcPage> => {
+    const el = document.createElement('hc-page');
+    el.doc = page();
+    el.store = new DeviceStore();
+    el.onPlaceWidget = async () => undefined;
+    el.mode = 'edit';
+    document.body.append(el);
+    await el.updateComplete;
+
+    const at: Record<string, [number, number]> = { a: [0, 200], b: [200, 400], c: [800, 1000] };
+    for (const cell of el.shadowRoot?.querySelectorAll('[data-widget]') ?? []) {
+      const [left, right] = at[cell.getAttribute('data-widget') ?? ''] ?? [0, 1];
+      cell.getBoundingClientRect = () => ({ left, right, top: 0, bottom: 100 }) as DOMRect;
+    }
+    return el;
+  };
+
+  const pickedIn = (el: HcPage): string[] =>
+    [...(el.shadowRoot?.querySelectorAll('[data-picked]') ?? [])]
+      .map((e) => e.getAttribute('data-widget') ?? '')
+      .sort();
+
+  const press = (el: HcPage, x: number, y: number, init: MouseEventInit = {}): void => {
+    const on = el.shadowRoot?.querySelector('.grid') as Element;
+    for (const type of ['pointerdown', 'pointerup']) {
+      on.dispatchEvent(
+        new FakePointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          clientX: x,
+          clientY: y,
+          pointerId: 1,
+          ...init,
+        }),
+      );
+    }
+  };
+
+  it('puts the whole group in hand for one press on a member', async () => {
+    // The whole point of grouping: a card in a group is rarely the thing
+    // somebody means to move — the group is.
+    const el = await arranged();
+    press(el, 100, 50);
+    await el.updateComplete;
+    expect(pickedIn(el)).toEqual(['a', 'b']);
+  });
+
+  it('holds only itself for a card in no group', async () => {
+    const el = await arranged();
+    press(el, 900, 50);
+    await el.updateComplete;
+    expect(pickedIn(el)).toEqual(['c']);
+  });
+
+  it('goes one level in on a second press, and holds less', async () => {
+    // Getting at a single member means going in first, which is why entering
+    // is a gesture of its own.
+    const el = await arranged();
+    press(el, 300, 50, { detail: 2 });
+    await el.updateComplete;
+    // Standing in `Wall`, pressing `b` holds `Wall/Lights` — which is only b.
+    expect(pickedIn(el)).toEqual(['b']);
+  });
+
+  it('steps back out, and holds the whole cluster again', async () => {
+    const el = await arranged();
+    press(el, 300, 50, { detail: 2 });
+    await el.updateComplete;
+    expect(el.stepOutOfGroup()).toBe(true);
+    await el.updateComplete;
+
+    press(el, 100, 50);
+    await el.updateComplete;
+    expect(pickedIn(el)).toEqual(['a', 'b']);
+    // Nothing left to step out of.
+    expect(el.stepOutOfGroup()).toBe(false);
+  });
+
+  it('leaves the group when something outside it is pressed', async () => {
+    // Ignoring the click instead would be a surface that stops responding for
+    // reasons nothing on screen explains.
+    const el = await arranged();
+    press(el, 300, 50, { detail: 2 });
+    await el.updateComplete;
+
+    press(el, 900, 50);
+    await el.updateComplete;
+    expect(pickedIn(el)).toEqual(['c']);
+    expect(el.stepOutOfGroup()).toBe(false);
+  });
+
+  it('toggles a cluster as one under shift', async () => {
+    // Taking one card out of a group you are holding would leave a selection
+    // that looks like the group and is not.
+    const el = await arranged();
+    press(el, 900, 50);
+    await el.updateComplete;
+    press(el, 100, 50, { shiftKey: true });
+    await el.updateComplete;
+    expect(pickedIn(el)).toEqual(['a', 'b', 'c']);
+
+    press(el, 100, 50, { shiftKey: true });
+    await el.updateComplete;
+    expect(pickedIn(el)).toEqual(['c']);
+  });
+
+  it('tells the shell what it holds, which is how a button can act on it', async () => {
+    const el = await arranged();
+    const seen: { ids: string[]; inside?: string }[] = [];
+    el.addEventListener('hc-picked', (e) => seen.push((e as CustomEvent).detail));
+
+    press(el, 100, 50);
+    await el.updateComplete;
+    expect(seen.at(-1)?.ids.sort()).toEqual(['a', 'b']);
+
+    press(el, 300, 50, { detail: 2 });
+    await el.updateComplete;
+    expect(seen.at(-1)?.inside).toBe('Wall');
+  });
+
+  it('moves a whole group by one delta when its members are held', async () => {
+    const many = groupSpy();
+    const el = await arranged();
+    el.onPlaceWidgets = many;
+    press(el, 100, 50);
+    await el.updateComplete;
+    Object.defineProperty(el.shadowRoot?.querySelector('.grid') as Element, 'clientWidth', {
+      value: 1200,
+      configurable: true,
+    });
+
+    const grab = el.shadowRoot?.querySelector('[data-widget="a"] .grab') as Element;
+    grab.dispatchEvent(
+      new FakePointerEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0, pointerId: 1 }),
+    );
+    grab.dispatchEvent(
+      new FakePointerEvent('pointermove', { clientX: 200, clientY: 0, pointerId: 1 }),
+    );
+    grab.dispatchEvent(
+      new FakePointerEvent('pointerup', { clientX: 200, clientY: 0, pointerId: 1 }),
+    );
+
+    expect(many.mock.calls[0]?.[0]).toEqual([
+      { id: 'a', box: { x: 2, y: 0, w: 2, h: 1 } },
+      { id: 'b', box: { x: 4, y: 0, w: 2, h: 1 } },
+    ]);
+  });
+});

@@ -21,6 +21,7 @@ import type {
 } from './dashboard.js';
 import { layoutToDraw } from './dashboard.js';
 import { cellsOf } from './geometry.js';
+import { withGroup } from './groups.js';
 
 /**
  * A page id from what somebody typed.
@@ -184,6 +185,35 @@ export function addWidget(
         placements: [...(l.placements ?? []), placeBelow(l, id)],
       })),
     },
+  };
+}
+
+/**
+ * The page with several widgets moved into (or out of) groups.
+ *
+ * One function for grouping, ungrouping and renaming, because all three are
+ * the same edit: a map of widget id to the path it should now carry, applied
+ * in one document so the whole regrouping is one step to undo. Doing them one
+ * at a time would leave a cluster half-grouped as a state somebody could undo
+ * back to, which is an arrangement that never existed.
+ *
+ * A path of `undefined` takes the key out entirely (`withGroup`), so grouping
+ * and then ungrouping leaves the document exactly as it was found.
+ *
+ * **Widgets, not placements.** A group is a property of the element and not of
+ * the arrangement (§14.1's rule for `layer`, and the same reasoning): a cluster
+ * held together on the wall is held together on the phone, so it lives in the
+ * widget's config where there is one copy of it rather than one per layout.
+ */
+export function regroupWidgets(
+  doc: DashboardDefinition,
+  paths: ReadonlyMap<string, string | undefined>,
+): DashboardDefinition {
+  return {
+    ...doc,
+    widgets: (doc.widgets ?? []).map((w) =>
+      paths.has(w.id) ? { ...w, config: withGroup(w.config, paths.get(w.id)) } : w,
+    ),
   };
 }
 

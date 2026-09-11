@@ -31,6 +31,7 @@ import {
   type Guide,
   type Handle,
 } from '../core/geometry.js';
+import { clickTarget, groupOf, isUnder, membersOf, stepOut } from '../core/groups.js';
 import type { SelectionContext } from '../core/selection.js';
 import { isVisible } from '../core/visibility.js';
 import type { DeviceStore } from '../core/store.js';
@@ -1032,15 +1033,95 @@ export class HcPage extends LitElement {
    * file manager and design application shares, and the one place a person
    * will not read documentation to discover.
    */
+  override updated(changed: Map<string, unknown>): void {
+    // The shell renders the Group and Ungroup buttons and does the writing, so
+    // it has to know what is in hand. An event rather than a callback because
+    // the selection is the page's (§14.2) and this is it reporting, not the
+    // shell reaching in — the same shape as `hc-open-room`.
+    if (!changed.has('picked') && !changed.has('inside')) return;
+    this.dispatchEvent(
+      new CustomEvent('hc-picked', {
+        bubbles: true,
+        composed: true,
+        detail: { ids: [...this.picked], inside: this.inside },
+      }),
+    );
+  }
+
   private pick(id: string, extend: boolean): void {
+    const held = this.clusterOf(id);
     if (!extend) {
-      this.picked = new Set([id]);
+      this.picked = held;
       return;
     }
     const next = new Set(this.picked);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
+    // A cluster toggles as one: taking one card out of a group you are holding
+    // would leave a selection that looks like the group and is not.
+    const already = [...held].every((m) => next.has(m));
+    for (const m of held) {
+      if (already) next.delete(m);
+      else next.add(m);
+    }
     this.picked = next;
+  }
+
+  /**
+   * What pressing this element actually puts in hand (§14.1's groups).
+   *
+   * **One click holds the cluster.** A card in a group is rarely the thing
+   * somebody means to move — the group is — and getting at a single member is
+   * what `inside` is for. Clicking something outside the group you are
+   * standing in takes you back out of it, because a surface that ignored the
+   * click would stop responding for reasons nothing on screen explains.
+   */
+  private clusterOf(id: string): Set<string> {
+    const paths = this.groupPaths();
+    const path = paths.get(id);
+
+    // Pressing anything that is not in the group you are standing in takes you
+    // out of it — **including a card in no group at all**, which the gesture
+    // this was ported from leaves you standing in. Staying put there means the
+    // next press on a member silently holds one card instead of the cluster,
+    // with nothing on screen explaining why.
+    if (this.inside !== undefined && (path === undefined || !isUnder(path, this.inside))) {
+      this.inside = undefined;
+    }
+
+    const target = clickTarget(path, this.inside);
+    return target === undefined ? new Set([id]) : membersOf(paths, target);
+  }
+
+  /** Every widget's group path, by id. */
+  private groupPaths(): Map<string, string | undefined> {
+    const paths = new Map<string, string | undefined>();
+    for (const w of this.doc?.widgets ?? []) paths.set(w.id, groupOf(w.config));
+    return paths;
+  }
+
+  /**
+   * Which group the surface is standing in, or none.
+   *
+   * Entering is a gesture of its own — a double press — because the whole
+   * value of a group is that an ordinary press holds all of it. Escape steps
+   * out one level, which is the same key that drops a tool and clears a
+   * selection: "never mind", one layer at a time.
+   */
+  @state() private inside: string | undefined;
+
+  /** Step out of one group, and say whether there was one to step out of. */
+  stepOutOfGroup(): boolean {
+    if (this.inside === undefined) return false;
+    this.inside = stepOut(this.inside);
+    return true;
+  }
+
+  /** Go into the group this element belongs to, one level down. */
+  private enter(id: string): void {
+    const target = clickTarget(this.groupPaths().get(id), this.inside);
+    if (target === undefined) return;
+    this.inside = target;
+    // Standing inside it, the same press now holds one level deeper.
+    this.picked = this.clusterOf(id);
   }
 
   /**
@@ -1264,7 +1345,11 @@ export class HcPage extends LitElement {
         if (!extend) this.picked = new Set();
         return;
       }
-      this.pick(on, extend);
+      // A second press in the same place goes *into* the group rather than
+      // holding it — the gesture of its own that §14.1's "one click holds the
+      // cluster" needs, or a member could never be reached at all.
+      if (upon.detail >= 2) this.enter(on);
+      else this.pick(on, extend);
     };
 
     target.addEventListener('pointermove', move);
