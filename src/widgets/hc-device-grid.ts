@@ -36,19 +36,55 @@ export class HcDeviceGrid extends LitElement {
       gap: calc(var(--hc-space-unit, 8px));
       grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
     }
+    /* **The set is the object; a row in it is not.**
+
+       Thirteen bordered boxes stacked in a column read as thirteen things when
+       the point is one list, and each of them ran the full width of the page
+       to hold an icon, a name and one word — about five hundred pixels of
+       nothing down the middle, thirteen times. So the rows give up their
+       chrome to the set (the shell hooks, §5.8) and the set flows them into as
+       many columns as the width will take.
+
+       Each row draws its own hairline all the way round, as a shadow rather
+       than a border so it costs no layout and **overlaps its neighbour's** —
+       which is what leaves one line between every pair and one at the outside,
+       with no rule anywhere that has to know which row is first, last, or at
+       the end of a line. A column count nobody has to state, and no arithmetic
+       to get wrong.
+
+       Drawn by the rows and not by the gaps, because a section with one device
+       in it has one row and the rest of the line is *nothing* — a container
+       painting the surface underneath would put an empty half-width box beside
+       it, which is what the first attempt did in every room with a single leak
+       sensor. auto-fit is here for the same reason: an empty track collapses, so one
+       row is a full-width row rather than a half of one. */
     .list {
       display: grid;
-      gap: calc(var(--hc-space-unit, 8px) * 0.5);
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(auto-fit, minmax(var(--hc-set-column, 17rem), 1fr));
+      border-radius: var(--hc-radius-md, 14px);
+      overflow: hidden;
     }
     /* One row, filling the height it was given. The room page asks for these
-       in a 44px placement, which is a pill and not a card. */
+       in a 44px placement, which is a pill and not a card — and a row of
+       chips with a gap between each is the same "several objects" reading the
+       list had, so they are segments of one strip instead. */
     .pills {
       display: grid;
       grid-auto-flow: column;
       grid-auto-columns: minmax(0, 1fr);
-      gap: calc(var(--hc-space-unit, 8px) * 0.75);
       height: 100%;
+      border-radius: var(--hc-radius-md, 14px);
+      overflow: hidden;
+    }
+    /* The chrome the rows hand over. Set on the children rather than on the
+       container, because these inherit and a row's own descendants — the
+       tile, a nested control — must keep theirs. */
+    .list > *,
+    .pills > * {
+      --hc-shell-surface: var(--hc-surface-raised, #141922);
+      --hc-shell-edge: 0;
+      --hc-shell-radius: 0;
+      box-shadow: 0 0 0 var(--hc-stroke-width, 1px) var(--hc-stroke-hairline, #262d38);
     }
     .empty {
       color: var(--hc-ink-muted, #8b95a4);

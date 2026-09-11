@@ -45,7 +45,7 @@ import {
 import { deriveDensity } from '../design/tokens.js';
 import { clickTarget, groupOf, isUnder, membersOf, stepOut } from '../core/groups.js';
 import type { SelectionContext } from '../core/selection.js';
-import { isVisible } from '../core/visibility.js';
+import { isVisible, selectsDevices } from '../core/visibility.js';
 import type { DeviceStore } from '../core/store.js';
 import type { CommandRequest } from '../core/widget.js';
 import type { EventFetch } from '../widgets/hc-event-feed.js';
@@ -1021,6 +1021,16 @@ export class HcPage extends LitElement {
    * Recursive, because a band of bands is empty exactly when all of them are,
    * and the question a column asks about a nested container is the same one
    * the page asks about a column.
+   *
+   * **And a section goes when its set does.** A section is a heading, a rule
+   * and a list; a room with no leak sensor wants none of the three, but the
+   * heading is visible in every sense the first rule can see — a heading has
+   * no devices to be empty of. So a container that holds something which
+   * *chooses* devices is as present as those members are, and a container
+   * that holds none of them keeps the first rule. That second half is what
+   * makes it a rule about sections rather than about headings: the room page's
+   * SETS band is three labels and no set, and it stays exactly as long as the
+   * labels do.
    */
   private holdsAnything(
     items: readonly GridItem[],
@@ -1029,12 +1039,22 @@ export class HcPage extends LitElement {
     flow: ReadonlyMap<string, DashboardGroupBox>,
   ): boolean {
     const devices = this.store?.list() ?? [];
+    let chooses = false;
+    let anything = false;
     for (const item of items) {
       const w = byId.get(item.id);
       if (w === undefined || this.stackedIn(w) !== box.path) continue;
-      if (isVisible(w.config ?? {}, devices, this.context)) return true;
+      const shown = isVisible(w.config ?? {}, devices, this.context, w.type);
+      if (selectsDevices(w.type, w.config ?? {})) {
+        if (shown) return true;
+        chooses = true;
+      } else if (shown) {
+        anything = true;
+      }
     }
-    return framesIn(box.path, flow).some((b) => this.holdsAnything(items, byId, b, flow));
+    const held = framesIn(box.path, flow).some((b) => this.holdsAnything(items, byId, b, flow));
+    if (held) return true;
+    return chooses ? false : anything;
   }
 
   /** Whether the container at this path lays its children out in a column. */
@@ -2336,7 +2356,7 @@ export class HcPage extends LitElement {
     // An element the document says to hide is not drawn at all, rather than
     // drawn and hidden: the SETS controls exist to aim at a light you have
     // touched, and before you touch one there is nothing to aim at (§14.1).
-    if (!isVisible(w.config ?? {}, this.store?.list() ?? [], this.context)) return nothing;
+    if (!isVisible(w.config ?? {}, this.store?.list() ?? [], this.context, w.type)) return nothing;
 
     // A template instance stands for another widget entirely, so what to draw
     // is decided before which tag draws it (§5.4).

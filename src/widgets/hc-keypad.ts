@@ -49,11 +49,36 @@ export class HcKeypad extends LitElement {
       display: grid;
       gap: 0.625rem;
       padding: var(--hc-density-card-padding, 14px);
-      border-radius: var(--hc-radius-md, 14px);
-      border: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
-      background: var(--hc-surface-raised, #141922);
+      /* The same chrome hooks a shell widget reads (§5.8), so a set can take
+         the box away from this one too. It does not extend the shell — it
+         draws a panel of keys rather than a headline and a control row — but
+         "who owns the surface" is a question about composition, and it gets
+         the same answer whatever the widget is made of. */
+      border-radius: var(--hc-shell-radius, var(--hc-radius-md, 14px));
+      border: var(
+        --hc-shell-edge,
+        var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38)
+      );
+      background: var(--hc-shell-surface, var(--hc-surface-raised, #141922));
       color: var(--hc-ink, #e9edf2);
       font-family: var(--hc-font-body, system-ui, sans-serif);
+    }
+    /* **In a set, a keypad is a row like everything else.** Its keys are the
+       point of a placement that names one device; in a list of what is in a
+       room they are twenty rows that push the room off the screen — the living
+       room has three of these and they came to four hundred pixels of buttons
+       under a heading about how the room is wired. The name and what was last
+       pressed is what a list wants, and holding it still opens the whole
+       thing. */
+    :host([data-row]) {
+      height: auto;
+      overflow: visible;
+    }
+    :host([data-row]) .card {
+      display: flex;
+      align-items: center;
+      min-height: var(--hc-density-row-height, 44px);
+      padding: 0 calc(var(--hc-space-unit, 8px) * 1.25);
     }
     .head {
       display: flex;
@@ -152,6 +177,9 @@ export class HcKeypad extends LitElement {
   @property({ attribute: false }) config: Record<string, unknown> = {};
   @property({ attribute: false }) onCommand: ((r: CommandRequest) => void) | undefined;
 
+  /** In a set, where the room is the subject and this is one line of it. */
+  @property({ type: Boolean, reflect: true, attribute: 'data-row' }) row = false;
+
   override render() {
     const d = this.device;
     if (d === undefined) return html`<div class="empty" part="empty">No device</div>`;
@@ -172,7 +200,7 @@ export class HcKeypad extends LitElement {
         </span>
       </div>
       ${
-        keys.length === 0
+        keys.length === 0 || this.row
           ? nothing
           : html`<div class="keys" part="set">
               ${keys.map((k) => this.key(d, k, press !== undefined))}

@@ -43,6 +43,21 @@ export abstract class HcLayoutShell extends LitElement {
          never decides what a state looks like. */
       --hc-shell-tint: 0%;
       --hc-shell-colour: var(--hc-ink-muted, #8b95a4);
+      /* The chrome a shell draws around itself, as three hooks rather than
+         three literals (§5.8, and they are ABI under §19.7).
+
+         A card is an object and wants all three. **A row in a set is not an
+         object** — the set is, and thirteen bordered boxes stacked in a column
+         read as thirteen things when the point is one list. A container sets
+         these to nothing on its children and provides the surface itself,
+         which is a caller's decision about composition and not something a
+         widget should be deciding from the inside.
+
+         Custom properties cross the shadow boundary; a part does not. That is
+         why this is a property and not a second row form. */
+      --hc-shell-surface: var(--hc-surface-raised, #141922);
+      --hc-shell-edge: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
+      --hc-shell-radius: var(--hc-radius-md, 14px);
     }
     /* **No containment here, at either level.** Inline-size containment
        removes an element's content-based intrinsic width, so a shell widget
@@ -59,9 +74,9 @@ export abstract class HcLayoutShell extends LitElement {
       box-sizing: border-box;
       height: 100%;
       padding: var(--hc-density-card-padding, 14px);
-      border-radius: var(--hc-radius-md, 14px);
-      border: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
-      background: var(--hc-surface-raised, #141922);
+      border-radius: var(--hc-shell-radius);
+      border: var(--hc-shell-edge);
+      background: var(--hc-shell-surface);
       color: var(--hc-ink, #e9edf2);
       font-family: var(--hc-font-body, system-ui, sans-serif);
     }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DeviceState } from '../src/core/device.js';
-import { isVisible } from '../src/core/visibility.js';
+import { isVisible, selectsDevices } from '../src/core/visibility.js';
 
 const light = (over: Partial<DeviceState> = {}): DeviceState => ({
   device_id: 'lamp',
@@ -61,5 +61,72 @@ describe('isVisible', () => {
 
   it('hides when the picked device is gone', () => {
     expect(isVisible({ hide_with: '@picked' }, [], { picked: 'deleted' })).toBe(false);
+  });
+});
+
+describe('an element with nothing to show', () => {
+  const garage: DeviceState[] = [
+    {
+      ...light({ device_id: 'door', name: 'Side Door' }),
+      device_type: 'contact_sensor',
+      area: 'garage',
+    },
+  ];
+  const set = (facet: string) => ({
+    selection_mode: 'facet',
+    facet: [facet],
+    area_name: '@room',
+    hide_when_empty: true,
+  });
+
+  it('is on the page when its selection found something', () => {
+    expect(isVisible(set('doors_windows'), garage, { room: 'garage' }, 'device_list')).toBe(true);
+  });
+
+  it('is not, when it found nothing', () => {
+    // A room with no leak sensor wants no LEAKS section, and the widget
+    // drawing an empty box is only half of that — the heading, the rule and
+    // the space they were drawn in all stayed.
+    expect(isVisible(set('leaks'), garage, { room: 'garage' }, 'device_list')).toBe(false);
+  });
+
+  it('stays on the page without the flag, however empty it is', () => {
+    // An empty set is usually a selection that matched nothing rather than a
+    // house with nothing in it, and saying so is the default for a reason.
+    const { hide_when_empty: _drop, ...loud } = set('leaks');
+    expect(isVisible(loud, garage, { room: 'garage' }, 'device_list')).toBe(true);
+  });
+
+  it('asks the scene vocabulary for a scene row, which is a different one', () => {
+    // `scope` decides a scene row's pool, not `selection_mode` (§5.3), so one
+    // question with two answers rather than a selection test that would find
+    // nothing and hide a row that has scenes.
+    const scenes: DeviceState[] = [
+      {
+        ...light({ device_id: 'evening', name: 'Evening' }),
+        device_type: 'scene',
+        area: 'garage',
+        schema: { actions: [{ id: 'activate', label: 'Activate' }] },
+      },
+    ];
+    const row = { scope: 'room', room: '@room', hide_when_empty: true };
+    expect(isVisible(row, scenes, { room: 'garage' }, 'scene_row')).toBe(true);
+    expect(isVisible(row, scenes, { room: 'attic' }, 'scene_row')).toBe(false);
+  });
+
+  it('never hides something that selects nothing in the first place', () => {
+    // A heading has no devices to be empty of, and answering "no" for one
+    // would delete it from the page.
+    expect(isVisible({ hide_when_empty: true }, [], {}, 'text')).toBe(true);
+  });
+});
+
+describe('what counts as choosing devices', () => {
+  it('is a selection or a scene row, and not a label', () => {
+    expect(selectsDevices('device_list', { selection_mode: 'facet' })).toBe(true);
+    expect(selectsDevices('device_grid', { query: 'lights' })).toBe(true);
+    expect(selectsDevices('scene_row', { scope: 'room' })).toBe(true);
+    expect(selectsDevices('text', { text: 'LEAKS' })).toBe(false);
+    expect(selectsDevices('line', {})).toBe(false);
   });
 });

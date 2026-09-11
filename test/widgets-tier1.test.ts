@@ -6,6 +6,10 @@
  * looking at it. These close the last three that §7.3 names by name.
  */
 import { describe, expect, it } from 'vitest';
+import { HcDeviceGrid } from '../src/widgets/hc-device-grid.js';
+import { HcLayoutShell } from '../src/sdk/shell.js';
+import '../src/widgets/hc-fan.js';
+import '../src/widgets/hc-keypad.js';
 import { parseMarkdown, spansIn } from '../src/core/markdown.js';
 import type { DeviceState } from '../src/core/device.js';
 import { setPreferences } from '../src/core/i18n.js';
@@ -189,5 +193,108 @@ describe('the camera', () => {
     });
     expect(el.shadowRoot?.querySelector('img')).toBeNull();
     expect(text(el)).toContain('not an address');
+  });
+});
+
+describe('a set is the object, and a row in it is not', () => {
+  const css = [HcDeviceGrid.styles].flat().map(String).join('\n');
+  const shell = [HcLayoutShell.styles].flat().map(String).join('\n');
+
+  it('lets a caller take the chrome off a shell, as three hooks', () => {
+    // §5.8 and ABI under §19.7. Custom properties cross the shadow boundary
+    // and a part does not, which is why this is a property rather than a
+    // second row form.
+    expect(shell).toMatch(/--hc-shell-surface:/);
+    expect(shell).toMatch(/--hc-shell-edge:/);
+    expect(shell).toMatch(/--hc-shell-radius:/);
+    expect(shell).toMatch(/background:\s*var\(--hc-shell-surface\)/);
+    expect(shell).toMatch(/border:\s*var\(--hc-shell-edge\)/);
+  });
+
+  it('takes it off every row it holds', () => {
+    // Thirteen bordered boxes stacked in a column read as thirteen things when
+    // the point is one list.
+    expect(css).toMatch(/\.list > \*,\s*\n?\s*\.pills > \*\s*\{[^}]*--hc-shell-edge:\s*0/);
+    expect(css).toMatch(/\.list > \*,\s*\n?\s*\.pills > \*\s*\{[^}]*--hc-shell-radius:\s*0/);
+  });
+
+  it('flows rows into as many columns as the width will take', () => {
+    // Each row ran the whole page to hold an icon, a name and one word.
+    expect(css).toMatch(/\.list\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fit/);
+  });
+
+  it('draws the separators on the rows, so one row is a whole row', () => {
+    // A container painting the surface underneath puts an empty half-width box
+    // beside the only leak sensor in the house. A shadow costs no layout and
+    // overlaps its neighbour's, which leaves one line between every pair and
+    // one at the outside with no first-or-last rule anywhere.
+    expect(css).toMatch(/\.list > \*,\s*\n?\s*\.pills > \*\s*\{[^}]*box-shadow:[^;]*hairline/);
+    expect(css).not.toMatch(/\.list\s*\{[^}]*background:/);
+  });
+});
+
+describe('a widget that is one line of a room rather than the subject of a page', () => {
+  const mount = async <T extends HTMLElement>(tag: string, device: DeviceState, row: boolean) => {
+    const el = document.createElement(tag) as T & { device?: DeviceState; row?: boolean };
+    el.device = device;
+    el.row = row;
+    document.body.append(el);
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    return el;
+  };
+
+  const fan: DeviceState = {
+    device_id: 'fan',
+    name: 'Ceiling Fan',
+    plugin_id: 'x',
+    available: true,
+    device_type: 'fan',
+    attributes: { on: false, speed: 'off', speed_pct: 0 },
+    last_seen: '2026-09-11T00:00:00Z',
+    schema: {
+      attributes: {
+        speed: {
+          kind: 'enum',
+          writable: true,
+          options: ['off', 'low', 'medium', 'medium_high', 'high'],
+        },
+      },
+    },
+  };
+
+  it('gives a fan the enum’s control, not one button per speed', async () => {
+    // Five segmented buttons need about two hundred pixels and a row in a
+    // two-column set has about two hundred and fifty for everything, so
+    // "Off / Low / Medium / Medium high / High" grew through the fan's name.
+    const row = await mount('hc-fan', fan, true);
+    expect(row.shadowRoot?.querySelector('select')).not.toBeNull();
+    expect(row.shadowRoot?.querySelectorAll('.speeds button')).toHaveLength(0);
+  });
+
+  it('keeps the speeds as speeds on a card of its own', async () => {
+    const card = await mount('hc-fan', fan, false);
+    expect(card.shadowRoot?.querySelector('select')).toBeNull();
+    expect(card.shadowRoot?.querySelectorAll('.speeds button')).toHaveLength(5);
+  });
+
+  const pico: DeviceState = {
+    device_id: 'pico',
+    name: 'Overhead',
+    plugin_id: 'lutron',
+    available: true,
+    device_type: 'pico_remote',
+    attributes: { available_buttons: [2, 3, 4, 5, 6], last_button_name: 'On' },
+    last_seen: '2026-09-11T00:00:00Z',
+  };
+
+  it('gives a keypad one line in a set and keeps its keys for its own page', async () => {
+    // The living room has three of these and their buttons came to four
+    // hundred pixels under a heading about how the room is wired.
+    const row = await mount('hc-keypad', pico, true);
+    expect(row.shadowRoot?.querySelector('.keys')).toBeNull();
+    expect(row.shadowRoot?.textContent).toContain('Overhead');
+
+    const card = await mount('hc-keypad', pico, false);
+    expect(card.shadowRoot?.querySelectorAll('.keys .key')).toHaveLength(5);
   });
 });

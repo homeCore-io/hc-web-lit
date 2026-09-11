@@ -37,7 +37,11 @@ export class HcDevicePill extends HcLayoutShell {
            columns, so its width comes from its container rather than from its
            content, and containment costs it nothing (see the shell). */
         container-type: inline-size;
-        border-radius: var(--hc-radius-md, 14px);
+        /* Its own radius by default, and the set's when it is in one: two
+           rounded boxes side by side read as two objects with a gap between
+           the curves, which is the pill style the household asked to be rid
+           of. Flat, they are segments of one strip. */
+        border-radius: var(--hc-shell-radius, var(--hc-radius-md, 14px));
         padding: 0 calc(var(--hc-space-unit, 8px));
         gap: 0.5rem;
         cursor: pointer;

@@ -173,3 +173,68 @@ describe('facet names', () => {
       expect(knownFacets()).toContain(used);
   });
 });
+
+describe('the facets a room page sorts its sensors by', () => {
+  // The household's garage: three door sensors, a leak sensor, a mouse-trap
+  // vibration sensor, an occupancy sensor, two thermometers, two timers, a
+  // Pico and a VCRX — twenty-two devices in one undifferentiated list, which
+  // is a list you read rather than scan.
+  const garage: DeviceState[] = [
+    d({ device_id: 'oh1', name: 'OH1 Door', device_type: 'contact_sensor', area: 'garage' }),
+    d({ device_id: 'wet', name: 'Leak Sensor', device_type: 'water_sensor', area: 'garage' }),
+    d({ device_id: 'rain', name: 'Rain', device_type: 'rain_sensor', area: 'garage' }),
+    d({ device_id: 'occ', name: 'Occupancy', device_type: 'occupancy_sensor', area: 'garage' }),
+    d({ device_id: 'pir', name: 'Motion', device_type: 'motion_sensor', area: 'garage' }),
+    d({ device_id: 'close', name: 'Auto-close', device_type: 'timer', area: 'garage' }),
+    d({ device_id: 'pico', name: 'Overhead', device_type: 'pico_remote', area: 'garage' }),
+    d({ device_id: 'vcrx', name: 'Garage VCRX', device_type: 'vcrx', area: 'garage' }),
+    d({ device_id: 'mouse', name: 'Mouse Trap', device_type: 'vibration_sensor', area: 'garage' }),
+    d({ device_id: 'freeze', name: 'Freezer', device_type: 'temperature_sensor', area: 'garage' }),
+  ];
+
+  const chosen = (facet: string): string[] =>
+    selectDevices(
+      { selection_mode: 'facet', facet: [facet], area_name: 'garage', sort: 'name' },
+      garage,
+    ).map((x) => x.device_id);
+
+  it('separates water from the rest of the weather', () => {
+    expect(chosen('leaks').sort()).toEqual(['rain', 'wet']);
+  });
+
+  it('counts occupancy as motion, because a person asking means both', () => {
+    expect(chosen('motion').sort()).toEqual(['occ', 'pir']);
+  });
+
+  it('gathers the timers', () => {
+    expect(chosen('timers')).toEqual(['close']);
+  });
+
+  it('gathers the house’s own wiring, and only that', () => {
+    // A Pico transmits and a VCRX is a relay panel. They stay on the page —
+    // a room that shows nothing of its own wiring is a room you cannot debug
+    // — but at the foot of it rather than through the middle of a sensor list.
+    expect(chosen('controls').sort()).toEqual(['pico', 'vcrx']);
+  });
+
+  it('leaves the catch-all catching what nothing else claimed', () => {
+    // The remainder is the point of it: a mouse-trap vibration sensor belongs
+    // to no section anybody would name, and inventing one for it would be
+    // inventing a vocabulary rather than reading the house's.
+    const rest = selectDevices(
+      {
+        selection_mode: 'area',
+        area_name: 'garage',
+        except: ['doors_windows', 'locks', 'motion', 'leaks', 'climate', 'timers', 'controls'],
+      },
+      garage,
+    ).map((x) => x.device_id);
+    expect(rest).toEqual(['mouse']);
+  });
+
+  it('is a name the house knows, so a document can reference it', () => {
+    for (const name of ['leaks', 'motion', 'timers', 'controls']) {
+      expect(knownFacets(), name).toContain(name);
+    }
+  });
+});

@@ -59,6 +59,20 @@ const FACETS: Record<string, (d: DeviceState) => boolean> = {
   covers: (d) => hint(d) === 'cover',
   climate: (d) => hint(d) === 'thermostat' || hint(d) === 'temperature_sensor',
   sensors: (d) => (d.device_type ?? '').endsWith('_sensor'),
+  // **Sensors are not one kind of thing to a person.** A garage with three
+  // door sensors, a leak sensor, a mouse-trap vibration sensor, an occupancy
+  // sensor and two thermometers in one undifferentiated list is a list you
+  // read rather than scan — the household's own observation, and the reason
+  // these exist alongside the `sensors` catch-all rather than inside it.
+  leaks: (d) => hint(d) === 'water_sensor' || hint(d) === 'rain_sensor',
+  motion: (d) => hint(d) === 'motion_sensor' || hint(d) === 'occupancy_sensor',
+  timers: (d) => hint(d) === 'timer',
+  // **The system's own hardware.** A Pico transmits and a VCRX is a relay
+  // panel: they are how the house is wired, not things a person came to a room
+  // page to look at. They stay on the page, gathered at the foot of it, rather
+  // than breaking a sensor list in half — a room that shows nothing of its own
+  // wiring is a room you cannot debug.
+  controls: (d) => ['keypad', 'pico_remote', 'vcrx', 'remote'].includes(hint(d) ?? ''),
   doors_windows: (d) =>
     ['door', 'window', 'garage', 'gate'].includes(d.ui_hint ?? '') ||
     d.device_type === 'contact_sensor',

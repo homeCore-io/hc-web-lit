@@ -83,6 +83,28 @@ export class HcFan extends HcLayoutShell {
       :host([data-row]) button {
         min-width: 2.5rem;
       }
+      /* **A named speed is an enum, and a narrow row gets the enum's control.**
+         Five segmented buttons need about two hundred pixels and a row in a
+         two-column set has about two hundred and fifty for everything — so
+         "Off / Low / Medium / Medium high / High" grew straight through the
+         fan's own name. A select is the control §5.11 names for the kind, it
+         says which speed is set, and it is the same width whatever the plugin
+         called the speeds. */
+      select {
+        max-width: 8rem;
+        padding: 0 0.25rem;
+        border-radius: var(--hc-radius-xs, 6px);
+        border: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
+        background: var(--hc-surface-sunken, #0d1116);
+        color: var(--hc-ink, #e9edf2);
+        font: inherit;
+        font-size: var(--hc-text-caption-size, 11px);
+        height: var(--hc-density-min-tap, 44px);
+      }
+      select:focus-visible {
+        outline: 2px solid var(--hc-stroke-focus, #7cc4ff);
+        outline-offset: 2px;
+      }
     `,
   ];
 
@@ -129,6 +151,25 @@ export class HcFan extends HcLayoutShell {
     const speeds = this.speeds;
     if (speeds.length === 0 || this.device === undefined) return nothing;
     const current = this.current;
+
+    // Narrow by construction: a set draws rows, and a row has room for one
+    // control rather than one per option.
+    if (this.row) {
+      return html`<select
+        part="controls"
+        aria-label="Speed"
+        .value=${current ?? ''}
+        @click=${(e: Event) => e.stopPropagation()}
+        @change=${(e: Event) => {
+          e.stopPropagation();
+          this.set((e.target as HTMLSelectElement).value);
+        }}
+      >
+        ${speeds.map(
+          (s) => html`<option value=${s} ?selected=${s === current}>${humanise(s)}</option>`,
+        )}
+      </select>`;
+    }
 
     return html`<div class="speeds" part="controls">
       ${speeds.map(

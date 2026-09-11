@@ -554,3 +554,87 @@ describe('a placement drawn to the page', () => {
     expect(plain.style.height).toBe('50px');
   });
 });
+
+describe('a section, which is a heading and a set', () => {
+  // A room with no leak sensor wants no LEAKS heading either, and the list
+  // hiding itself is only half of that.
+  const section: DashboardGroupBox = {
+    path: 'Left/leaks',
+    rect: { x: 0, y: 0, w: 700, h: 60 },
+    frame: true,
+    stack: true,
+  };
+  const band: DashboardGroupBox = {
+    path: 'Left/head',
+    rect: { x: 0, y: 100, w: 700, h: 22 },
+    frame: true,
+    stack: true,
+  };
+  const column: DashboardGroupBox = {
+    path: 'Left',
+    rect: { x: 0, y: 100, w: 760, h: 400 },
+    frame: true,
+    stack: true,
+  };
+
+  const layout = {
+    breakpoint: 'desktop' as const,
+    columns: 12,
+    row_height: 120,
+    gap: 12,
+    flow: 'free' as const,
+    frame: { width: 1240, height: 900, fit: 'scroll' as const },
+    groups: [column, section, band],
+    placements: [
+      { widget_id: 'label', x: 0, y: 0, w: 1, h: 1, rect: { x: 0, y: 0, w: 300, h: 18 } },
+      { widget_id: 'list', x: 0, y: 0, w: 1, h: 1, rect: { x: 0, y: 30, w: 700, h: 40 } },
+      { widget_id: 'plain', x: 0, y: 0, w: 1, h: 1, rect: { x: 0, y: 0, w: 300, h: 18 } },
+    ],
+  };
+
+  const mount = async (): Promise<HcPage> => {
+    const el = document.createElement('hc-page');
+    el.doc = {
+      id: 'd',
+      name: 'D',
+      icon: 'home',
+      owner_user_id: 'u',
+      layouts: [layout],
+      widgets: [
+        { id: 'label', type: 'text', config: { text: 'LEAKS', group: 'Left/leaks' } },
+        {
+          id: 'list',
+          type: 'device_list',
+          config: {
+            group: 'Left/leaks',
+            selection_mode: 'facet',
+            facet: ['leaks'],
+            area_name: '@room',
+            hide_when_empty: true,
+          },
+        },
+        { id: 'plain', type: 'text', config: { text: 'SETS', group: 'Left/head' } },
+      ],
+    };
+    el.store = new DeviceStore();
+    el.context = { room: 'garage' };
+    document.body.append(el);
+    await el.updateComplete;
+    return el;
+  };
+
+  it('goes when its set does, heading and all', async () => {
+    // The store is empty, so the list has nothing and the section is a label
+    // over a gap.
+    const el = await mount();
+    expect(el.shadowRoot?.querySelector('.stack[data-frame="Left/leaks"]')).toBeNull();
+  });
+
+  it('keeps a container that holds no set at all', async () => {
+    // The room page's SETS band is three labels and no list, and it stays
+    // exactly as long as the labels do — which is what makes this a rule about
+    // sections rather than about headings.
+    const el = await mount();
+    expect(el.shadowRoot?.querySelector('.stack[data-frame="Left/head"]')).not.toBeNull();
+  });
+});
