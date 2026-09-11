@@ -33,6 +33,50 @@ import type { ActionConfig } from '../core/actions.js';
 import type { TemplateStore } from '../core/templates.js';
 import { mountWidget, specFor, type MountEnv, type MountTarget } from './mount.js';
 
+/**
+ * How far a press travels before it is a drag.
+ *
+ * In screen pixels rather than layout units, because the question is about the
+ * hand and not about the document: a finger resting on glass moves a pixel or
+ * two, and on a wall panel every press would otherwise be a tiny drag.
+ */
+const NUDGE = 4;
+
+/** How many empty rows a grid offers to draw into, below what is on it. */
+const SPARE = 3;
+
+/**
+ * The rectangle between two points, in whatever units they are in.
+ *
+ * **Cells are inclusive and pixels are not**, which is the whole of the
+ * difference. Dragging from the middle of cell 2 to the middle of cell 4 means
+ * three cells, because a cell is a thing you land on; dragging from x=100 to
+ * x=400 means 300 pixels, because a pixel is a distance. Getting this wrong
+ * gives a grid widget that is one column short of what somebody drew.
+ */
+function boxBetween(a: { x: number; y: number }, b: { x: number; y: number }, free: boolean): Box {
+  // **The corners are clamped, not the box.** A drag that leaves the page to
+  // the left has a corner off it, and the rectangle somebody drew is the part
+  // that is still on — clamping `x` afterwards and keeping the width instead
+  // makes a widget wider than anything they saw, growing to the right as the
+  // pointer goes left.
+  const x1 = Math.max(0, Math.min(a.x, b.x));
+  const y1 = Math.max(0, Math.min(a.y, b.y));
+  const x2 = Math.max(0, Math.max(a.x, b.x));
+  const y2 = Math.max(0, Math.max(a.y, b.y));
+
+  return free
+    ? {
+        x: Math.round(x1),
+        y: Math.round(y1),
+        // A widget with no width is a widget that cannot be grabbed again —
+        // the same floor `boxFrom` puts under a resize.
+        w: Math.round(Math.max(40, x2 - x1)),
+        h: Math.round(Math.max(40, y2 - y1)),
+      }
+    : { x: x1, y: y1, w: Math.max(1, x2 - x1 + 1), h: Math.max(1, y2 - y1 + 1) };
+}
+
 @customElement('hc-page')
 export class HcPage extends LitElement {
   static override styles = css`
@@ -103,6 +147,27 @@ export class HcPage extends LitElement {
       outline: 2px dashed var(--hc-accent-active, #ffc978);
       outline-offset: 2px;
       opacity: 0.85;
+    }
+    /* A surface holding a tool (§14.1). The cursor is the only thing that says
+       a press will draw rather than select, and without it the mode is
+       invisible until somebody has already made a widget by accident. */
+    [data-armed] {
+      cursor: crosshair;
+      touch-action: none;
+    }
+    /* Where the thing being drawn will land. Outline rather than fill: the
+       point of drag-to-create is seeing the size against what is already on
+       the page, and a solid block hides the neighbours it is lining up with. */
+    .drawing {
+      border: 2px dashed var(--hc-accent-active, #ffc978);
+      border-radius: var(--hc-radius-md, 14px);
+      background: color-mix(in srgb, var(--hc-accent-active, #ffc978) 12%, transparent);
+      pointer-events: none;
+      z-index: 6;
+    }
+    .frame > .drawing {
+      position: absolute;
+      box-sizing: border-box;
     }
     .unknown {
       display: grid;
@@ -187,6 +252,30 @@ export class HcPage extends LitElement {
 
   /** Move or resize one, in the layout on screen. */
   @property({ attribute: false }) onPlaceWidget: MountEnv['onPlaceWidget'];
+
+  /**
+   * The widget type held, waiting to be drawn (§14.1).
+   *
+   * **Held, not chosen.** Picking a type from a list and having the widget
+   * appear somewhere is catalogue-then-place, and it is the single thing that
+   * makes an editor read as a form with a preview. A tool is held until it is
+   * used or dropped, and while it is held this surface draws instead of
+   * arranging.
+   *
+   * The shell owns it because it owns the palette: a page told which tool is
+   * held has no business deciding what the household is allowed to hold.
+   */
+  @property({ type: String }) tool: string | undefined;
+
+  /**
+   * Make the held widget at the box somebody dragged out.
+   *
+   * Separate from `onAddWidget`, which appends at the bottom and is what the
+   * catalogue still does (§14.1 — "the catalogue stays"). This one carries a
+   * box, so the widget exists at the size and place it was drawn.
+   */
+  @property({ attribute: false }) onDrawWidget:
+    ((type: string, box: Box) => Promise<void>) | undefined;
 
   /** What is installed, and how to install something (§18.2). */
   @property({ attribute: false }) extensions: MountEnv['extensions'];
@@ -319,8 +408,11 @@ export class HcPage extends LitElement {
     return html`
       <div
         class="frame"
+        ?data-armed=${this.armed}
+        @pointerdown=${(e: PointerEvent) => this.startDraw(e)}
         style="width:${frame.width}px;height:${frame.height}px;transform:scale(${scale})"
       >
+        ${this.drawPreview()}
         ${items.map((item) => {
           const w = byId.get(item.id);
           const r = item.rect;
@@ -509,6 +601,154 @@ export class HcPage extends LitElement {
       ></div>`;
   }
 
+  /**
+   * Whether a press on this surface draws a widget rather than arranges one.
+   *
+   * All three have to be true, and the third is the one worth naming: a
+   * session that may not write pages can still be handed a tool by a shell
+   * that forgot to check, and a surface that armed anyway would draw a
+   * rectangle and then throw (§5.11 — not offered rather than offered and
+   * refused).
+   */
+  private get armed(): boolean {
+    return this.mode === 'edit' && this.tool !== undefined && this.onDrawWidget !== undefined;
+  }
+
+  /**
+   * The box being drawn right now, in the layout's own units.
+   *
+   * Held rather than written, for the same reason a drag is: a create that
+   * wrote per frame would make a widget on the first pixel and resize it a
+   * hundred times.
+   */
+  @state() private drawing: Box | undefined;
+
+  /**
+   * A press on empty surface, followed to the end, making a widget.
+   *
+   * **The whole point of §14.1's tool palette.** You hold a tool and drag, and
+   * the thing exists at the size and place you dragged it — rather than
+   * appearing at the bottom of the page for you to then go and move.
+   */
+  private startDraw(e: PointerEvent): void {
+    const type = this.tool;
+    if (!this.armed || type === undefined) return;
+
+    const from = this.pointIn(e.clientX, e.clientY);
+    // Nowhere to measure against — a page that has not been laid out yet. The
+    // same refusal a move makes, and for the same reason: pixels treated as
+    // cells put a widget three hundred columns to the right.
+    if (from === undefined) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const target = e.currentTarget as HTMLElement;
+    try {
+      target.setPointerCapture(e.pointerId);
+    } catch {
+      // The pointer is no longer one the browser considers active. Losing the
+      // capture costs a drag that leaves the surface; throwing here would cost
+      // the gesture entirely (see `startDrag`).
+    }
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let moved = false;
+
+    const move = (m: PointerEvent): void => {
+      // A press is not a drag until it has travelled. Without the threshold
+      // every click would count as a one-cell drag, and a finger that shifts
+      // two pixels on release would make a widget nobody could see.
+      if (Math.abs(m.clientX - startX) > NUDGE || Math.abs(m.clientY - startY) > NUDGE) {
+        moved = true;
+      }
+      const to = this.pointIn(m.clientX, m.clientY);
+      if (to !== undefined)
+        this.drawing = moved ? boxBetween(from, to, this.free) : this.atPoint(from);
+    };
+
+    const end = (): void => {
+      target.removeEventListener('pointermove', move);
+      target.removeEventListener('pointerup', end);
+      target.removeEventListener('pointercancel', end);
+
+      const box = this.drawing ?? this.atPoint(from);
+      this.drawing = undefined;
+      void this.onDrawWidget?.(type, box);
+    };
+
+    // A press that never moves still makes a widget, at the size the catalogue
+    // would have given it, where the pointer is. Refusing would mean a tool
+    // that is held and does nothing, which reads as broken rather than strict.
+    this.drawing = this.atPoint(from);
+    target.addEventListener('pointermove', move);
+    target.addEventListener('pointerup', end);
+    target.addEventListener('pointercancel', end);
+  }
+
+  /** Whether the layout on screen composes by rect rather than by cell. */
+  private get free(): boolean {
+    const layout =
+      this.doc === undefined ? undefined : layoutToDraw(this.doc, this.breakpoint)?.layout;
+    return layout?.flow === 'free';
+  }
+
+  /**
+   * A point on the screen, in the units the layout is written in.
+   *
+   * Cells on a packed page and frame pixels on a composed one — the same split
+   * `boxFrom` makes for a drag, and for the same reason: writing cells into a
+   * composed layout moves nothing and looks broken.
+   */
+  private pointIn(clientX: number, clientY: number): { x: number; y: number } | undefined {
+    const layout =
+      this.doc === undefined ? undefined : layoutToDraw(this.doc, this.breakpoint)?.layout;
+
+    if (layout?.flow === 'free') {
+      const frame = this.shadowRoot?.querySelector('.frame');
+      if (frame === null || frame === undefined) return undefined;
+      const at = frame.getBoundingClientRect();
+      const scale = this.frameScale();
+      return { x: (clientX - at.left) / scale, y: (clientY - at.top) / scale };
+    }
+
+    const grid = this.shadowRoot?.querySelector('.grid');
+    const cell = this.cellSize(layout);
+    if (grid === null || grid === undefined || cell === undefined) return undefined;
+    const at = grid.getBoundingClientRect();
+    return {
+      x: Math.floor((clientX - at.left) / cell.w),
+      y: Math.floor((clientY - at.top) / cell.h),
+    };
+  }
+
+  /** The size a widget gets when it was pointed at rather than dragged out. */
+  private atPoint(from: { x: number; y: number }): Box {
+    const layout =
+      this.doc === undefined ? undefined : layoutToDraw(this.doc, this.breakpoint)?.layout;
+    // The same defaults `placeBelow` uses, so a widget is the size somebody is
+    // used to whichever way they made it.
+    const size = this.free ? { w: 360, h: 200 } : { w: Math.min(6, layout?.columns || 12), h: 2 };
+    return { x: Math.max(0, Math.round(from.x)), y: Math.max(0, Math.round(from.y)), ...size };
+  }
+
+  /** The rectangle being drawn, drawn — in the grid, or in the frame. */
+  private drawPreview() {
+    const box = this.drawing;
+    if (box === undefined) return nothing;
+
+    return this.free
+      ? html`<div
+          class="drawing"
+          style="left:${box.x}px;top:${box.y}px;width:${box.w}px;height:${box.h}px"
+        ></div>`
+      : html`<div
+          class="drawing"
+          style="grid-column:${box.x + 1}/span ${box.w};grid-row:${box.y + 1}/span ${box.h}"
+        ></div>`;
+  }
+
   private grid(
     items: readonly GridItem[],
     byId: Map<string, DashboardWidget>,
@@ -516,13 +756,26 @@ export class HcPage extends LitElement {
     rowHeight: number,
     gap: number,
   ) {
+    // **Somewhere to draw.** A CSS grid is exactly as tall as its rows, so the
+    // empty space below the last widget — which is where a person reaches to
+    // put the next one — does not exist as far as the pointer is concerned.
+    // While a tool is held the surface grows by a few rows, and shrinks again
+    // when it is dropped: a page that was permanently taller than its content
+    // would be scrollable past the end for everyone, including a wall panel
+    // that is only ever looked at.
+    const used = items.reduce((low, i) => Math.max(low, i.y + i.h), 0);
+    const room = this.armed ? `min-height:${(used + SPARE) * (rowHeight + gap)}px;` : '';
+
     return html`
       <div
         class="grid"
+        ?data-armed=${this.armed}
+        @pointerdown=${(e: PointerEvent) => this.startDraw(e)}
         style="grid-template-columns:repeat(${columns},1fr);
                grid-auto-rows:${rowHeight}px;
-               gap:${gap}px"
+               gap:${gap}px;${room}"
       >
+        ${this.drawPreview()}
         ${items.map((item) => {
           const w = byId.get(item.id);
           if (w === undefined) return nothing;

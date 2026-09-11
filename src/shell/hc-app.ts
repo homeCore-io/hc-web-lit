@@ -24,6 +24,8 @@ import {
   renamed,
   type Box,
 } from '../core/pages.js';
+import { knownTypes } from '../core/registry.js';
+import { humanise } from '../core/text.js';
 import { EventStream } from '../core/events.js';
 import { check, checkAction } from '../core/safety.js';
 import { DeviceStore } from '../core/store.js';
@@ -165,7 +167,8 @@ export class HcApp extends LitElement {
       font: inherit;
       max-width: 40vw;
     }
-    header button.armed {
+    header button.armed,
+    header select.armed {
       border-color: var(--hc-accent-active, #ffc978);
       color: var(--hc-accent-active, #ffc978);
     }
@@ -613,6 +616,35 @@ export class HcApp extends LitElement {
   };
 
   /**
+   * Make a widget where somebody drew it (§14.1).
+   *
+   * **Add and place, in one step that undo sees as one.** The two halves are
+   * `addWidget` and `placeWidget` because that is what they already are, but a
+   * person drew one rectangle and one press of undo has to take it away — two
+   * `writePages` calls would leave a widget sitting at the bottom of the page
+   * as the thing the first undo goes back to.
+   *
+   * The box is in the drawn layout's own units, and `placeWidget` writes it
+   * into the layout that is on screen — borrowed or not. Every *other* layout
+   * keeps the placement `addWidget` gave it at the bottom: where a widget sits
+   * may differ per size, whether it exists may not.
+   */
+  private readonly drawWidgetOnPage = async (type: string, box: Box): Promise<void> => {
+    const doc = this.current;
+    if (doc === undefined) throw new Error('No page to draw on.');
+
+    const { doc: added, id } = addWidget(doc, type);
+    // A placement the layout does not have is not a failure here the way it is
+    // for a move: `addWidget` just made it. Falling back to the added document
+    // keeps the widget rather than losing it to a layout lookup.
+    const next = placeWidget(added, this.breakpoint, id, box) ?? added;
+
+    this.writePages(this.replacing(next), next.id);
+    this.dropTool();
+    return Promise.resolve();
+  };
+
+  /**
    * Move or resize a widget on the page being shown.
    *
    * The breakpoint is this element's, because which layout is on screen is a
@@ -685,6 +717,28 @@ export class HcApp extends LitElement {
    * nobody would know why.
    */
   @state() private editing = false;
+
+  /**
+   * The widget type held, waiting to be drawn on the page (§14.1).
+   *
+   * Held here rather than on the page, because the palette is chrome: what a
+   * household may put on a page is a question about the session, and a page
+   * that owned the answer would be a page deciding what it is allowed to
+   * contain. `hc-page` is told which tool is held and draws with it.
+   */
+  @state() private tool: string | undefined;
+
+  /**
+   * Stop holding the tool.
+   *
+   * After one widget, deliberately. A palette that stayed armed is how a
+   * person ends up with four headings — the second press was meant to select
+   * the first one. Design applications that keep the tool do it with a visible
+   * mode switch and a keyboard nobody has in front of a wall panel.
+   */
+  private readonly dropTool = (): void => {
+    this.tool = undefined;
+  };
 
   /**
    * Rename the page, and only that.
@@ -850,6 +904,7 @@ export class HcApp extends LitElement {
     if (this.panelKey !== undefined) void this.connectWithKey(this.panelKey);
 
     globalThis.addEventListener?.('pagehide', this.onHide);
+    globalThis.addEventListener?.('keydown', this.onKey);
   }
 
   override disconnectedCallback(): void {
@@ -860,7 +915,21 @@ export class HcApp extends LitElement {
     if (this.schemaSweep !== undefined) clearTimeout(this.schemaSweep);
     if (this.retry !== undefined) clearTimeout(this.retry);
     globalThis.removeEventListener?.('pagehide', this.onHide);
+    globalThis.removeEventListener?.('keydown', this.onKey);
   }
+
+  /**
+   * Escape puts the tool down.
+   *
+   * On the window rather than on the palette, because by the time somebody
+   * wants out of it the focus is on the page they were about to draw on — a
+   * handler on the `<select>` would only fire for somebody who had not yet
+   * moved, which is nobody. It is the one key this client binds, and it does
+   * the one thing Escape means everywhere: never mind.
+   */
+  private readonly onKey = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape') this.dropTool();
+  };
 
   /**
    * Tokens go on the document root, not on this element.
@@ -1388,6 +1457,46 @@ export class HcApp extends LitElement {
    * again, and the reason is sharper here than usual, because the failure
    * would be a page somebody made that vanishes on reload.
    */
+  /**
+   * The tool palette — pick a widget, then draw it (§14.1).
+   *
+   * **Only while the page is being arranged**, because a tool is a thing you
+   * hold over a page you are editing, and arming the surface of a page
+   * somebody is using would mean a press on a light drawing a rectangle.
+   *
+   * A list rather than a row of tool buttons: this client draws fifty-odd
+   * widget types and a palette with fifty buttons in the header is a palette
+   * nobody reads. What it offers is `knownTypes()` — what *this client can
+   * draw* — for the reason the catalogue gives: offering a type that renders
+   * as a labelled placeholder is offering somebody a broken card and calling
+   * it a choice.
+   *
+   * Choosing arms; it does not add. That is the whole difference from the
+   * catalogue in the property panel, which stays (§14.1) and still appends at
+   * the bottom for somebody who would rather pick from a list and not drag.
+   */
+  private palette() {
+    if (!this.editing) return nothing;
+
+    return html`<select
+      class=${this.tool === undefined ? '' : 'armed'}
+      aria-label="Draw a widget"
+      title=${
+        this.tool === undefined
+          ? 'Pick a widget, then drag on the page to draw it'
+          : `Drag on the page to draw a ${humanise(this.tool)}, or press Escape`
+      }
+      .value=${this.tool ?? ''}
+      @change=${(e: Event) => {
+        const type = (e.target as HTMLSelectElement).value;
+        this.tool = type === '' ? undefined : type;
+      }}
+    >
+      <option value="">Draw…</option>
+      ${knownTypes().map((t) => html`<option value=${t}>${humanise(t)}</option>`)}
+    </select>`;
+  }
+
   private pageControls() {
     if (!this.mayWriteDashboards()) return nothing;
     const id = this.current?.id;
@@ -1411,7 +1520,8 @@ export class HcApp extends LitElement {
       />`;
     }
 
-    return html`<button
+    return html`${this.palette()}
+      <button
         title="Undo the last change"
         ?disabled=${!this.undoStack.canUndo}
         @click=${() => this.stepHistory('undo')}
@@ -1431,6 +1541,10 @@ export class HcApp extends LitElement {
         aria-pressed=${this.editing ? 'true' : 'false'}
         @click=${() => {
           this.editing = !this.editing;
+          // A tool held into a page being *used* would arm nothing — the page
+          // refuses — and would still be held when arranging resumed, which is
+          // a mode somebody left behind coming back without being asked for.
+          this.dropTool();
         }}
       >
         ${this.editing ? 'Done' : 'Arrange'}
@@ -1521,6 +1635,8 @@ export class HcApp extends LitElement {
         .onAddWidget=${this.mayWriteDashboards() ? this.addWidgetToPage : undefined}
         .onRemoveWidget=${this.mayWriteDashboards() ? this.removeWidgetFromPage : undefined}
         .onPlaceWidget=${this.mayWriteDashboards() ? this.placeWidgetOnPage : undefined}
+        .onDrawWidget=${this.mayWriteDashboards() ? this.drawWidgetOnPage : undefined}
+        .tool=${this.tool}
         mode=${this.editing ? 'edit' : 'view'}
         .extensions=${this.extensions}
         .onInstallExtension=${this.mayWriteDashboards() ? this.installExtension : undefined}

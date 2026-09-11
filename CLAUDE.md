@@ -2273,8 +2273,15 @@ not a failure of it.
       from the placement alone so a sandboxed element is transformable without
       being inspectable (§14.2). Read the Dart's for the bugs it names; it has
       no resize-while-rotated and no extension boundary
-- [ ] Tool palette with drag-to-create; the catalogue stays but is not the only
-      way in (§14.1)
+- [x] Tool palette with drag-to-create; the catalogue stays but is not the only
+      way in (§14.1). The palette is the shell's, beside Undo and Arrange, and
+      it *arms* rather than adds: a held tool turns the page into a surface you
+      draw on, in both flows — cells on a packed page, frame pixels on a
+      composed one. It is a list and not a row of tool buttons, because fifty
+      widget types is not a row. A press that never travels still makes one, at
+      the size the catalogue would have given it, where the pointer is: a tool
+      that is held and does nothing reads as broken rather than as strict. The
+      property panel's catalogue is untouched and still appends at the bottom
 - [ ] Decorative elements: image, icon, text — no device binding, action optional
 - [ ] Host-enforced `mode: "edit"`: pointer capture, `ctx.action` refuses to
       dispatch (§14.2)

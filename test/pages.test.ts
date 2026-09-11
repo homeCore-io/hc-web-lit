@@ -16,6 +16,7 @@ import {
   placeWidget,
   removeWidget,
   renamed,
+  type Box,
 } from '../src/core/pages.js';
 import { layoutToDraw } from '../src/core/dashboard.js';
 
@@ -311,5 +312,94 @@ describe('moving a widget', () => {
       units: 'cells',
     });
     expect(boxOf(desktopOnly.layouts?.[0], 'nope')).toBeUndefined();
+  });
+});
+
+describe('drawing a widget, which is adding and placing at once (§14.1)', () => {
+  /**
+   * What `hc-app.drawWidgetOnPage` does, in the two calls it makes.
+   *
+   * Pinned here rather than in the shell because the composition is the part
+   * that can be wrong: the box belongs to the layout on screen, and every
+   * other layout keeps the placement `addWidget` gave it. Where a widget sits
+   * may differ per size; whether it exists may not.
+   */
+  const twoSizes: DashboardDefinition = {
+    id: 'house',
+    name: 'House',
+    icon: 'home',
+    owner_user_id: 'u',
+    widgets: [{ id: 'heading_1', type: 'heading', config: { text: 'Hall' } }],
+    layouts: [
+      {
+        breakpoint: 'desktop',
+        columns: 12,
+        row_height: 120,
+        gap: 12,
+        placements: [{ widget_id: 'heading_1', x: 0, y: 0, w: 12, h: 1 }],
+      },
+      {
+        breakpoint: 'mobile',
+        columns: 4,
+        row_height: 120,
+        gap: 12,
+        placements: [{ widget_id: 'heading_1', x: 0, y: 0, w: 4, h: 1 }],
+      },
+    ],
+  };
+
+  const drawn = (breakpoint: 'desktop' | 'mobile', box: Box) => {
+    const { doc, id } = addWidget(twoSizes, 'toggle');
+    return { doc: placeWidget(doc, breakpoint, id, box) ?? doc, id };
+  };
+
+  const placementIn = (doc: DashboardDefinition, breakpoint: string, id: string) =>
+    doc.layouts
+      ?.find((l) => l.breakpoint === breakpoint)
+      ?.placements?.find((p) => p.widget_id === id);
+
+  it('lands where it was drawn, in the layout that was on screen', () => {
+    const { doc, id } = drawn('desktop', { x: 3, y: 2, w: 4, h: 3 });
+    expect(placementIn(doc, 'desktop', id)).toMatchObject({ x: 3, y: 2, w: 4, h: 3 });
+  });
+
+  it('still exists on every other size, below what is there', () => {
+    // Drawing on a laptop must not leave a phone showing less. It is not in
+    // the same place — nobody drew it there — but it is on the page.
+    const { doc, id } = drawn('desktop', { x: 3, y: 2, w: 4, h: 3 });
+    const onPhone = placementIn(doc, 'mobile', id);
+    expect(onPhone).toBeDefined();
+    expect(onPhone?.y).toBe(1);
+  });
+
+  it('writes into the layout being borrowed, not into a new one', () => {
+    // A page with only a desktop layout, drawn on from a phone: §5.7 says the
+    // phone borrows desktop, and the edit has to land where the numbers came
+    // from or the page silently splits into two arrangements.
+    const desktopOnly: DashboardDefinition = {
+      ...twoSizes,
+      layouts: [twoSizes.layouts![0]!],
+    };
+    const { doc, id } = addWidget(desktopOnly, 'toggle');
+    const next = placeWidget(doc, 'mobile', id, { x: 1, y: 1, w: 2, h: 2 });
+
+    expect(next?.layouts).toHaveLength(1);
+    expect(placementIn(next!, 'desktop', id)).toMatchObject({ x: 1, y: 1, w: 2, h: 2 });
+  });
+
+  it('draws into a composed page by rect, leaving the cells it fell back to', () => {
+    const composed: DashboardDefinition = {
+      ...twoSizes,
+      layouts: [
+        {
+          ...twoSizes.layouts![0]!,
+          flow: 'free',
+          frame: { width: 1240, height: 1248, fit: 'scroll' },
+        },
+      ],
+    };
+    const { doc, id } = addWidget(composed, 'text');
+    const next = placeWidget(doc, 'desktop', id, { x: 100, y: 100, w: 300, h: 200 });
+    expect(placementIn(next!, 'desktop', id)?.rect).toEqual({ x: 100, y: 100, w: 300, h: 200 });
   });
 });

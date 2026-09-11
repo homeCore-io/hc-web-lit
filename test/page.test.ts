@@ -388,26 +388,29 @@ describe('a page being arranged rather than used', () => {
   });
 });
 
-describe('dragging a widget on a page being arranged', () => {
-  /**
-   * jsdom has neither `PointerEvent` nor pointer capture.
-   *
-   * Shimmed rather than skipped: the arithmetic between a finger and a cell
-   * is the part worth pinning, and it does not need a real browser to be
-   * wrong. The gesture itself is checked in one.
-   */
-  class FakePointerEvent extends MouseEvent {
-    readonly pointerId: number;
-    constructor(type: string, init: MouseEventInit & { pointerId?: number } = {}) {
-      super(type, init);
-      this.pointerId = init.pointerId ?? 1;
-    }
+/**
+ * jsdom has neither `PointerEvent` nor pointer capture.
+ *
+ * Shimmed rather than skipped: the arithmetic between a finger and a cell is
+ * the part worth pinning, and it does not need a real browser to be wrong. The
+ * gesture itself is checked in one.
+ */
+class FakePointerEvent extends MouseEvent {
+  readonly pointerId: number;
+  constructor(type: string, init: MouseEventInit & { pointerId?: number } = {}) {
+    super(type, init);
+    this.pointerId = init.pointerId ?? 1;
   }
-  beforeEach(() => {
-    (globalThis as unknown as { PointerEvent: unknown }).PointerEvent = FakePointerEvent;
-    Element.prototype.setPointerCapture = () => undefined;
-    Element.prototype.releasePointerCapture = () => undefined;
-  });
+}
+
+function shimPointers(): void {
+  (globalThis as unknown as { PointerEvent: unknown }).PointerEvent = FakePointerEvent;
+  Element.prototype.setPointerCapture = () => undefined;
+  Element.prototype.releasePointerCapture = () => undefined;
+}
+
+describe('dragging a widget on a page being arranged', () => {
+  beforeEach(shimPointers);
 
   const page = (): DashboardDefinition =>
     base({
@@ -516,5 +519,249 @@ describe('dragging a widget on a page being arranged', () => {
     const el = await arranged(placed);
     drag(handleIn(el, 'grip'), -900, -900);
     expect(placed).toHaveBeenCalledWith('t', { x: 0, y: 0, w: 1, h: 1 });
+  });
+});
+
+describe('drawing a widget with a tool held (§14.1)', () => {
+  beforeEach(shimPointers);
+
+  const page = (): DashboardDefinition =>
+    base({
+      widgets: [{ id: 't', type: 'text', config: { text: 'Hall' } }],
+      layouts: [
+        {
+          breakpoint: 'desktop',
+          columns: 12,
+          row_height: 100,
+          gap: 0,
+          placements: [{ widget_id: 't', x: 0, y: 0, w: 6, h: 2 }],
+        },
+      ],
+    });
+
+  /**
+   * A page with a tool held, laid out so a cell is 100px square.
+   *
+   * jsdom lays nothing out, so `getBoundingClientRect` is all zeros and the
+   * grid's origin is the viewport's — which makes the arithmetic below read
+   * directly: clientX 250 is column 2.
+   */
+  const holding = async (
+    drew: (type: string, box: unknown) => Promise<void>,
+    over: Partial<HcPage> = {},
+  ): Promise<HcPage> => {
+    const el = document.createElement('hc-page');
+    el.doc = page();
+    el.store = new DeviceStore();
+    el.onDrawWidget = drew;
+    el.onPlaceWidget = async () => undefined;
+    el.mode = 'edit';
+    el.tool = 'toggle';
+    Object.assign(el, over);
+    document.body.append(el);
+    await el.updateComplete;
+
+    const grid = el.shadowRoot?.querySelector('.grid');
+    Object.defineProperty(grid as Element, 'clientWidth', { value: 1200, configurable: true });
+    return el;
+  };
+
+  const surface = (el: HcPage): Element => {
+    const found = el.shadowRoot?.querySelector('.grid');
+    expect(found, 'no .grid surface').not.toBeNull();
+    return found as Element;
+  };
+
+  const draw = (on: Element, from: [number, number], to: [number, number]): void => {
+    on.dispatchEvent(
+      new FakePointerEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        clientX: from[0],
+        clientY: from[1],
+        pointerId: 1,
+      }),
+    );
+    on.dispatchEvent(
+      new FakePointerEvent('pointermove', { clientX: to[0], clientY: to[1], pointerId: 1 }),
+    );
+    on.dispatchEvent(
+      new FakePointerEvent('pointerup', { clientX: to[0], clientY: to[1], pointerId: 1 }),
+    );
+  };
+
+  it('makes the widget at the size and place it was dragged', async () => {
+    // The whole of §14.1's drag-to-create: the thing exists where you drew it,
+    // rather than at the bottom of the page for you to then go and move.
+    const drew = vi.fn(async () => undefined);
+    const el = await holding(drew);
+    draw(surface(el), [250, 200], [450, 400]);
+    expect(drew).toHaveBeenCalledWith('toggle', { x: 2, y: 2, w: 3, h: 3 });
+  });
+
+  it('counts cells inclusively, because a cell is a thing you land on', async () => {
+    // Pressing and releasing inside one cell is one cell, not none — the
+    // off-by-one that gives a widget one column less than somebody drew.
+    const drew = vi.fn(async () => undefined);
+    const el = await holding(drew);
+    draw(surface(el), [210, 210], [290, 290]);
+    expect(drew).toHaveBeenCalledWith('toggle', { x: 2, y: 2, w: 1, h: 1 });
+  });
+
+  it('draws the same rectangle whichever corner it started from', async () => {
+    const drew = vi.fn(async () => undefined);
+    const el = await holding(drew);
+    draw(surface(el), [450, 400], [250, 200]);
+    expect(drew).toHaveBeenCalledWith('toggle', { x: 2, y: 2, w: 3, h: 3 });
+  });
+
+  it('gives a press that never travelled the size the catalogue would', async () => {
+    // A tool held and pressed does something rather than nothing: refusing
+    // would be a mode that is armed and inert, which reads as broken.
+    const drew = vi.fn(async () => undefined);
+    const el = await holding(drew);
+    draw(surface(el), [250, 200], [252, 201]);
+    expect(drew).toHaveBeenCalledWith('toggle', { x: 2, y: 2, w: 6, h: 2 });
+  });
+
+  it('never draws off the left or top of the page', async () => {
+    const drew = vi.fn(async () => undefined);
+    const el = await holding(drew);
+    draw(surface(el), [250, 200], [-900, -900]);
+    expect(drew).toHaveBeenCalledWith('toggle', { x: 0, y: 0, w: 3, h: 3 });
+  });
+
+  it('shows where the widget will land while the finger is down', async () => {
+    const el = await holding(async () => undefined);
+    const on = surface(el);
+    on.dispatchEvent(
+      new FakePointerEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 250,
+        clientY: 200,
+        pointerId: 1,
+      }),
+    );
+    on.dispatchEvent(
+      new FakePointerEvent('pointermove', { clientX: 450, clientY: 400, pointerId: 1 }),
+    );
+    await el.updateComplete;
+
+    const preview = el.shadowRoot?.querySelector('.drawing') as HTMLElement;
+    expect(preview, 'nothing showed where the widget would land').not.toBeNull();
+    expect(preview.style.gridColumn).toBe('3/span 3');
+    expect(preview.style.gridRow).toBe('3/span 3');
+  });
+
+  it('puts the preview away when the finger comes up', async () => {
+    const el = await holding(async () => undefined);
+    draw(surface(el), [250, 200], [450, 400]);
+    await el.updateComplete;
+    expect(el.shadowRoot?.querySelector('.drawing')).toBeNull();
+  });
+
+  it('arms the surface only while a tool is held', async () => {
+    const el = await holding(async () => undefined);
+    expect(surface(el).hasAttribute('data-armed')).toBe(true);
+
+    el.tool = undefined;
+    await el.updateComplete;
+    expect(surface(el).hasAttribute('data-armed')).toBe(false);
+  });
+
+  it('draws nothing on a page being used rather than arranged', async () => {
+    // A tool held into view mode would mean a press on a light drawing a
+    // rectangle, which is §14.2's rule from the other side.
+    const drew = vi.fn(async () => undefined);
+    const el = await holding(drew, { mode: 'view' });
+    draw(surface(el), [250, 200], [450, 400]);
+    expect(drew).not.toHaveBeenCalled();
+  });
+
+  it('draws nothing for a session that may not write pages', async () => {
+    // §5.11: not offered rather than offered and refused. A shell that handed
+    // over a tool without the means to use it must not arm the surface.
+    const el = await holding(async () => undefined, { onDrawWidget: undefined });
+    expect(surface(el).hasAttribute('data-armed')).toBe(false);
+  });
+
+  it('makes room below the page to draw into', async () => {
+    // A CSS grid is exactly as tall as its rows, so without this the empty
+    // space somebody reaches for to put the next widget does not exist.
+    const el = await holding(async () => undefined);
+    // Two rows used, three spare, 100px a row.
+    expect((surface(el) as HTMLElement).style.minHeight).toBe('500px');
+
+    el.tool = undefined;
+    await el.updateComplete;
+    expect((surface(el) as HTMLElement).style.minHeight).toBe('');
+  });
+});
+
+describe('drawing on a composed page, where the units are pixels', () => {
+  beforeEach(shimPointers);
+
+  const holding = async (drew: (type: string, box: unknown) => Promise<void>): Promise<HcPage> => {
+    const el = document.createElement('hc-page');
+    el.doc = base({
+      widgets: [{ id: 'h', type: 'text', config: { text: 'EVERY ROOM' } }],
+      layouts: [
+        {
+          breakpoint: 'desktop',
+          columns: 12,
+          row_height: 120,
+          gap: 12,
+          flow: 'free',
+          frame: { width: 1240, height: 1248, fit: 'scroll' },
+          placements: [
+            { widget_id: 'h', x: 0, y: 0, w: 12, h: 1, rect: { x: 22, y: 64, w: 600, h: 48 } },
+          ],
+        },
+      ],
+    });
+    el.store = new DeviceStore();
+    el.onDrawWidget = drew;
+    el.mode = 'edit';
+    el.tool = 'text';
+    document.body.append(el);
+    await el.updateComplete;
+    return el;
+  };
+
+  const draw = (on: Element, from: [number, number], to: [number, number]): void => {
+    on.dispatchEvent(
+      new FakePointerEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        clientX: from[0],
+        clientY: from[1],
+        pointerId: 1,
+      }),
+    );
+    on.dispatchEvent(
+      new FakePointerEvent('pointermove', { clientX: to[0], clientY: to[1], pointerId: 1 }),
+    );
+    on.dispatchEvent(
+      new FakePointerEvent('pointerup', { clientX: to[0], clientY: to[1], pointerId: 1 }),
+    );
+  };
+
+  it('measures pixels as a distance, not as cells to land on', async () => {
+    // The inclusive +1 a grid gets would be a pixel too wide here, and a
+    // composed page has no cells to round to at all.
+    const drew = vi.fn(async () => undefined);
+    const el = await holding(drew);
+    const frame = el.shadowRoot?.querySelector('.frame') as Element;
+    draw(frame, [100, 100], [400, 300]);
+    expect(drew).toHaveBeenCalledWith('text', { x: 100, y: 100, w: 300, h: 200 });
+  });
+
+  it('keeps a drawn widget big enough to grab again', async () => {
+    const drew = vi.fn(async () => undefined);
+    const el = await holding(drew);
+    const frame = el.shadowRoot?.querySelector('.frame') as Element;
+    draw(frame, [100, 100], [110, 108]);
+    expect(drew).toHaveBeenCalledWith('text', { x: 100, y: 100, w: 40, h: 40 });
   });
 });
