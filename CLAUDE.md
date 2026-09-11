@@ -2327,7 +2327,15 @@ not a failure of it.
 - [ ] Host-enforced `mode: "edit"`: pointer capture, `ctx.action` refuses to
       dispatch (§14.2)
 - [ ] Undo/redo stack
-- [ ] Expression editor: SyntaxError on blur, live preview against real state
+- [x] Expression editor: SyntaxError on blur, live preview against real state.
+      An `ƒx` toggle on every value-shaped field turns a literal into
+      `{ $expr }` and back, keeping what it came to on the way out. **Offered
+      on every such field rather than on the ones core marks**, because core's
+      vocabulary declares `x-hc-expr` for nothing (the wire half does not exist
+      — §18.3, Phase 1) while `resolveConfig` evaluates `$expr` and `{{ … }}`
+      on every key of every config. The toggle follows the renderer rather than
+      a vocabulary that has not been written; offering it nowhere would have
+      meant a feature that works everywhere and is reachable from nowhere
 - [ ] Template authoring UI
 - [ ] Device/query picker, asset picker, room picker, extension browser.
       **The asset picker is in**, which is the one of the four that had

@@ -50,6 +50,29 @@ import { boxOf, type Box } from '../core/pages.js';
 import { knownRoles } from '../design/roles.js';
 import { markNames } from '../design/icons.js';
 import { assetUrl, type StoredAsset } from '../core/assets.js';
+import { compile, evaluate, isExpr, type ExprScope } from '../core/expr.js';
+
+/**
+ * What an expression came to, in a line a person can read.
+ *
+ * `undefined` is spelled out rather than shown as an empty preview, because it
+ * is the answer somebody most needs to see: an expression that compiles and
+ * evaluates to nothing is the one that draws a blank card, and a preview that
+ * showed nothing for it would look exactly like a preview that had not run.
+ */
+function shown(value: unknown): string {
+  if (value === undefined) return 'nothing';
+  if (value === null) return 'null';
+  if (typeof value === 'string') return value === '' ? '(empty text)' : value;
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value) ?? String(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+}
 import { mountChildren, type MountEnv } from '../shell/mount.js';
 
 /** The three states of a confirmation, in the words the field uses. */
@@ -169,6 +192,36 @@ export class HcPropertyPanel extends LitElement {
       flex: 1 1 100%;
       color: var(--hc-ink-muted, #8b95a4);
       font-size: var(--hc-text-caption-size, 11px);
+    }
+    /* The toggle between a plain value and one worked out from the house
+       (§6.3). Quiet until it is on, because most fields are never expressions
+       and a row of lit buttons would read as a row of warnings. */
+    .fx {
+      margin-left: 0.4rem;
+      padding: 0 0.3rem;
+      border: 1px solid var(--hc-stroke-hairline, #262d38);
+      border-radius: var(--hc-radius-sm, 8px);
+      background: none;
+      color: var(--hc-ink-muted, #8b95a4);
+      font: inherit;
+      font-size: var(--hc-text-caption-size, 11px);
+      cursor: pointer;
+    }
+    .fx.on {
+      border-color: var(--hc-accent-active, #ffc978);
+      color: var(--hc-accent-active, #ffc978);
+    }
+    .expr {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.25rem;
+      flex: 1 1 auto;
+    }
+    .expr input {
+      flex: 1 1 12rem;
+      /* Monospace, because this is code: a stray space before a bracket is
+         the kind of thing a proportional font hides. */
+      font-family: var(--hc-font-mono, ui-monospace, monospace);
     }
     .opaque {
       color: var(--hc-ink-muted, #8b95a4);
@@ -477,6 +530,126 @@ export class HcPropertyPanel extends LitElement {
 
   private set(p: Property, value: unknown): void {
     this.commit(withValue(this.current, p, value));
+  }
+
+  /**
+   * Which field is being written as an expression, and what has been typed.
+   *
+   * Held rather than written through on every keystroke, because a half-typed
+   * expression is a SyntaxError and writing one into the document would mean
+   * the card drawing its fallback while somebody is still typing the name of
+   * the thing it is about to show.
+   */
+  @state() private editing: { name: string; source: string } | undefined;
+
+  /**
+   * The expression a field currently holds, if it holds one.
+   *
+   * **Every field, not only the ones core marks.** §6.3 says a field accepts
+   * expressions when its schema declares `x-hc-expr`, and core's vocabulary
+   * declares it for nothing — the wire half of that key does not exist yet
+   * (§18.3, Phase 1). What *does* exist is `resolveConfig`, which evaluates
+   * `$expr` and `{{ … }}` on every key of every config before a widget sees
+   * it. So the toggle follows the renderer rather than a vocabulary that has
+   * not been written: offering it where the value would in fact be evaluated
+   * is the honest answer, and offering it nowhere would mean a feature that
+   * works everywhere and can be reached from nowhere.
+   */
+  private exprIn(p: Property): string | undefined {
+    if (this.editing?.name === p.name) return this.editing.source;
+    const value: unknown = p.value;
+    return isExpr(value) ? value.$expr : undefined;
+  }
+
+  /** Whether this field is one an expression can sensibly be written into. */
+  private takesExpr(p: Property): boolean {
+    // **A field already holding one always offers the way back.** An `$expr`
+    // is an object, so the form derived from the stored value stops being
+    // value-shaped the moment the toggle is used — which took the toggle away
+    // and left no way to return to a plain value except by hand.
+    if (this.exprIn(p) !== undefined) return true;
+
+    // Otherwise a value-shaped control. A gesture, a key/value payload and an
+    // opaque object are each their own little editor, and a list is a row per
+    // item — an expression returning an array is legal and is not a row.
+    return ['text', 'longText', 'number', 'select'].includes(p.form);
+  }
+
+  /**
+   * What an expression would see right now (§6.4).
+   *
+   * The real house, not a sample of it: the whole point of a preview is
+   * finding out that `device.attributes.brightness` is undefined on *this*
+   * lamp before saving a card that draws nothing.
+   */
+  private previewScope(): ExprScope {
+    const id = this.current['device_id'];
+    const device =
+      typeof id === 'string' ? this.devices.find((d) => d.device_id === id) : undefined;
+    return {
+      ...(device === undefined ? {} : { device }),
+      devices: Object.fromEntries(this.devices.map((d) => [d.device_id, d])),
+      vars: this.current,
+      now: Date.now(),
+    };
+  }
+
+  /**
+   * An expression, what is wrong with it, and what it comes to.
+   *
+   * §6.5 rejects a malformed expression **at save time**, so what is typed
+   * stays on screen and the document keeps the last thing that compiled. The
+   * alternative — refusing the keystroke — is an editor you cannot type an
+   * expression into, because every expression is malformed while it is half
+   * written.
+   */
+  private renderExpr(p: Property, source: string) {
+    const made = compile(source);
+    const broken = made instanceof Error ? made.message : undefined;
+    const value = broken === undefined ? evaluate(source, this.previewScope()) : undefined;
+
+    return html`<div class="expr">
+      <input
+        part="select"
+        type="text"
+        aria-label=${`${p.label} expression`}
+        .value=${source}
+        @input=${(e: Event) => {
+          this.editing = { name: p.name, source: (e.target as HTMLInputElement).value };
+        }}
+        @blur=${() => {
+          // On blur, not on every keystroke: see `editing`.
+          if (broken === undefined) this.set(p, { $expr: source });
+          this.editing = undefined;
+        }}
+      />
+      ${
+        broken === undefined
+          ? html`<span class="resolved">= ${shown(value)}</span>`
+          : html`<span class="problem">${broken}</span>`
+      }
+    </div>`;
+  }
+
+  /**
+   * Turn a field between a plain value and an expression.
+   *
+   * Going in, the literal becomes a quoted string rather than an empty box: a
+   * field that said `Hall` and now says nothing has lost what it said, and the
+   * commonest expression anybody writes starts from the value already there.
+   * Coming out, the field keeps whatever the expression currently evaluates
+   * to, so turning it off is not a way to blank a card by accident.
+   */
+  private toggleExpr(p: Property): void {
+    const source = this.exprIn(p);
+    this.editing = undefined;
+    if (source === undefined) {
+      const literal = typeof p.value === 'string' ? JSON.stringify(p.value) : String(p.value ?? '');
+      this.set(p, { $expr: literal === 'undefined' ? "''" : literal });
+      return;
+    }
+    const got = evaluate(source, this.previewScope());
+    this.set(p, got === undefined ? '' : got);
   }
 
   /**
@@ -1054,9 +1227,34 @@ export class HcPropertyPanel extends LitElement {
             <div class="name ${p.required ? 'required' : ''}">
               ${p.label}${p.required ? ' *' : ''}
               ${p.undescribed === true ? html`<span class="extra">not core's</span>` : nothing}
+              ${
+                // Ungated, like every other control here: `commit` writes to
+                // the draft and fires `hc-widget-change` whether or not a host
+                // wired `onEditWidget`, and gating on that callback hid the
+                // toggle in the one place it matters — the page's own panel,
+                // which saves through `onSaveWidget` instead.
+                this.takesExpr(p)
+                  ? html`<button
+                      class="fx ${this.exprIn(p) === undefined ? '' : 'on'}"
+                      part="action"
+                      title=${
+                        this.exprIn(p) === undefined
+                          ? 'Work this out from the house instead'
+                          : 'Back to a plain value'
+                      }
+                      aria-pressed=${this.exprIn(p) === undefined ? 'false' : 'true'}
+                      @click=${() => this.toggleExpr(p)}
+                    >
+                      ƒx
+                    </button>`
+                  : nothing
+              }
             </div>
             <div class="field">
-              ${this.renderField(p)}
+              ${(() => {
+                const source = this.exprIn(p);
+                return source === undefined ? this.renderField(p) : this.renderExpr(p, source);
+              })()}
               ${p.problem !== undefined ? html`<span class="problem">${p.problem}</span>` : nothing}
               ${
                 p.suggest === 'device' && p.form !== 'list' && this.nameOf(p.value) !== undefined
