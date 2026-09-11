@@ -51,6 +51,7 @@ import { pagesToShow, LastKnown, ageOf } from '../core/last-known.js';
 import type { CommandEvent } from '../core/plugins.js';
 import type { Vocabulary } from '../core/vocabulary.js';
 import { since, type Preferences } from '../core/i18n.js';
+import { AssetSource, type StoredAsset } from '../core/assets.js';
 import { ExtensionSource, type InstalledExtensions } from '../ext/install.js';
 import type { CommandRequest } from '../core/widget.js';
 import { effectiveName, isOn } from '../core/present.js';
@@ -587,6 +588,28 @@ export class HcApp extends LitElement {
    * that defines a custom element cannot be registered twice — so the widget
    * that offers this says "reload to use it" rather than appearing to work.
    */
+  /** A household's own pictures, as the store last listed them (§9). */
+  @state() private assets: readonly StoredAsset[] = [];
+
+  private assetStore(): AssetSource {
+    return new AssetSource({ token: () => this.api?.bearer() });
+  }
+
+  /**
+   * Put a picture in the store, and keep the list in step.
+   *
+   * Re-listed rather than appended: two browsers uploading at once is a real
+   * case on a household with a wall panel and a laptop, and a list that only
+   * ever grew by what *this* session added would quietly disagree with the
+   * store it claims to describe. The same picture twice is the same id
+   * (`server/store.ts`), so the list does not grow either.
+   */
+  private readonly uploadAsset = async (file: Blob): Promise<StoredAsset> => {
+    const got = await this.assetStore().upload(file);
+    this.assets = await this.assetStore().list();
+    return got;
+  };
+
   private readonly installExtension = async (
     archive: ArrayBuffer,
   ): Promise<{ id: string; files: number }> =>
@@ -990,7 +1013,9 @@ export class HcApp extends LitElement {
       pages: this.pageList(),
       mode: this.editing ? 'edit' : 'view',
       extensions: this.extensions,
+      assets: this.assets,
       ...(this.mayWriteDashboards() ? { onInstallExtension: this.installExtension } : {}),
+      ...(this.mayWriteDashboards() ? { onUploadAsset: this.uploadAsset } : {}),
       ...(this.mayWriteDashboards()
         ? {
             onSaveWidget: this.saveWidget,
@@ -1191,6 +1216,11 @@ export class HcApp extends LitElement {
       // the devices because nothing on the first paint needs it — only the
       // property panel does, and it works without it.
       this.vocabulary = await api.dashboardVocabulary();
+      // What the household has uploaded, for a field that takes a picture
+      // (§9). Not awaited before the first paint for the same reason the
+      // vocabulary is not: only the property panel wants it, and it works
+      // without it.
+      this.assets = await this.assetStore().list();
 
       this.docs = await this.loadPages(api);
       this.current = this.docs[0];
@@ -1841,6 +1871,8 @@ export class HcApp extends LitElement {
         mode=${this.editing ? 'edit' : 'view'}
         .extensions=${this.extensions}
         .onInstallExtension=${this.mayWriteDashboards() ? this.installExtension : undefined}
+        .assets=${this.assets}
+        .onUploadAsset=${this.mayWriteDashboards() ? this.uploadAsset : undefined}
         .scopes=${this.panelScopes}
         .templates=${this.authored.templates()}
         .onAction=${this.runAction}

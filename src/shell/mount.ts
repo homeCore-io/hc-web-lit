@@ -59,6 +59,9 @@ export type MountTarget = HTMLElement & {
   /** What is installed, and how to install something (§18.2). */
   extensions?: MountEnv['extensions'];
   onInstallExtension?: MountEnv['onInstallExtension'];
+  /** A household's own pictures, and how to add one (§9). */
+  assets?: MountEnv['assets'];
+  onUploadAsset?: MountEnv['onUploadAsset'];
   /** Move or resize one, and the layout it is being placed in. */
   onPlaceWidget?: MountEnv['onPlaceWidget'];
   pagePlacements?: MountEnv['pagePlacements'];
@@ -179,6 +182,8 @@ export function mountWidget(el: MountTarget, w: WidgetSpec, env: MountEnv): void
   if (env.onInstallExtension !== undefined) {
     give(el, 'onInstallExtension', env.onInstallExtension);
   }
+  if (env.assets !== undefined) give(el, 'assets', env.assets);
+  if (env.onUploadAsset !== undefined) give(el, 'onUploadAsset', env.onUploadAsset);
   if (env.pagePlacements !== undefined) give(el, 'pagePlacements', env.pagePlacements);
   if (env.scopes !== undefined) give(el, 'scopes', env.scopes);
 

@@ -161,6 +161,17 @@ export interface MountEnv {
   extensions?: { loaded: unknown[]; failed: { id: string; error: string }[] };
   onInstallExtension?: (archive: ArrayBuffer) => Promise<{ id: string; files: number }>;
   /**
+   * A household's own pictures, and how to add one (§9).
+   *
+   * The listing comes from the host for the same reason the extensions one
+   * does: one fetch, at startup, so every widget that offers a picture offers
+   * the same set. Uploading is a callback rather than a URL because a widget
+   * holds no token and no base (§19.4) — it hands over bytes and is told where
+   * they ended up.
+   */
+  assets?: readonly { id: string; kind: string; bytes: number }[];
+  onUploadAsset?: (file: Blob) => Promise<{ id: string; kind: string; bytes: number }>;
+  /**
    * The pages this household has, for a widget that links to one (§5.10).
    *
    * Names and ids, never the documents: a widget that wanted to *read*

@@ -456,6 +456,10 @@ export class HcPage extends LitElement {
   @property({ attribute: false }) extensions: MountEnv['extensions'];
   @property({ attribute: false }) onInstallExtension: MountEnv['onInstallExtension'];
 
+  /** A household's own pictures, and how to add one (§9). */
+  @property({ attribute: false }) assets: MountEnv['assets'];
+  @property({ attribute: false }) onUploadAsset: MountEnv['onUploadAsset'];
+
   /**
    * Viewing or arranging (§14.2).
    *
@@ -1768,6 +1772,8 @@ export class HcPage extends LitElement {
       breakpoint: this.breakpoint,
       mode: this.mode,
       ...(this.extensions !== undefined ? { extensions: this.extensions } : {}),
+      ...(this.assets !== undefined ? { assets: this.assets } : {}),
+      ...(this.onUploadAsset !== undefined ? { onUploadAsset: this.onUploadAsset } : {}),
       ...(this.onInstallExtension !== undefined
         ? { onInstallExtension: this.onInstallExtension }
         : {}),

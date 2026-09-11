@@ -49,6 +49,7 @@ import type { DashboardLayout, DashboardWidget } from '../core/dashboard.js';
 import { boxOf, type Box } from '../core/pages.js';
 import { knownRoles } from '../design/roles.js';
 import { markNames } from '../design/icons.js';
+import { assetUrl, type StoredAsset } from '../core/assets.js';
 import { mountChildren, type MountEnv } from '../shell/mount.js';
 
 /** The three states of a confirmation, in the words the field uses. */
@@ -218,6 +219,13 @@ export class HcPropertyPanel extends LitElement {
   @property({ attribute: false }) vocabulary: Vocabulary | undefined;
   /** The household's pages, so a field that names one can offer them. */
   @property({ attribute: false }) pages: readonly { id: string; name: string }[] = [];
+
+  /** A household's own pictures, and how to add one (§9). */
+  @property({ attribute: false }) assets: readonly StoredAsset[] = [];
+  @property({ attribute: false }) onUploadAsset: ((file: Blob) => Promise<StoredAsset>) | undefined;
+
+  /** Whether a file is on its way to the store, so a second press cannot start another. */
+  @state() private uploading = false;
   /**
    * The widgets on the page this panel is on.
    *
@@ -517,6 +525,15 @@ export class HcPropertyPanel extends LitElement {
         return knownFacets().map((f) => ({ value: f, label: humanise(f) }));
       case 'dashboard':
         return this.pages.map((p) => ({ value: p.id, label: p.name }));
+      case 'asset':
+        // The URL is the value, because that is what the field holds — a
+        // person pasting a link from elsewhere and a person choosing a stored
+        // picture are filling in the same box. The label says what it is and
+        // how big, which is all a content hash can be described by.
+        return this.assets.map((a) => ({
+          value: assetUrl(a.id),
+          label: `${a.kind || 'file'} · ${Math.max(1, Math.round(a.bytes / 1024))} KB`,
+        }));
       default:
         return [];
     }
@@ -549,6 +566,47 @@ export class HcPropertyPanel extends LitElement {
     if (typeof id !== 'string' || id === '') return undefined;
     const device = this.devices.find((d) => d.device_id === id);
     return device === undefined ? undefined : effectiveName(device);
+  }
+
+  /**
+   * Put one of a household's own pictures into a field that takes a URL (§9).
+   *
+   * **Offered on an asset field and only there**, and only where the host has
+   * opened the door — a static deployment has no store, and a control that
+   * uploaded into nothing would be §5.11's "offered and refused".
+   *
+   * The file goes straight in and the field is set to where it landed, because
+   * the two halves are one thing a person is doing: picking a file they have
+   * *in order to* put it here. An upload that left them to then find it in a
+   * list would be a picker that made them do the filing.
+   */
+  private addAsset(p: Property) {
+    if (p.suggest !== 'asset' || this.onUploadAsset === undefined) return nothing;
+
+    return html`<label class="upload" part="action">
+      ${this.uploading ? 'Storing…' : 'Add a picture…'}
+      <input
+        type="file"
+        accept="image/*"
+        hidden
+        @change=${async (e: Event) => {
+          const input = e.target as HTMLInputElement;
+          const file = input.files?.[0];
+          input.value = '';
+          if (file === undefined) return;
+          this.uploading = true;
+          this.trouble = '';
+          try {
+            const got = await this.onUploadAsset!(file);
+            this.set(p, assetUrl(got.id));
+          } catch (err) {
+            this.trouble = `Not stored: ${err instanceof Error ? err.message : String(err)}`;
+          } finally {
+            this.uploading = false;
+          }
+        }}
+      />
+    </label>`;
   }
 
   private datalist(kind: Suggest | undefined, id: string) {
@@ -885,7 +943,7 @@ export class HcPropertyPanel extends LitElement {
         return html`${this.text(p, typeof p.value === 'string' ? p.value : '', (v) =>
           this.set(p, v),
         )}
-        ${this.datalist(p.suggest, `list-${p.name}`)}`;
+        ${this.datalist(p.suggest, `list-${p.name}`)}${this.addAsset(p)}`;
     }
   }
 

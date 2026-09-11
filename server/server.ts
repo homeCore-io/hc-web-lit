@@ -233,6 +233,10 @@ export const handler = async (req: IncomingMessage, res: ServerResponse): Promis
       return send(res, 201, got);
     }
 
+    if (url === '/api/assets' && method === 'GET') {
+      return send(res, 200, { assets: await store.listAssets() });
+    }
+
     if (url === '/api/assets' && method === 'POST') {
       const bytes = await body(req, store.limits.maxBytes);
       return send(res, 201, await store.putAsset(bytes, String(req.headers['x-extension'] ?? '')));

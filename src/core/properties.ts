@@ -68,7 +68,7 @@ export type PropertyForm =
  * control still accepts a value that is not on the list.
  */
 export type Suggest =
-  'device' | 'scene' | 'area' | 'attribute' | 'role' | 'icon' | 'dashboard' | 'facet';
+  'device' | 'scene' | 'area' | 'attribute' | 'role' | 'icon' | 'dashboard' | 'facet' | 'asset';
 
 /** One editable thing in the panel. */
 export interface Property {
@@ -157,6 +157,13 @@ const SUGGESTS: Record<string, Suggest> = {
   dashboard_ids: 'dashboard',
   room_page: 'dashboard',
   facet: 'facet',
+  // A household's own pictures (§9). Core describes `url` as a plain string
+  // because it is one — the store is this client's, not core's — so the
+  // *suggestion* is the store's contents and the field still takes any URL.
+  // Offering it is what makes the asset store reachable at all: before this
+  // the only picture a `url` field could name was one somewhere else on the
+  // network.
+  url: 'asset',
   // `types` is deliberately absent: it holds device *types*, which are a
   // plugin's open vocabulary and not this client's facet names. A picker
   // offering the wrong list is worse than a plain box, because every value in

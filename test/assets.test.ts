@@ -7,7 +7,7 @@
  * renders, and the serving has to be safe enough that being able to render it
  * is not a way in.
  */
-import { mkdtemp } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -18,9 +18,11 @@ const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3
 const svg = (inner: string): Buffer => Buffer.from(`<svg xmlns="x">${inner}</svg>`, 'utf8');
 
 let store: Store;
+let root: string;
 
 beforeEach(async () => {
-  store = new Store(await mkdtemp(join(tmpdir(), 'hc-asset-')), {
+  root = await mkdtemp(join(tmpdir(), 'hc-asset-'));
+  store = new Store(root, {
     maxBytes: 1024 * 1024,
     maxTotalBytes: 0,
   });
@@ -159,5 +161,51 @@ describe('the headers an asset is served with', () => {
 
   it('caches forever, which is only safe because the id is the hash', () => {
     expect(assetHeaders('image/png')['cache-control']).toContain('immutable');
+  });
+});
+
+describe('what the store will say it holds (§9)', () => {
+  it('is empty before anything is uploaded', async () => {
+    // A household that has uploaded nothing is the ordinary first case, not a
+    // failure — there is no directory yet.
+    expect(await store.listAssets()).toEqual([]);
+  });
+
+  it('lists what was put in, by content hash and sniffed kind', async () => {
+    const one = await store.putAsset(png);
+    const two = await store.putAsset(svg('<rect/>'));
+    const listed = await store.listAssets();
+
+    expect(listed.map((a) => a.id).sort()).toEqual([one.id, two.id].sort());
+    expect(listed.find((a) => a.id === one.id)?.kind).toBe('png');
+    expect(listed.find((a) => a.id === two.id)?.kind).toBe('svg');
+    expect(listed.every((a) => a.bytes > 0)).toBe(true);
+  });
+
+  it('does not grow when the same picture goes in twice', async () => {
+    // The id is the hash of the stored bytes, which is what makes a household
+    // store stop growing once it holds what it needs.
+    await store.putAsset(png);
+    await store.putAsset(png);
+    expect(await store.listAssets()).toHaveLength(1);
+  });
+
+  it('reports the sanitised size, not the size that was sent', async () => {
+    // An SVG is rewritten on the way in, so the bytes a listing reports have
+    // to be the bytes that would come back out.
+    const hostile = svg('<script>alert(1)</script><rect/>');
+    const put = await store.putAsset(hostile);
+    const listed = (await store.listAssets()).find((a) => a.id === put.id);
+    expect(listed?.bytes).toBe(put.bytes);
+    expect(listed?.bytes).toBeLessThan(hostile.byteLength);
+  });
+
+  it('skips a file in the directory that is not a stored asset', async () => {
+    // The directory is a household's disk, and something else living in it is
+    // not this program's to describe.
+    const put = await store.putAsset(png);
+    await mkdir(join(root, 'assets'), { recursive: true });
+    await writeFile(join(root, 'assets', 'notes.txt'), 'mine');
+    expect((await store.listAssets()).map((a) => a.id)).toEqual([put.id]);
   });
 });

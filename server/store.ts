@@ -13,7 +13,7 @@
  * would be a dependency bought with nothing.
  */
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, extname, join, resolve } from 'node:path';
 import { sanitiseSvg, sniff } from './assets.ts';
 
@@ -163,6 +163,35 @@ export class Store {
     await mkdir(dirname(file), { recursive: true });
     await writeFile(file, stored);
     return { id, bytes: stored.byteLength, kind: seen.kind };
+  }
+
+  /**
+   * What is in the store, so a person can choose from it.
+   *
+   * **Nothing is opened.** The id is the content hash and the suffix is the
+   * kind `putAsset` sniffed when it wrote the file, so a listing of a hundred
+   * pictures costs one directory read rather than a hundred. A file whose name
+   * is not a stored id is skipped rather than reported: the directory is a
+   * household's disk, and something else living in it is not this program's to
+   * describe.
+   */
+  async listAssets(): Promise<{ id: string; kind: string; bytes: number }[]> {
+    try {
+      const dir = this.path('assets');
+      const found: { id: string; kind: string; bytes: number }[] = [];
+      for (const name of await readdir(dir)) {
+        const id = name.slice(0, 64);
+        if (!SAFE_ID.test(id)) continue;
+        const size = await stat(join(dir, name)).catch(() => undefined);
+        if (size === undefined) continue;
+        found.push({ id, kind: extname(name).slice(1), bytes: size.size });
+      }
+      return found.sort((a, b) => a.id.localeCompare(b.id));
+    } catch {
+      // No directory yet is an empty store, not a failure: a household that
+      // has uploaded nothing is the ordinary first case.
+      return [];
+    }
   }
 
   /**

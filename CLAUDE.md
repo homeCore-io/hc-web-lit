@@ -2329,7 +2329,18 @@ not a failure of it.
 - [ ] Undo/redo stack
 - [ ] Expression editor: SyntaxError on blur, live preview against real state
 - [ ] Template authoring UI
-- [ ] Device/query picker, asset picker, room picker, extension browser
+- [ ] Device/query picker, asset picker, room picker, extension browser.
+      **The asset picker is in**, which is the one of the four that had
+      nothing at all: the store could hold a file and serve it back long
+      before the GUI could reach it, so the only picture a `url` field could
+      name was one somewhere else on the network. `GET /api/assets` lists it,
+      the panel offers it on every `url` field, and "Add a picture…" uploads
+      and fills the field in one go. Device, scene, room, icon, role, facet
+      and dashboard pickers are `datalist` suggestions and have been since
+      §4.4 — **open on purpose**, because a suggestion that also restricted
+      would make a document naming something this build has not learned
+      unsaveable. Still open: a query picker, and searching a device list by
+      the name a person reads rather than by the id a `datalist` matches on
 - [ ] Validate → diff → apply deployment flow
 
 **Phase 11 — Ecosystem**
