@@ -51,6 +51,17 @@ export interface GridItem {
    * never heard of frames.
    */
   rect?: DashboardRect | null;
+
+  /**
+   * Degrees clockwise about the element's own centre, when it is composed.
+   *
+   * The engine has no opinion about it: gravity, collision and packing all
+   * work on cells, and a rotated card's cells are its unrotated footprint
+   * (§14.3 — the cells are a fallback, not a rendering). It rides here so the
+   * surface drawing an item does not have to go back to the placement for the
+   * one field the engine did not carry across.
+   */
+  angle?: number | null;
 }
 
 const right = (i: GridItem): number => i.x + i.w;

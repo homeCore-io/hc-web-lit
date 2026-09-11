@@ -170,6 +170,7 @@ export function gridItems(
     h: p.h,
     ...(lifted.has(p.widget_id) ? { floating: true } : {}),
     ...(p.rect != null ? { rect: p.rect } : {}),
+    ...(p.angle != null ? { angle: p.angle } : {}),
   }));
 }
 

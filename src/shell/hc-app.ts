@@ -22,6 +22,7 @@ import {
   placeWidget,
   placeWidgets,
   removeWidget,
+  turnWidget,
   renamed,
   type Box,
 } from '../core/pages.js';
@@ -679,6 +680,25 @@ export class HcApp extends LitElement {
 
     const next = placeWidgets(doc, this.breakpoint, new Map(moves.map((m) => [m.id, m.box])));
     if (next === undefined) throw new Error('This layout has none of those widgets.');
+
+    this.writePages(this.replacing(next), next.id);
+    return Promise.resolve();
+  };
+
+  /**
+   * Turn a widget on the composed page being shown (§14.1).
+   *
+   * Refused rather than ignored on a packed page: `turnWidget` says no when
+   * the layout has no frame, and a handle that wrote nothing while looking
+   * like it had would be worse than one that is not offered — which is what
+   * the surface does, since grid mode draws no turn handle at all.
+   */
+  private readonly turnWidgetOnPage = async (widgetId: string, angle: number): Promise<void> => {
+    const doc = this.current;
+    if (doc === undefined) throw new Error('No page to turn on.');
+
+    const next = turnWidget(doc, this.breakpoint, widgetId, angle);
+    if (next === undefined) throw new Error(`This layout cannot turn "${widgetId}".`);
 
     this.writePages(this.replacing(next), next.id);
     return Promise.resolve();
@@ -1658,6 +1678,7 @@ export class HcApp extends LitElement {
         .onRemoveWidget=${this.mayWriteDashboards() ? this.removeWidgetFromPage : undefined}
         .onPlaceWidget=${this.mayWriteDashboards() ? this.placeWidgetOnPage : undefined}
         .onPlaceWidgets=${this.mayWriteDashboards() ? this.placeWidgetsOnPage : undefined}
+        .onTurnWidget=${this.mayWriteDashboards() ? this.turnWidgetOnPage : undefined}
         .onDrawWidget=${this.mayWriteDashboards() ? this.drawWidgetOnPage : undefined}
         .tool=${this.tool}
         mode=${this.editing ? 'edit' : 'view'}

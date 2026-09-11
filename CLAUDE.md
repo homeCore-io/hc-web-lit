@@ -2278,11 +2278,23 @@ not a failure of it.
       free-mode designer below
 - [ ] **Grid mode:** cell placement, the coarse magnet, one grip, no rotation
 - [ ] **Free mode:** `frame` + `rect` + `angle`, eight handles, the fine magnet,
-      guides, lift above the grid, groups and group rotation
-- [ ] Transform geometry — written against the placement model, gestures working
+      guides, lift above the grid, groups and group rotation. **`rect`, `angle`,
+      the eight handles and the fine magnet are in.** `angle` was declared in
+      the document and drawn by nobody until now, so a card could be stored
+      turned and would render square. Still open: guides, lift, groups and
+      group rotation
+- [x] Transform geometry — written against the placement model, gestures working
       from the placement alone so a sandboxed element is transformable without
-      being inspectable (§14.2). Read the Dart's for the bugs it names; it has
-      no resize-while-rotated and no extension boundary
+      being inspectable (§14.2). `core/geometry.ts`, pure and tested as such.
+      The Dart was read for the bugs it names and they are all here: the
+      opposite edge stays put, the edge *under the pointer* snaps and never the
+      width, per-element floors (`registerLeast`), and the whole-cell
+      approximation stays legal for core so a composed edit cannot make a page
+      unsaveable. **Resize-while-rotated, which that code does not have, is
+      solved by rotating the pointer delta into the element's frame before the
+      anchor arithmetic and rebuilding the rect about the anchor** — the
+      alternative swings a growing card round its own moving centre, so it
+      slides sideways while being resized
 - [x] Tool palette with drag-to-create; the catalogue stays but is not the only
       way in (§14.1). The palette is the shell's, beside Undo and Arrange, and
       it *arms* rather than adds: a held tool turns the page into a surface you

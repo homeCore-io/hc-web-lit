@@ -20,6 +20,7 @@ import type {
   DashboardWidgetPlacement,
 } from './dashboard.js';
 import { layoutToDraw } from './dashboard.js';
+import { cellsOf } from './geometry.js';
 
 /**
  * A page id from what somebody typed.
@@ -292,15 +293,80 @@ export function placeWidgets(
   const move = (p: DashboardWidgetPlacement): DashboardWidgetPlacement => {
     const box = moves.get(p.widget_id);
     if (box === undefined) return p;
-    return layout.flow === 'free'
-      ? { ...p, rect: { ...(p.rect ?? {}), ...box } }
-      : { ...p, x: box.x, y: box.y, w: box.w, h: box.h };
+    if (layout.flow !== 'free') return { ...p, x: box.x, y: box.y, w: box.w, h: box.h };
+
+    // **The cells follow the rectangle.** Core validates the cells and knows
+    // nothing about frames, so a composed edit that left them behind would
+    // save a page whose fallback says where the card used to be — and would
+    // eventually save one core rejects, with the failure arriving at save time
+    // talking about columns. This is the safety property of storing both
+    // (§14.3): a client that has never heard of frames draws these and gets a
+    // page that is approximately right rather than blank.
+    const rect = { ...(p.rect ?? {}), ...box };
+    const frame = layout.frame;
+    if (frame == null) return { ...p, rect };
+    return {
+      ...p,
+      rect,
+      ...cellsOf(rect, {
+        width: frame.width,
+        columns: layout.columns,
+        rowHeight: layout.row_height,
+        gap: layout.gap,
+      }),
+    };
   };
 
   return {
     ...doc,
     layouts: (doc.layouts ?? []).map((l) =>
       l.breakpoint === editing ? { ...l, placements: placements.map(move) } : l,
+    ),
+  };
+}
+
+/**
+ * Turn a widget, in the layout that is actually on screen.
+ *
+ * Separate from placing it, because it is a separate edit: a rectangle and an
+ * angle are stored side by side (§14.3), and folding the angle into `Box`
+ * would put a field on every grid move that a packed page has no use for —
+ * §14.1 gives grid mode no rotation at all.
+ *
+ * Only a composed layout, for the same reason. A packed card's position is
+ * cells, an angle is not expressible in them, and a client drawing the cells
+ * would show a rotated card square with no hint that it was ever turned.
+ */
+export function turnWidget(
+  doc: DashboardDefinition,
+  breakpoint: DashboardBreakpoint,
+  widgetId: string,
+  angle: number,
+): DashboardDefinition | undefined {
+  const drawn = layoutToDraw(doc, breakpoint);
+  if (drawn === undefined) return undefined;
+
+  const editing = drawn.borrowedFrom ?? breakpoint;
+  const layout = (doc.layouts ?? []).find((l) => l.breakpoint === editing);
+  if (layout === undefined || layout.flow !== 'free') return undefined;
+  if (!(layout.placements ?? []).some((p) => p.widget_id === widgetId)) return undefined;
+
+  // One spelling per angle, and `null` for a card that is straight — which is
+  // how this schema spells absence everywhere else (`rect`), and keeps a card
+  // that was turned and turned back from carrying a `0` forever.
+  const turned = ((angle % 360) + 360) % 360 || null;
+
+  return {
+    ...doc,
+    layouts: (doc.layouts ?? []).map((l) =>
+      l.breakpoint === editing
+        ? {
+            ...l,
+            placements: (l.placements ?? []).map((p) =>
+              p.widget_id === widgetId ? { ...p, angle: turned } : p,
+            ),
+          }
+        : l,
     ),
   };
 }

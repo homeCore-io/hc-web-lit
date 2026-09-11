@@ -263,8 +263,43 @@ describe('a widget larger than its placement', () => {
     // apply adopted stylesheets, so `getComputedStyle` here would report the
     // empty string whether the rule existed or not — a test that cannot fail.
     const css = [HcPageClass.styles].flat().map(String).join('\n');
-    expect(css).toMatch(/\.placed\s*\{[^}]*overflow:\s*hidden/);
-    expect(css).toMatch(/\.cell\s*\{[^}]*overflow:\s*hidden/);
+    expect(css).toMatch(/\.body\s*\{[^}]*overflow:\s*hidden/);
+  });
+
+  it('clips the widget and not the box that holds the handles', async () => {
+    // The clip used to be on `.placed`, which also holds free mode's handles —
+    // and the turn handle sits *above* the card, so the clip deleted the
+    // handle rather than the overflow. Two things wanting opposite treatment,
+    // so they are two elements now.
+    const el = document.createElement('hc-page');
+    el.doc = base({
+      widgets: [{ id: 'h', type: 'text', config: { text: 'EVERY ROOM' } }],
+      layouts: [
+        {
+          breakpoint: 'desktop',
+          columns: 12,
+          row_height: 120,
+          gap: 12,
+          flow: 'free',
+          frame: { width: 1240, height: 1248, fit: 'scroll' },
+          placements: [
+            { widget_id: 'h', x: 0, y: 0, w: 12, h: 1, rect: { x: 100, y: 100, w: 200, h: 100 } },
+          ],
+        },
+      ],
+    });
+    el.store = new DeviceStore();
+    el.onPlaceWidget = async () => undefined;
+    el.onTurnWidget = async () => undefined;
+    el.mode = 'edit';
+    document.body.append(el);
+    await el.updateComplete;
+
+    const placed = el.shadowRoot?.querySelector('.placed') as HTMLElement;
+    // The handles are children of the unclipped box, beside the clipped body.
+    expect(placed.querySelector(':scope > .turn')).not.toBeNull();
+    expect(placed.querySelector(':scope > .body')).not.toBeNull();
+    expect(placed.querySelector('.body .turn')).toBeNull();
   });
 });
 
@@ -1136,5 +1171,196 @@ describe('picking more than one, and moving them together (§14.2)', () => {
     await el.updateComplete;
     expect(drew).toHaveBeenCalled();
     expect(pickedIn(el)).toEqual([]);
+  });
+});
+
+describe('composing with eight handles and a turn (§14.1)', () => {
+  beforeEach(shimPointers);
+
+  const composed = (over: Partial<DashboardDefinition> = {}): DashboardDefinition =>
+    base({
+      widgets: [{ id: 'h', type: 'text', config: { text: 'EVERY ROOM' } }],
+      layouts: [
+        {
+          breakpoint: 'desktop',
+          columns: 12,
+          row_height: 120,
+          gap: 12,
+          flow: 'free',
+          frame: { width: 1240, height: 1248, fit: 'scroll' },
+          placements: [
+            { widget_id: 'h', x: 0, y: 0, w: 12, h: 1, rect: { x: 100, y: 100, w: 200, h: 100 } },
+          ],
+        },
+      ],
+      ...over,
+    });
+
+  const arranged = async (over: Partial<HcPage> = {}): Promise<HcPage> => {
+    const el = document.createElement('hc-page');
+    el.doc = composed();
+    el.store = new DeviceStore();
+    el.onPlaceWidget = async () => undefined;
+    el.onTurnWidget = async () => undefined;
+    el.mode = 'edit';
+    Object.assign(el, over);
+    document.body.append(el);
+    await el.updateComplete;
+    return el;
+  };
+
+  const pull = (el: HcPage, which: string, byX: number, byY: number): void => {
+    const handle = el.shadowRoot?.querySelector(`.${which.replace(/ /g, '.')}`);
+    expect(handle, `no ${which} handle`).not.toBeNull();
+    const at = handle as Element;
+    at.dispatchEvent(
+      new FakePointerEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 0,
+        clientY: 0,
+        pointerId: 1,
+      }),
+    );
+    at.dispatchEvent(
+      new FakePointerEvent('pointermove', { clientX: byX, clientY: byY, pointerId: 1 }),
+    );
+    at.dispatchEvent(
+      new FakePointerEvent('pointerup', { clientX: byX, clientY: byY, pointerId: 1 }),
+    );
+  };
+
+  it('offers eight handles and a turn where a packed page gets one grip', async () => {
+    const el = await arranged();
+    expect(el.shadowRoot?.querySelectorAll('.edge')).toHaveLength(8);
+    expect(el.shadowRoot?.querySelector('.turn')).not.toBeNull();
+    expect(el.shadowRoot?.querySelector('.grip')).toBeNull();
+  });
+
+  it('still offers a packed page exactly one grip and no turn', async () => {
+    // §14.1: a packed card is anchored top-left and only its extent is in
+    // question, so a second handle offers an edit the engine would undo.
+    const el = document.createElement('hc-page');
+    el.doc = base({
+      widgets: [{ id: 't', type: 'text', config: { text: 'Hall' } }],
+      layouts: [
+        {
+          breakpoint: 'desktop',
+          columns: 12,
+          row_height: 100,
+          gap: 0,
+          placements: [{ widget_id: 't', x: 0, y: 0, w: 6, h: 2 }],
+        },
+      ],
+    });
+    el.store = new DeviceStore();
+    el.onPlaceWidget = async () => undefined;
+    el.mode = 'edit';
+    document.body.append(el);
+    await el.updateComplete;
+
+    expect(el.shadowRoot?.querySelectorAll('.edge')).toHaveLength(0);
+    expect(el.shadowRoot?.querySelector('.turn')).toBeNull();
+    expect(el.shadowRoot?.querySelector('.grip')).not.toBeNull();
+  });
+
+  it('pulls the left edge without moving the right', async () => {
+    // Dragged to 56, which is on the fine grid, so the magnet is not what this
+    // is measuring: the right edge stays at 300 and the width absorbs it all.
+    const placed = vi.fn(async () => undefined);
+    const el = await arranged({ onPlaceWidget: placed });
+    pull(el, 'edge left', -44, 0);
+    expect(placed).toHaveBeenCalledWith('h', { x: 56, y: 100, w: 244, h: 100 });
+  });
+
+  it('snaps a composed edge to the fine grid, not to a column', async () => {
+    // A text box snapped to a 120px cell can be 120 wide or 240 and nothing
+    // between, so it is never the width of its own words.
+    const placed = vi.fn(async () => undefined);
+    const el = await arranged({ onPlaceWidget: placed });
+    pull(el, 'edge right', 3, 0);
+    expect(placed).toHaveBeenCalledWith('h', { x: 100, y: 100, w: 204, h: 100 });
+  });
+
+  it('takes both axes from a corner', async () => {
+    const placed = vi.fn(async () => undefined);
+    const el = await arranged({ onPlaceWidget: placed });
+    pull(el, 'edge top-left', -44, -20);
+    expect(placed).toHaveBeenCalledWith('h', { x: 56, y: 80, w: 244, h: 120 });
+  });
+
+  it('draws the angle the document stores, which nothing did before', async () => {
+    const el = await arranged();
+    el.doc = composed({
+      layouts: [
+        {
+          ...composed().layouts![0]!,
+          placements: [
+            {
+              widget_id: 'h',
+              x: 0,
+              y: 0,
+              w: 12,
+              h: 1,
+              rect: { x: 100, y: 100, w: 200, h: 100 },
+              angle: 30,
+            },
+          ],
+        },
+      ],
+    });
+    await el.updateComplete;
+    const placed = el.shadowRoot?.querySelector('.placed') as HTMLElement;
+    expect(placed.style.transform).toBe('rotate(30deg)');
+  });
+
+  it('turns a card by how far round the finger went', async () => {
+    const turned = vi.fn(async (_id: string, _angle: number) => undefined);
+    const el = await arranged({ onTurnWidget: turned });
+
+    // The card's centre, measured off the drawn box — stubbed, because jsdom
+    // lays nothing out. Grabbed due east of it and carried due south.
+    const card = el.shadowRoot?.querySelector('[data-widget="h"]') as Element;
+    card.getBoundingClientRect = () =>
+      ({ left: 100, top: 100, width: 200, height: 100, right: 300, bottom: 200 }) as DOMRect;
+
+    const handle = el.shadowRoot?.querySelector('.turn') as Element;
+    handle.dispatchEvent(
+      new FakePointerEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 300,
+        clientY: 150,
+        pointerId: 1,
+      }),
+    );
+    handle.dispatchEvent(
+      new FakePointerEvent('pointermove', { clientX: 200, clientY: 250, pointerId: 1 }),
+    );
+    handle.dispatchEvent(
+      new FakePointerEvent('pointerup', { clientX: 200, clientY: 250, pointerId: 1 }),
+    );
+
+    expect(turned).toHaveBeenCalledTimes(1);
+    expect(turned.mock.calls[0]?.[1]).toBeCloseTo(90, 6);
+  });
+
+  it('offers no turn handle to a host that cannot write one', async () => {
+    // §5.11 again: not offered rather than offered and refused.
+    const el = await arranged({ onTurnWidget: undefined });
+    const handle = el.shadowRoot?.querySelector('.turn') as Element;
+    // The handle is drawn — free mode always shows it — but pressing it
+    // starts nothing, so there is no gesture that ends in a throw.
+    handle.dispatchEvent(
+      new FakePointerEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 300,
+        clientY: 150,
+        pointerId: 1,
+      }),
+    );
+    await el.updateComplete;
+    expect(el.shadowRoot?.querySelector('[data-dragging]')).toBeNull();
   });
 });

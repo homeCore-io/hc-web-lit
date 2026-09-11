@@ -22,13 +22,14 @@ import type {
 import { gridItems, layoutToDraw } from '../core/dashboard.js';
 import type { Box } from '../core/pages.js';
 import { Engine, type GridItem } from '../core/layout.js';
+import { FINE, HANDLES, angleFrom, resizedBy, type Handle } from '../core/geometry.js';
 import type { SelectionContext } from '../core/selection.js';
 import { isVisible } from '../core/visibility.js';
 import type { DeviceStore } from '../core/store.js';
 import type { CommandRequest } from '../core/widget.js';
 import type { EventFetch } from '../widgets/hc-event-feed.js';
 import type { HistoryFetch } from '../widgets/hc-history-chart.js';
-import { tagFor } from '../core/registry.js';
+import { leastFor as leastOfType, tagFor } from '../core/registry.js';
 import type { ActionConfig } from '../core/actions.js';
 import type { TemplateStore } from '../core/templates.js';
 import { mountWidget, specFor, type MountEnv, type MountTarget } from './mount.js';
@@ -86,11 +87,21 @@ function boxBetween(a: { x: number; y: number }, b: { x: number; y: number }, fr
  */
 interface Drag {
   id: string;
-  grip: 'move' | 'size';
+  /**
+   * What was taken hold of. `move` drags the card, `size` is grid mode's one
+   * grip, `turn` rotates, and the eight named handles are free mode's (§14.1).
+   */
+  grip: 'move' | 'size' | 'turn' | Handle;
   from: Box;
   dx: number;
   dy: number;
   with: ReadonlySet<string>;
+  /** Degrees the card was already at, which a resize has to undo (§14.2). */
+  angle: number;
+  /** Where the card's centre is on screen, for a turn. */
+  centre?: { x: number; y: number };
+  /** Where the turn was grabbed, so it is a delta and not a jump. */
+  grabbed?: { x: number; y: number };
 }
 
 @customElement('hc-page')
@@ -117,15 +128,23 @@ export class HcPage extends LitElement {
       position: absolute;
       box-sizing: border-box;
       min-width: 0;
-      /* A placement is the size the author drew, and a widget does not get to
-         disagree. A device set of twelve full cards in a short box escaped its
-         rect and drew over three neighbours — which is not a widget that needs
-         more room, it is a page that has stopped being the arrangement
-         somebody saved. Widgets that scroll (a set, a feed) do it inside
-         this. */
-      overflow: hidden;
     }
     .cell {
+      min-width: 0;
+    }
+    /* A placement is the size the author drew, and a widget does not get to
+       disagree. A device set of twelve full cards in a short box escaped its
+       rect and drew over three neighbours — which is not a widget that needs
+       more room, it is a page that has stopped being the arrangement somebody
+       saved. Widgets that scroll (a set, a feed) do it inside this.
+
+       On the widget rather than on the placement, because the placement also
+       holds the handles: free mode's turn handle sits *above* the card, and a
+       clip on the box around it deleted the handle rather than the overflow.
+       The two things want opposite treatment, so they are two elements. */
+    .body {
+      width: 100%;
+      height: 100%;
       min-width: 0;
       overflow: hidden;
     }
@@ -163,6 +182,61 @@ export class HcPage extends LitElement {
       outline: 2px dashed var(--hc-accent-active, #ffc978);
       outline-offset: 2px;
       opacity: 0.85;
+    }
+    /* Free mode's eight, and the turn above them (§14.1). Small squares on the
+       edges and corners rather than the two clipped triangles a packed card
+       gets: eight triangles would be eight arrows pointing nowhere in
+       particular, and the shape is what says "pull this edge". */
+    .edge,
+    .turn {
+      position: absolute;
+      z-index: 5;
+      width: 0.75rem;
+      height: 0.75rem;
+      box-sizing: border-box;
+      border: 2px solid var(--hc-accent-active, #ffc978);
+      background: var(--hc-surface-base, #0b0e13);
+      border-radius: 3px;
+      touch-action: none;
+    }
+    .edge.top-left {
+      inset: -0.375rem auto auto -0.375rem;
+      cursor: nwse-resize;
+    }
+    .edge.top {
+      inset: -0.375rem auto auto calc(50% - 0.375rem);
+      cursor: ns-resize;
+    }
+    .edge.top-right {
+      inset: -0.375rem -0.375rem auto auto;
+      cursor: nesw-resize;
+    }
+    .edge.right {
+      inset: calc(50% - 0.375rem) -0.375rem auto auto;
+      cursor: ew-resize;
+    }
+    .edge.bottom-right {
+      inset: auto -0.375rem -0.375rem auto;
+      cursor: nwse-resize;
+    }
+    .edge.bottom {
+      inset: auto auto -0.375rem calc(50% - 0.375rem);
+      cursor: ns-resize;
+    }
+    .edge.bottom-left {
+      inset: auto auto -0.375rem -0.375rem;
+      cursor: nesw-resize;
+    }
+    .edge.left {
+      inset: calc(50% - 0.375rem) auto auto -0.375rem;
+      cursor: ew-resize;
+    }
+    /* Above the card and clear of the corner handles, which is where every
+       design application puts it and so where a hand goes looking. */
+    .turn {
+      inset: -1.75rem auto auto calc(50% - 0.375rem);
+      border-radius: 50%;
+      cursor: grab;
     }
     /* A surface holding a tool (§14.1). The cursor is the only thing that says
        a press will draw rather than select, and without it the mode is
@@ -298,6 +372,17 @@ export class HcPage extends LitElement {
    */
   @property({ attribute: false }) onPlaceWidgets:
     ((moves: readonly { id: string; box: Box }[]) => Promise<void>) | undefined;
+
+  /**
+   * Turn one, on a composed page (§14.1).
+   *
+   * Its own door rather than a field on a placement write, because it is its
+   * own edit: a rectangle and an angle sit side by side in the document
+   * (§14.3), grid mode has no rotation at all, and folding it in would put a
+   * field on every packed drag that a packed page can never use.
+   */
+  @property({ attribute: false }) onTurnWidget:
+    ((widgetId: string, angle: number) => Promise<void>) | undefined;
 
   /**
    * The widget type held, waiting to be drawn (§14.1).
@@ -492,16 +577,21 @@ export class HcPage extends LitElement {
           if (w === undefined || r == null) return nothing;
           const z = w.config?.['z'];
           const at = this.previewOf(item.id, { x: r.x, y: r.y, w: r.w, h: r.h });
+          // **Stored and, until now, never acted on.** §14.3 says core keeps
+          // `angle` and has no opinion about it; a client that keeps it and
+          // does not draw it is a client where turning a card does nothing.
+          const turn = this.angleOf(item);
           return html`<div
             class="placed"
             data-widget=${item.id}
             ?data-picked=${this.mode === 'edit' && this.picked.has(item.id)}
             ?data-dragging=${this.dragging?.with.has(item.id) === true}
             style="left:${at.x}px;top:${at.y}px;width:${at.w}px;height:${at.h}px;${
-              typeof z === 'number' ? `z-index:${z}` : ''
-            }"
+              turn === 0 ? '' : `transform:rotate(${turn}deg);`
+            }${typeof z === 'number' ? `z-index:${z}` : ''}"
           >
-            ${this.draw(w)} ${this.handles(item.id, { x: r.x, y: r.y, w: r.w, h: r.h })}
+            <div class="body">${this.draw(w)}</div>
+            ${this.handles(item.id, { x: r.x, y: r.y, w: r.w, h: r.h }, item.angle ?? 0)}
           </div>`;
         })}
       </div>
@@ -524,8 +614,11 @@ export class HcPage extends LitElement {
    * Pointer capture, because §14.2 asks for it and because without it a drag
    * that leaves the card — which every drag does — stops getting events.
    */
-  private startDrag(e: PointerEvent, id: string, grip: 'move' | 'size', box: Box): void {
+  private startDrag(e: PointerEvent, id: string, grip: Drag['grip'], box: Box, angle = 0): void {
     if (this.mode !== 'edit' || this.onPlaceWidget === undefined) return;
+    // Turning writes through its own door, and a host that has not opened it
+    // is one where the handle should do nothing rather than throw.
+    if (grip === 'turn' && this.onTurnWidget === undefined) return;
     e.preventDefault();
     e.stopPropagation();
 
@@ -550,7 +643,20 @@ export class HcPage extends LitElement {
     }
     const startX = e.clientX;
     const startY = e.clientY;
-    this.dragging = { id, grip, from: box, dx: 0, dy: 0, with: carrying };
+    // A turn is measured from the card's middle, which is also what it turns
+    // about — read off the drawn element, because that is the one thing the
+    // placement cannot say: where the frame put it on this screen.
+    const middle = grip === 'turn' ? this.centreOnScreen(id) : undefined;
+    this.dragging = {
+      id,
+      grip,
+      from: box,
+      dx: 0,
+      dy: 0,
+      with: carrying,
+      angle,
+      ...(middle === undefined ? {} : { centre: middle, grabbed: { x: startX, y: startY } }),
+    };
 
     const move = (m: PointerEvent): void => {
       if (this.dragging === undefined) return;
@@ -565,6 +671,21 @@ export class HcPage extends LitElement {
       const drag = this.dragging;
       this.dragging = undefined;
       if (drag === undefined) return;
+
+      if (drag.grip === 'turn') {
+        if (drag.centre === undefined || drag.grabbed === undefined) return;
+        const turned = angleFrom(
+          drag.centre,
+          drag.grabbed,
+          { x: drag.grabbed.x + drag.dx, y: drag.grabbed.y + drag.dy },
+          drag.angle,
+        );
+        // The same rule every other gesture follows: a press that turned
+        // nothing is a press, and writing the angle it already had is a save
+        // nobody asked for.
+        if (turned !== drag.angle) void this.onTurnWidget?.(drag.id, turned);
+        return;
+      }
 
       const moves = this.movesFrom(drag);
       const from = this.boxesOf(drag.with);
@@ -597,7 +718,7 @@ export class HcPage extends LitElement {
    * thirds, and a drag that ignored that would move things half again as far
    * as the finger.
    */
-  private boxFrom(drag: { grip: 'move' | 'size'; from: Box; dx: number; dy: number }): Box {
+  private boxFrom(drag: Pick<Drag, 'id' | 'grip' | 'from' | 'dx' | 'dy' | 'angle'>): Box {
     const step = this.stepOf(drag.dx, drag.dy);
     // Nowhere to measure a cell against — a page that has not been laid out
     // yet. Moving by the raw pixels would send a widget three hundred cells to
@@ -611,12 +732,43 @@ export class HcPage extends LitElement {
         y: Math.max(0, drag.from.y + step.dy),
       };
     }
-    // A widget with no width is a widget that cannot be grabbed again.
-    const least = this.free ? 40 : 1;
+    if (drag.grip === 'turn') return drag.from;
+
+    // **Eight handles, and the fine magnet** — §14.1's free mode. The opposite
+    // edge stays put, the edge under the pointer snaps, and a rotated card has
+    // the delta turned into its own frame first (`core/geometry.ts`).
+    if (drag.grip !== 'size') {
+      return resizedBy(drag.from, drag.grip, step, {
+        step: FINE,
+        angle: drag.angle,
+        ...this.leastFor(drag.id),
+      });
+    }
+
+    // Grid mode's one grip: the card is anchored top-left and only its extent
+    // is in question, which is all a cell grid needs (§14.1).
     return {
       ...drag.from,
-      w: Math.max(least, drag.from.w + step.dx),
-      h: Math.max(least, drag.from.h + step.dy),
+      w: Math.max(1, drag.from.w + step.dx),
+      h: Math.max(1, drag.from.h + step.dy),
+    };
+  }
+
+  /**
+   * How small this element may be pulled, when it has said it has a floor.
+   *
+   * A slider that loses its knob below 64 should not be draggable to 48. Read
+   * off the widget's own class rather than by measuring it, because §14.2's
+   * rule is that every gesture works from the placement alone: measuring would
+   * mean reaching inside, and a sandboxed element has no inside to reach into.
+   */
+  private leastFor(id: string): { leastW?: number; leastH?: number } {
+    const type = (this.doc?.widgets ?? []).find((w) => w.id === id)?.type;
+    const least = type === undefined ? undefined : leastOfType(type);
+    if (least === undefined) return {};
+    return {
+      ...(least.w === undefined ? {} : { leastW: least.w }),
+      ...(least.h === undefined ? {} : { leastH: least.h }),
     };
   }
 
@@ -661,7 +813,9 @@ export class HcPage extends LitElement {
    */
   private movesFrom(drag: Drag): Map<string, Box> {
     const moves = new Map<string, Box>();
-    if (drag.grip === 'size' || drag.with.size <= 1) {
+    // Turning changes no rectangle at all, so there is nothing here to move.
+    if (drag.grip === 'turn') return moves;
+    if (drag.grip !== 'move' || drag.with.size <= 1) {
       moves.set(drag.id, this.boxFrom(drag));
       return moves;
     }
@@ -682,6 +836,49 @@ export class HcPage extends LitElement {
   /** Where this widget should be drawn right now, drag included. */
   private previewOf(id: string, box: Box): Box {
     return this.moving?.get(id) ?? box;
+  }
+
+  /**
+   * What angle this item is drawn at right now, turn in progress included.
+   *
+   * The preview is what makes a rotation gesture usable at all: without it the
+   * card sits still until the finger comes up and then jumps to its new angle,
+   * which reads as the drag having done nothing and then something else
+   * happening.
+   */
+  private angleOf(item: GridItem): number {
+    const drag = this.dragging;
+    if (drag?.grip === 'turn' && drag.id === item.id && drag.centre && drag.grabbed) {
+      return angleFrom(
+        drag.centre,
+        drag.grabbed,
+        { x: drag.grabbed.x + drag.dx, y: drag.grabbed.y + drag.dy },
+        drag.angle,
+      );
+    }
+    return item.angle ?? 0;
+  }
+
+  /**
+   * The middle of a drawn placement, in screen pixels.
+   *
+   * Measured rather than computed, because it is the one thing the placement
+   * cannot say: where the frame's own scale and the page's scroll have put the
+   * card on *this* screen. It is still not reaching inside the widget — the
+   * element being measured is the host's own `.placed` box (§14.2).
+   */
+  private centreOnScreen(id: string): { x: number; y: number } | undefined {
+    // Scanned rather than selected, like every other lookup on this surface. A
+    // widget id comes out of a document and goes into a CSS selector, which is
+    // an escaping question nobody should have to get right — and `CSS.escape`
+    // is not everywhere, so the answer would have been a throw inside a
+    // pointer handler, which is the quietest possible failure.
+    for (const el of this.shadowRoot?.querySelectorAll('[data-widget]') ?? []) {
+      if (el.getAttribute('data-widget') !== id) continue;
+      const at = el.getBoundingClientRect();
+      return { x: at.left + at.width / 2, y: at.top + at.height / 2 };
+    }
+    return undefined;
   }
 
   /** One cell, in pixels, including the gap that follows it. */
@@ -712,20 +909,47 @@ export class HcPage extends LitElement {
    * layout changes when the handles appear — a page that reflowed on entering
    * edit mode would be a page you arrange in a shape it does not have.
    */
-  private handles(id: string, box: Box) {
+  private handles(id: string, box: Box, angle = 0) {
     if (this.mode !== 'edit' || this.onPlaceWidget === undefined) return nothing;
 
-    return html`<div
-        class="grab"
-        part="action"
-        title="Move"
-        @pointerdown=${(e: PointerEvent) => this.startDrag(e, id, 'move', box)}
-      ></div>
+    const move = html`<div
+      class="grab"
+      part="action"
+      title="Move"
+      @pointerdown=${(e: PointerEvent) => this.startDrag(e, id, 'move', box, angle)}
+    ></div>`;
+
+    // **Grid mode gets one grip; composing gets eight and a turn** (§14.1). A
+    // packed card is anchored top-left and only its extent is in question, so
+    // a second handle would offer an edit the engine would immediately undo.
+    // A composed card has no privileged corner: pulling its left edge left is
+    // a different edit from pulling its right edge right, and doing the first
+    // with a corner grip is two gestures and an arithmetic problem.
+    if (!this.free) {
+      return html`${move}
+        <div
+          class="grip"
+          part="action"
+          title="Resize"
+          @pointerdown=${(e: PointerEvent) => this.startDrag(e, id, 'size', box, angle)}
+        ></div>`;
+    }
+
+    return html`${move}
+      ${HANDLES.map(
+        (handle) =>
+          html`<div
+            class="edge ${handle}"
+            part="action"
+            title="Resize"
+            @pointerdown=${(e: PointerEvent) => this.startDrag(e, id, handle, box, angle)}
+          ></div>`,
+      )}
       <div
-        class="grip"
+        class="turn"
         part="action"
-        title="Resize"
-        @pointerdown=${(e: PointerEvent) => this.startDrag(e, id, 'size', box)}
+        title="Turn"
+        @pointerdown=${(e: PointerEvent) => this.startDrag(e, id, 'turn', box, angle)}
       ></div>`;
   }
 
@@ -1151,7 +1375,8 @@ export class HcPage extends LitElement {
             style="grid-column:${at.x + 1}/span ${at.w};
                    grid-row:${at.y + 1}/span ${at.h}"
           >
-            ${this.draw(w)} ${this.handles(item.id, { x: item.x, y: item.y, w: item.w, h: item.h })}
+            <div class="body">${this.draw(w)}</div>
+            ${this.handles(item.id, { x: item.x, y: item.y, w: item.w, h: item.h })}
           </div>`;
         })}
       </div>

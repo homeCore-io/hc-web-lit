@@ -28,6 +28,35 @@ export function knownTypes(): string[] {
   return [...registry.keys()].sort();
 }
 
+/** The smallest a widget of this type is worth drawing, in frame units. */
+export interface LeastSize {
+  w?: number;
+  h?: number;
+}
+
+/**
+ * How small a resize may pull a widget of this type.
+ *
+ * §14.2's third complaint about a generic transformer: it knows nothing about
+ * per-element minimums, and a slider that loses its knob below 64 should not be
+ * draggable to 48. The floor is a property of the *type* rather than of the
+ * drawn element, deliberately — every designer gesture has to work from the
+ * placement alone (§14.2), so a host that measured the element to find its
+ * minimum would work for a first-party card and fail on the sandboxed one.
+ *
+ * Declared rather than assumed: a type that says nothing gets the flat floor
+ * in `core/geometry.ts`, which is the honest answer for most of them.
+ */
+const floors = new Map<string, LeastSize>();
+
+export function registerLeast(type: string, least: LeastSize): void {
+  floors.set(type, least);
+}
+
+export function leastFor(type: string): LeastSize | undefined {
+  return floors.get(type);
+}
+
 /**
  * Which element draws a *device*, when a type-specific one exists.
  *
