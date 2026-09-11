@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DeviceState } from '../src/core/device.js';
 import { clock, isPlayer, nowPlaying, progress, summary } from '../src/core/media.js';
+import '../src/widgets/hc-media-card.js';
 
 const dev = (
   attributes: Record<string, unknown>,
@@ -109,5 +110,71 @@ describe('what counts as a player', () => {
     // existed.
     expect(isPlayer(dev({ on: true }, { device_type: 'light' }))).toBe(false);
     expect(isPlayer(dev({}, { device_type: 'switch' }))).toBe(false);
+  });
+});
+
+describe('a media card on a house page (§7.2)', () => {
+  const player = (over: Partial<DeviceState> = {}): DeviceState => ({
+    device_id: 'roku',
+    name: 'Living Room',
+    plugin_id: 'roku',
+    available: true,
+    area: 'living_room',
+    device_type: 'media_player',
+    attributes: { state: 'playing', media_title: 'Blue Train', volume: 30 },
+    last_seen: '2026-09-11T00:00:00Z',
+    schema: {
+      actions: [
+        { id: 'play_pause', label: 'Play' },
+        { id: 'next', label: 'Next' },
+        { id: 'previous', label: 'Previous' },
+        { id: 'volume_up', label: 'Louder' },
+      ],
+    },
+    ...over,
+  });
+
+  const card = async (config: Record<string, unknown>) => {
+    const el = document.createElement('hc-media-card');
+    el.device = player();
+    el.config = config;
+    document.body.append(el);
+    await el.updateComplete;
+    return el;
+  };
+
+  it('is status and one control when compact', async () => {
+    // Seven players each with a transport cluster, a volume row and a progress
+    // bar is a page about the stereo.
+    const el = await card({ compact: true });
+    const root = el.shadowRoot!;
+    expect(root.querySelector('.card.compact')).not.toBeNull();
+    expect(root.querySelectorAll('button')).toHaveLength(1);
+    expect(root.querySelector('.progress')).toBeNull();
+    expect(root.querySelector('.volume')).toBeNull();
+    expect(root.querySelector('.wash')).toBeNull();
+  });
+
+  it('still says where and what, which is the point of it', async () => {
+    const el = await card({ compact: true });
+    const text = (el.shadowRoot?.textContent ?? '').replace(/\s+/g, ' ');
+    expect(text).toContain('Living Room');
+    expect(text).toContain('Blue Train');
+  });
+
+  it('keeps the full card when nothing asked for compact', async () => {
+    const el = await card({});
+    expect(el.shadowRoot?.querySelector('.card.compact')).toBeNull();
+    expect((el.shadowRoot?.querySelectorAll('button') ?? []).length).toBeGreaterThan(1);
+  });
+
+  it('offers no button for a player that declares no transport', async () => {
+    // The curation rule underneath is unchanged: only what the device said.
+    const el = document.createElement('hc-media-card');
+    el.device = player({ schema: { actions: [] } });
+    el.config = { compact: true };
+    document.body.append(el);
+    await el.updateComplete;
+    expect(el.shadowRoot?.querySelectorAll('button')).toHaveLength(0);
   });
 });

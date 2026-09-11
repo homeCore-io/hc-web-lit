@@ -20,6 +20,10 @@ import {
   toPage,
 } from '../src/core/frames.js';
 import { placeWidget } from '../src/core/pages.js';
+import { DeviceStore } from '../src/core/store.js';
+import '../src/shell/hc-page.js';
+import '../src/widgets/hc-text.js';
+import type { HcPage } from '../src/shell/hc-page.js';
 
 const box = (over: Partial<DashboardGroupBox> & { path: string }): DashboardGroupBox => ({
   rect: { x: 0, y: 0, w: 100, h: 100 },
@@ -155,5 +159,118 @@ describe('the seam, end to end', () => {
   it('leaves an unframed page exactly as it was', () => {
     const plain = { ...layout, groups: [] };
     expect(gridItems(plain, widgets)[0]?.rect).toEqual({ x: 16, y: 48, w: 96, h: 64 });
+  });
+});
+
+describe('a frame that stacks its members (§14.1)', () => {
+  const stacked: DashboardGroupBox = {
+    path: 'Playing',
+    rect: { x: 40, y: 60, w: 400, h: 200 },
+    frame: true,
+    stack: true,
+    stack_gap: 8,
+    padding: 12,
+  };
+
+  const layout = {
+    breakpoint: 'desktop' as const,
+    columns: 12,
+    row_height: 120,
+    gap: 12,
+    flow: 'free' as const,
+    frame: { width: 1240, height: 800, fit: 'scroll' as const },
+    groups: [stacked],
+    placements: [
+      { widget_id: 'a', x: 0, y: 0, w: 1, h: 1, rect: { x: 0, y: 0, w: 300, h: 60 } },
+      { widget_id: 'b', x: 0, y: 0, w: 1, h: 1, rect: { x: 0, y: 0, w: 300, h: 60 } },
+      { widget_id: 'loose', x: 0, y: 0, w: 1, h: 1, rect: { x: 600, y: 60, w: 200, h: 40 } },
+    ],
+  };
+  const widgets = [
+    { id: 'a', type: 'text', config: { text: 'one', group: 'Playing' } },
+    { id: 'b', type: 'text', config: { text: 'two', group: 'Playing' } },
+    { id: 'loose', type: 'text', config: { text: 'elsewhere' } },
+  ];
+
+  const mount = async (): Promise<HcPage> => {
+    const el = document.createElement('hc-page');
+    el.doc = {
+      id: 'd',
+      name: 'D',
+      icon: 'home',
+      owner_user_id: 'u',
+      layouts: [layout],
+      widgets,
+    };
+    el.store = new DeviceStore();
+    document.body.append(el);
+    await el.updateComplete;
+    return el;
+  };
+
+  it('draws one container at the frame’s own place', async () => {
+    const el = await mount();
+    const stack = el.shadowRoot?.querySelector('.stack') as HTMLElement;
+    expect(stack, 'no stack container').not.toBeNull();
+    expect(stack.dataset['frame']).toBe('Playing');
+    expect(stack.style.left).toBe('40px');
+    expect(stack.style.top).toBe('60px');
+    expect(stack.style.gap).toBe('8px');
+    expect(stack.style.padding).toBe('12px');
+  });
+
+  it('puts its members inside it, in flow', async () => {
+    // Which is the whole point: a member that grows pushes the ones below it
+    // down, and that only happens if they are really inside.
+    const el = await mount();
+    const stack = el.shadowRoot?.querySelector('.stack') as HTMLElement;
+    const inside = [...stack.querySelectorAll('[data-widget]')].map((e) =>
+      e.getAttribute('data-widget'),
+    );
+    expect(inside).toEqual(['a', 'b']);
+  });
+
+  it('draws each member once, not twice', async () => {
+    // A stacked member positioned at its stored coordinates *as well* would be
+    // the same card in two places.
+    const el = await mount();
+    const all = [...(el.shadowRoot?.querySelectorAll('[data-widget]') ?? [])].map((e) =>
+      e.getAttribute('data-widget'),
+    );
+    expect(all.filter((id) => id === 'a')).toHaveLength(1);
+  });
+
+  it('leaves a card outside the frame where it was put', async () => {
+    const el = await mount();
+    const loose = [...(el.shadowRoot?.querySelectorAll('.placed') ?? [])].find(
+      (e) => e.getAttribute('data-widget') === 'loose',
+    ) as HTMLElement;
+    expect(loose.style.left).toBe('600px');
+    expect(loose.classList.contains('inflow')).toBe(false);
+  });
+
+  it('takes its members’ tops from the column, not from their rects', async () => {
+    const el = await mount();
+    const inflow = el.shadowRoot?.querySelector('.placed.inflow') as HTMLElement;
+    expect(inflow.style.left).toBe('');
+    expect(inflow.style.top).toBe('');
+  });
+
+  it('draws no separate backdrop for itself', async () => {
+    // The stack is a real container and already has a body; a framebody behind
+    // it would be a second box in the same place.
+    const el = await mount();
+    expect(el.shadowRoot?.querySelector('.framebody[data-frame="Playing"]')).toBeNull();
+  });
+
+  it('is an ordinary positioned frame when it does not stack', async () => {
+    const el = await mount();
+    el.doc = {
+      ...el.doc!,
+      layouts: [{ ...layout, groups: [{ ...stacked, stack: false }] }],
+    };
+    await el.updateComplete;
+    expect(el.shadowRoot?.querySelector('.stack')).toBeNull();
+    expect(el.shadowRoot?.querySelector('.framebody')).not.toBeNull();
   });
 });

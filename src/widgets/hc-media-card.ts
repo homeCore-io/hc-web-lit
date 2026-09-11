@@ -72,6 +72,41 @@ export class HcMediaCard extends LitElement {
       opacity: 0.28;
       pointer-events: none;
     }
+    /* One row: what it is, what is on, and the one button worth pressing. */
+    .card.compact {
+      display: flex;
+      align-items: center;
+      gap: calc(var(--hc-space-unit, 8px) * 0.75);
+      padding: calc(var(--hc-space-unit, 8px) * 0.5) calc(var(--hc-space-unit, 8px));
+      min-height: 0;
+    }
+    .card.compact .art {
+      width: 1.25rem;
+      height: 1.25rem;
+      flex: none;
+    }
+    .card.compact .lines {
+      display: flex;
+      align-items: baseline;
+      gap: calc(var(--hc-space-unit, 8px) * 0.75);
+      min-width: 0;
+      flex: 1 1 auto;
+      overflow: hidden;
+    }
+    /* The name stays whole and the track gives way — on a house page you are
+       looking for the room first and the song second. */
+    .card.compact .where {
+      flex: none;
+    }
+    .card.compact .title {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--hc-ink-muted, #8b95a4);
+    }
+    .card.compact .buttons {
+      flex: none;
+    }
     .head {
       position: relative;
       display: flex;
@@ -277,6 +312,26 @@ export class HcMediaCard extends LitElement {
       claimed = true;
       return b;
     });
+
+    // **Status first, one control** (§7.2's curation, one step further). A
+    // house page wants to know what is playing where, not to conduct it: seven
+    // players each with a transport cluster, a volume row and a progress bar
+    // is a page about the stereo. Compact keeps the name, what is playing, and
+    // the one button somebody actually reaches for — and drops the art wash,
+    // the bar and the volume, which are what a room page is for.
+    if (this.config['compact'] === true) {
+      const primary = transport.find((b) => b.primary) ?? transport[0];
+      return html`<div class="card compact" part="player">
+        <span class="art" part="indicator">
+          ${icon(n.state === 'playing' ? 'play' : 'media')}
+        </span>
+        <span class="lines">
+          <span class="where" part="state">${effectiveName(d)}</span>
+          <span class="title" part="name">${n.title ?? n.source ?? summary(n)}</span>
+        </span>
+        ${primary === undefined ? nothing : this.buttons(d, [{ ...primary, primary: false }])}
+      </div>`;
+    }
 
     return html`<div class="card" part="player">
       ${this.art === undefined ? nothing : html`<div class="wash" style="background-image:url(${this.art})"></div>`}

@@ -33,9 +33,9 @@ import {
   type Guide,
   type Handle,
 } from '../core/geometry.js';
-import { framesByPath, pageRectOf } from '../core/frames.js';
+import { framesByPath, isFrame, pageRectOf } from '../core/frames.js';
 import { deriveDensity } from '../design/tokens.js';
-import { clickTarget, groupOf, isUnder, membersOf, stepOut } from '../core/groups.js';
+import { clickTarget, groupOf, isUnder, membersOf, segmentsOf, stepOut } from '../core/groups.js';
 import type { SelectionContext } from '../core/selection.js';
 import { isVisible } from '../core/visibility.js';
 import type { DeviceStore } from '../core/store.js';
@@ -367,6 +367,28 @@ export class HcPage extends LitElement {
        under everything, because the frame is a coordinate space first — its
        members are ordinary placements drawn at resolved page positions, not
        children in the DOM. */
+    /* A frame that lays its members out in a column (§14.1). The container
+       a positioned frame does not need to be: a member that grows pushes the
+       ones below it down, which only happens if they are really inside it. */
+    .stack {
+      position: absolute;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      border-radius: var(--hc-radius-md, 14px);
+      background: var(--hc-surface-raised, #141922);
+      z-index: 1;
+    }
+    /* In flow, so the stack decides where it sits. Everything else about a
+       placement is unchanged, which is why one function draws both. */
+    .placed.inflow {
+      position: relative;
+      left: auto;
+      top: auto;
+      width: auto;
+      flex: none;
+    }
     .framebody {
       position: absolute;
       z-index: 0;
@@ -746,37 +768,126 @@ export class HcPage extends LitElement {
         style="width:${frame.width}px;height:${tall}px;transform:scale(${scale})"
       >
         ${this.frameBodies(items)} ${this.drawPreview()} ${this.groupFrame()}
+        ${this.stacks(items, byId)}
         ${items.map((item) => {
           const w = byId.get(item.id);
-          const r = item.rect;
-          if (w === undefined || r == null) return nothing;
-          const z = w.config?.['z'];
-          const at = this.previewOf(item.id, { x: r.x, y: r.y, w: r.w, h: r.h });
-          // A placement that says so is as tall as what is in it (§14.1). The
-          // rect stays the author's *minimum*: a card never shrinks below the
-          // box it was drawn in, it only grows past it when the alternative is
-          // hiding something.
-          const fits = fitsContent(w.config);
-          // **Stored and, until now, never acted on.** §14.3 says core keeps
-          // `angle` and has no opinion about it; a client that keeps it and
-          // does not draw it is a client where turning a card does nothing.
-          const turn = this.angleOf(item);
-          return html`<div
-            class="placed"
-            data-widget=${item.id}
-            ?data-picked=${this.mode === 'edit' && this.picked.has(item.id)}
-            ?data-dragging=${this.dragging?.with.has(item.id) === true}
-            ?data-fits=${fits}
-            style="left:${at.x}px;top:${at.y}px;width:${at.w}px;${
-              fits ? `min-height:${at.h}px;` : `height:${at.h}px;`
-            }${turn === 0 ? '' : `transform:rotate(${turn}deg);`}${typeof z === 'number' ? `z-index:${z}` : ''}"
-          >
-            <div class="body">${this.draw(w)}</div>
-            ${this.handles(item.id, { x: r.x, y: r.y, w: r.w, h: r.h }, item.angle ?? 0)}
-          </div>`;
+          if (w === undefined || item.rect == null) return nothing;
+          // A member of a stacked frame is drawn by the stack, in flow, and
+          // must not also be drawn here at its stored coordinates.
+          if (this.stackedIn(w) !== undefined) return nothing;
+          return this.placement(item, w);
         })}
       </div>
     `;
+  }
+
+  /**
+   * The frames on this layout that lay their members out in a column (§14.1).
+   *
+   * **A real container, not a backdrop.** A positioned frame can be drawn
+   * behind its members because they know where they are; a *stacked* one
+   * decides where they are, and the whole point is that a member which grows
+   * pushes the ones below it down. That only happens if they are actually in
+   * it — so a stacked frame renders as a flow container with its members as
+   * children, and nothing about their stored rectangles decides their tops.
+   *
+   * Their widths come from the column rather than from their rects, because a
+   * stack is "these, one under another" and a column of things at four
+   * different widths is not what anybody means by that. Their heights are
+   * still their own: a drawn height is a height, and `fit: content` is how one
+   * says otherwise.
+   */
+  private stacks(items: readonly GridItem[], byId: Map<string, DashboardWidget>) {
+    const layout =
+      this.doc === undefined ? undefined : layoutToDraw(this.doc, this.breakpoint)?.layout;
+    const boxes = (layout?.groups ?? []).filter((b) => b.stack === true && isFrame(b));
+    if (boxes.length === 0) return nothing;
+
+    const frames = framesByPath(layout?.groups);
+    return boxes.map((box) => {
+      const at = pageRectOf(box, frames);
+      if (at === undefined) return nothing;
+
+      const mine = items.filter((i) => {
+        const w = byId.get(i.id);
+        return w !== undefined && this.stackedIn(w) === box.path;
+      });
+      const pad = box.padding ?? 0;
+      const gap = box.stack_gap ?? 0;
+      const grows = box.frame === true && box.clip !== true;
+
+      return html`<div
+        class="stack"
+        data-frame=${box.path}
+        style="left:${at.x}px;top:${at.y}px;width:${at.w}px;${
+          grows ? `min-height:${at.h}px;` : `height:${at.h}px;`
+        }padding:${pad}px;gap:${gap}px"
+      >
+        ${mine.map((item) => {
+          const w = byId.get(item.id);
+          return w === undefined ? nothing : this.placement(item, w, true);
+        })}
+      </div>`;
+    });
+  }
+
+  /**
+   * The stacked frame this widget is laid out by, if any.
+   *
+   * Its own group, or the nearest ancestor of it that stacks — a card in
+   * `Wall/Lights` is stacked by `Wall` when `Wall` is the one that says so.
+   */
+  private stackedIn(w: DashboardWidget): string | undefined {
+    const path = groupOf(w.config);
+    if (path === undefined) return undefined;
+    const layout =
+      this.doc === undefined ? undefined : layoutToDraw(this.doc, this.breakpoint)?.layout;
+    const stacked = new Set(
+      (layout?.groups ?? []).filter((b) => b.stack === true && isFrame(b)).map((b) => b.path),
+    );
+    const parts = segmentsOf(path);
+    for (let i = parts.length; i >= 1; i--) {
+      const at = parts.slice(0, i).join('/');
+      if (stacked.has(at)) return at;
+    }
+    return undefined;
+  }
+
+  /**
+   * One placement, positioned by the page or carried by a stack.
+   *
+   * One function for both, because everything else about a placement — the
+   * handles, the selection, the turn, the clip, the fit — is the same wherever
+   * its top came from, and two copies of that is two places to fix a bug in.
+   */
+  private placement(item: GridItem, w: DashboardWidget, inStack = false) {
+    const r = item.rect;
+    if (r == null) return nothing;
+    const z = w.config?.['z'];
+    const at = this.previewOf(item.id, { x: r.x, y: r.y, w: r.w, h: r.h });
+    // A placement that says so is as tall as what is in it (§14.1). The rect
+    // stays the author's *minimum*: a card never shrinks below the box it was
+    // drawn in, it only grows past it when the alternative is hiding something.
+    const fits = fitsContent(w.config);
+    // **Stored and, until now, never acted on.** §14.3 says core keeps `angle`
+    // and has no opinion about it; a client that keeps it and does not draw it
+    // is a client where turning a card does nothing.
+    const turn = this.angleOf(item);
+    const height = fits ? `min-height:${at.h}px;` : `height:${at.h}px;`;
+
+    return html`<div
+      class=${inStack ? 'placed inflow' : 'placed'}
+      data-widget=${item.id}
+      ?data-picked=${this.mode === 'edit' && this.picked.has(item.id)}
+      ?data-dragging=${this.dragging?.with.has(item.id) === true}
+      ?data-fits=${fits}
+      style="${inStack ? '' : `left:${at.x}px;top:${at.y}px;width:${at.w}px;`}${height}${
+        turn === 0 ? '' : `transform:rotate(${turn}deg);`
+      }${typeof z === 'number' ? `z-index:${z}` : ''}"
+    >
+      <div class="body">${this.draw(w)}</div>
+      ${this.handles(item.id, { x: r.x, y: r.y, w: r.w, h: r.h }, item.angle ?? 0)}
+    </div>`;
   }
 
   /**
@@ -1090,6 +1201,9 @@ export class HcPage extends LitElement {
 
     const frames = framesByPath(boxes);
     return boxes.map((box) => {
+      // A stacked frame draws its own body — it is a real container, and a
+      // backdrop behind it would be a second box in the same place.
+      if (box.stack === true) return nothing;
       const at = pageRectOf(box, frames);
       if (at === undefined) return nothing;
       return html`<div
