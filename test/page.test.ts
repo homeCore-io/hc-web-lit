@@ -692,8 +692,19 @@ describe('drawing a widget with a tool held (§14.1)', () => {
     const el = await holding(async () => undefined);
     // Two rows used, three spare, 100px a row.
     expect((surface(el) as HTMLElement).style.minHeight).toBe('500px');
+  });
 
+  it('keeps that room for the whole of edit mode, not only while armed', async () => {
+    // Putting the tool down must not take the surface away: a rubber band
+    // starts on it too, and so does the press that clears a selection. While
+    // this was tied to the tool, the only place to begin either was the gaps
+    // between cards.
+    const el = await holding(async () => undefined);
     el.tool = undefined;
+    await el.updateComplete;
+    expect((surface(el) as HTMLElement).style.minHeight).toBe('500px');
+
+    el.mode = 'view';
     await el.updateComplete;
     expect((surface(el) as HTMLElement).style.minHeight).toBe('');
   });
@@ -763,5 +774,367 @@ describe('drawing on a composed page, where the units are pixels', () => {
     const frame = el.shadowRoot?.querySelector('.frame') as Element;
     draw(frame, [100, 100], [110, 108]);
     expect(drew).toHaveBeenCalledWith('text', { x: 100, y: 100, w: 40, h: 40 });
+  });
+});
+
+describe('picking more than one, and moving them together (§14.2)', () => {
+  beforeEach(shimPointers);
+
+  /** Three cards in a row, each two cells wide, so a band can reach two. */
+  const page = (): DashboardDefinition =>
+    base({
+      widgets: [
+        { id: 'a', type: 'text', config: { text: 'a' } },
+        { id: 'b', type: 'text', config: { text: 'b' } },
+        { id: 'c', type: 'text', config: { text: 'c' } },
+      ],
+      layouts: [
+        {
+          breakpoint: 'desktop',
+          columns: 12,
+          row_height: 100,
+          gap: 0,
+          placements: [
+            { widget_id: 'a', x: 1, y: 0, w: 2, h: 1 },
+            { widget_id: 'b', x: 3, y: 0, w: 2, h: 1 },
+            { widget_id: 'c', x: 8, y: 0, w: 2, h: 1 },
+          ],
+        },
+      ],
+    });
+
+  /**
+   * jsdom lays nothing out, so every `getBoundingClientRect` is zeros and a
+   * band would sweep up everything or nothing. The rects are stubbed from the
+   * placements — 100px a cell — which is what a browser would have measured.
+   */
+  const arranged = async (over: Partial<HcPage> = {}): Promise<HcPage> => {
+    const el = document.createElement('hc-page');
+    el.doc = page();
+    el.store = new DeviceStore();
+    el.onPlaceWidget = async () => undefined;
+    el.mode = 'edit';
+    Object.assign(el, over);
+    document.body.append(el);
+    await el.updateComplete;
+
+    const grid = el.shadowRoot?.querySelector('.grid');
+    Object.defineProperty(grid as Element, 'clientWidth', { value: 1200, configurable: true });
+    place(el);
+    return el;
+  };
+
+  /** Give each drawn cell the rect its placement says it occupies. */
+  const place = (el: HcPage): void => {
+    const at: Record<string, [number, number]> = { a: [100, 2], b: [300, 2], c: [800, 2] };
+    for (const cell of el.shadowRoot?.querySelectorAll('[data-widget]') ?? []) {
+      const [left, cells] = at[cell.getAttribute('data-widget') ?? ''] ?? [0, 1];
+      cell.getBoundingClientRect = () =>
+        ({ left, right: left + cells * 100, top: 0, bottom: 100 }) as DOMRect;
+    }
+  };
+
+  /** A group-move spy that keeps its argument types, so the calls can be read. */
+  type Moves = readonly { id: string; box: { x: number; y: number; w: number; h: number } }[];
+  const groupSpy = () => vi.fn(async (_moves: Moves) => undefined);
+
+  const pickedIn = (el: HcPage): string[] =>
+    [...(el.shadowRoot?.querySelectorAll('[data-picked]') ?? [])].map(
+      (e) => e.getAttribute('data-widget') ?? '',
+    );
+
+  const surface = (el: HcPage): Element => el.shadowRoot?.querySelector('.grid') as Element;
+
+  const sweep = (
+    on: Element,
+    from: [number, number],
+    to: [number, number],
+    init: MouseEventInit = {},
+  ): void => {
+    on.dispatchEvent(
+      new FakePointerEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        clientX: from[0],
+        clientY: from[1],
+        pointerId: 1,
+        ...init,
+      }),
+    );
+    on.dispatchEvent(
+      new FakePointerEvent('pointermove', { clientX: to[0], clientY: to[1], pointerId: 1 }),
+    );
+    on.dispatchEvent(
+      new FakePointerEvent('pointerup', { clientX: to[0], clientY: to[1], pointerId: 1 }),
+    );
+  };
+
+  it('takes everything the band touches, not only what it contains', async () => {
+    // A band has to reach round every card it means to take, and on a page of
+    // wide cards that is most of the width — so containment makes the gesture
+    // unusable at exactly the size of thing it is for.
+    const el = await arranged();
+    sweep(surface(el), [150, 20], [350, 60]);
+    await el.updateComplete;
+    expect(pickedIn(el).sort()).toEqual(['a', 'b']);
+  });
+
+  it('leaves alone what the band never reached', async () => {
+    const el = await arranged();
+    sweep(surface(el), [150, 20], [350, 60]);
+    await el.updateComplete;
+    expect(pickedIn(el)).not.toContain('c');
+  });
+
+  it('replaces the selection on a plain sweep and adds to it on shift', async () => {
+    const el = await arranged();
+    sweep(surface(el), [150, 20], [350, 60]);
+    await el.updateComplete;
+
+    sweep(surface(el), [820, 20], [980, 60], { shiftKey: true });
+    await el.updateComplete;
+    expect(pickedIn(el).sort()).toEqual(['a', 'b', 'c']);
+
+    sweep(surface(el), [820, 20], [980, 60]);
+    await el.updateComplete;
+    expect(pickedIn(el)).toEqual(['c']);
+  });
+
+  it('shows the band while the finger is down and puts it away after', async () => {
+    const el = await arranged();
+    const on = surface(el);
+    on.dispatchEvent(
+      new FakePointerEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 50,
+        clientY: 20,
+        pointerId: 1,
+      }),
+    );
+    on.dispatchEvent(
+      new FakePointerEvent('pointermove', { clientX: 250, clientY: 60, pointerId: 1 }),
+    );
+    await el.updateComplete;
+
+    const band = el.shadowRoot?.querySelector('.band') as HTMLElement;
+    expect(band, 'no rubber band while sweeping').not.toBeNull();
+    expect(band.style.left).toBe('50px');
+    expect(band.style.width).toBe('200px');
+
+    on.dispatchEvent(
+      new FakePointerEvent('pointerup', { clientX: 250, clientY: 60, pointerId: 1 }),
+    );
+    await el.updateComplete;
+    expect(el.shadowRoot?.querySelector('.band')).toBeNull();
+  });
+
+  it('is a click and not a sweep when the finger never travelled', async () => {
+    // A press on a card picks that card; a press on the gaps clears, which is
+    // where somebody presses to mean "never mind" without reaching for a key.
+    const el = await arranged();
+    sweep(surface(el), [150, 20], [152, 21]);
+    await el.updateComplete;
+    expect(pickedIn(el)).toEqual(['a']);
+
+    sweep(surface(el), [600, 400], [600, 400]);
+    await el.updateComplete;
+    expect(pickedIn(el)).toEqual([]);
+  });
+
+  it('moves everything picked by one delta, in one write', async () => {
+    const many = groupSpy();
+    const one = vi.fn(async () => undefined);
+    const el = await arranged({ onPlaceWidgets: many, onPlaceWidget: one });
+    sweep(surface(el), [150, 20], [350, 60]);
+    await el.updateComplete;
+    place(el);
+
+    const grab = el.shadowRoot?.querySelector('[data-widget="a"] .grab') as Element;
+    grab.dispatchEvent(
+      new FakePointerEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0, pointerId: 1 }),
+    );
+    grab.dispatchEvent(
+      new FakePointerEvent('pointermove', { clientX: 300, clientY: 0, pointerId: 1 }),
+    );
+    grab.dispatchEvent(
+      new FakePointerEvent('pointerup', { clientX: 300, clientY: 0, pointerId: 1 }),
+    );
+
+    expect(one).not.toHaveBeenCalled();
+    expect(many).toHaveBeenCalledTimes(1);
+    expect(many.mock.calls[0]?.[0]).toEqual([
+      { id: 'a', box: { x: 4, y: 0, w: 2, h: 1 } },
+      { id: 'b', box: { x: 6, y: 0, w: 2, h: 1 } },
+    ]);
+  });
+
+  it('shortens the delta rather than deforming the group at the edge', async () => {
+    // Clamping each card on its own is how a selection arrives somewhere
+    // deformed: the leftmost stops at column 0 and the others keep going.
+    const many = groupSpy();
+    const el = await arranged({ onPlaceWidgets: many });
+    sweep(surface(el), [150, 20], [350, 60]);
+    await el.updateComplete;
+    place(el);
+
+    const grab = el.shadowRoot?.querySelector('[data-widget="b"] .grab') as Element;
+    grab.dispatchEvent(
+      new FakePointerEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0, pointerId: 1 }),
+    );
+    grab.dispatchEvent(
+      new FakePointerEvent('pointermove', { clientX: -300, clientY: 0, pointerId: 1 }),
+    );
+    grab.dispatchEvent(
+      new FakePointerEvent('pointerup', { clientX: -300, clientY: 0, pointerId: 1 }),
+    );
+
+    // Three cells left was asked for and one was available, because `a` sits
+    // at column 1. Both move by that one, and the two are still two cells
+    // apart — which is the whole point. Clamping each on its own would have
+    // put `a` at 0 and `b` at 0 too, three cells from where it started.
+    expect(many.mock.calls[0]?.[0]).toEqual([
+      { id: 'a', box: { x: 0, y: 0, w: 2, h: 1 } },
+      { id: 'b', box: { x: 2, y: 0, w: 2, h: 1 } },
+    ]);
+  });
+
+  it('writes nothing at all when the clamp leaves the group where it was', async () => {
+    // The same rule a single card follows: a press that moved nothing is a
+    // press, and writing the numbers it already had is a save nobody asked for.
+    const many = groupSpy();
+    const el = await arranged({ onPlaceWidgets: many });
+    sweep(surface(el), [150, 20], [350, 60]);
+    await el.updateComplete;
+    place(el);
+
+    const grab = el.shadowRoot?.querySelector('[data-widget="a"] .grab') as Element;
+    grab.dispatchEvent(
+      new FakePointerEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0, pointerId: 1 }),
+    );
+    grab.dispatchEvent(
+      new FakePointerEvent('pointermove', { clientX: 0, clientY: -900, pointerId: 1 }),
+    );
+    grab.dispatchEvent(
+      new FakePointerEvent('pointerup', { clientX: 0, clientY: -900, pointerId: 1 }),
+    );
+
+    expect(many).not.toHaveBeenCalled();
+  });
+
+  it('grabbing an unpicked card picks it and leaves the rest', async () => {
+    const many = groupSpy();
+    const one = vi.fn(async () => undefined);
+    const el = await arranged({ onPlaceWidgets: many, onPlaceWidget: one });
+    sweep(surface(el), [150, 20], [350, 60]);
+    await el.updateComplete;
+    place(el);
+
+    const grab = el.shadowRoot?.querySelector('[data-widget="c"] .grab') as Element;
+    grab.dispatchEvent(
+      new FakePointerEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0, pointerId: 1 }),
+    );
+    grab.dispatchEvent(
+      new FakePointerEvent('pointermove', { clientX: 100, clientY: 0, pointerId: 1 }),
+    );
+    grab.dispatchEvent(
+      new FakePointerEvent('pointerup', { clientX: 100, clientY: 0, pointerId: 1 }),
+    );
+
+    expect(many).not.toHaveBeenCalled();
+    expect(one).toHaveBeenCalledWith('c', { x: 9, y: 0, w: 2, h: 1 });
+  });
+
+  it('resizes one card even when several are picked', async () => {
+    // §14.1 gives grid mode one grip; a group resize is a free-mode gesture
+    // with eight handles and a group frame.
+    const many = groupSpy();
+    const one = vi.fn(async () => undefined);
+    const el = await arranged({ onPlaceWidgets: many, onPlaceWidget: one });
+    sweep(surface(el), [150, 20], [350, 60]);
+    await el.updateComplete;
+    place(el);
+
+    const grip = el.shadowRoot?.querySelector('[data-widget="a"] .grip') as Element;
+    grip.dispatchEvent(
+      new FakePointerEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0, pointerId: 1 }),
+    );
+    grip.dispatchEvent(
+      new FakePointerEvent('pointermove', { clientX: 200, clientY: 0, pointerId: 1 }),
+    );
+    grip.dispatchEvent(
+      new FakePointerEvent('pointerup', { clientX: 200, clientY: 0, pointerId: 1 }),
+    );
+
+    expect(many).not.toHaveBeenCalled();
+    expect(one).toHaveBeenCalledWith('a', { x: 1, y: 0, w: 4, h: 1 });
+  });
+
+  it('falls back to one write at a time for a host with no group door', async () => {
+    const one = vi.fn(async () => undefined);
+    const el = await arranged({ onPlaceWidget: one, onPlaceWidgets: undefined });
+    sweep(surface(el), [150, 20], [350, 60]);
+    await el.updateComplete;
+    place(el);
+
+    const grab = el.shadowRoot?.querySelector('[data-widget="a"] .grab') as Element;
+    grab.dispatchEvent(
+      new FakePointerEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0, pointerId: 1 }),
+    );
+    grab.dispatchEvent(
+      new FakePointerEvent('pointermove', { clientX: 300, clientY: 0, pointerId: 1 }),
+    );
+    grab.dispatchEvent(
+      new FakePointerEvent('pointerup', { clientX: 300, clientY: 0, pointerId: 1 }),
+    );
+
+    // One at a time means one *await* at a time, so the second write is a
+    // microtask behind the gesture rather than part of it.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(one).toHaveBeenCalledTimes(2);
+  });
+
+  it('picks nothing while the page is being used', async () => {
+    const el = await arranged({ mode: 'view' });
+    sweep(surface(el), [150, 20], [350, 60]);
+    await el.updateComplete;
+    expect(pickedIn(el)).toEqual([]);
+  });
+
+  it('forgets the selection when arranging stops', async () => {
+    const el = await arranged();
+    sweep(surface(el), [150, 20], [350, 60]);
+    await el.updateComplete;
+    expect(pickedIn(el)).toHaveLength(2);
+
+    el.mode = 'view';
+    await el.updateComplete;
+    expect(pickedIn(el)).toEqual([]);
+  });
+
+  it('forgets the selection on another page, and keeps it on an edit', async () => {
+    const el = await arranged();
+    sweep(surface(el), [150, 20], [350, 60]);
+    await el.updateComplete;
+
+    // The same page, edited: ids still mean what they meant.
+    el.doc = { ...page(), name: 'D, edited' };
+    await el.updateComplete;
+    place(el);
+    expect(pickedIn(el)).toHaveLength(2);
+
+    // Another page: ids are unique within a document and not across them.
+    el.doc = { ...page(), id: 'other' };
+    await el.updateComplete;
+    expect(pickedIn(el)).toEqual([]);
+  });
+
+  it('does not sweep while a tool is held, because that press draws', async () => {
+    const drew = vi.fn(async () => undefined);
+    const el = await arranged({ tool: 'toggle', onDrawWidget: drew });
+    sweep(surface(el), [150, 20], [350, 60]);
+    await el.updateComplete;
+    expect(drew).toHaveBeenCalled();
+    expect(pickedIn(el)).toEqual([]);
   });
 });

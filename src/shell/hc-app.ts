@@ -20,6 +20,7 @@ import {
   duplicatePage,
   newPage,
   placeWidget,
+  placeWidgets,
   removeWidget,
   renamed,
   type Box,
@@ -657,6 +658,27 @@ export class HcApp extends LitElement {
 
     const next = placeWidget(doc, this.breakpoint, widgetId, box);
     if (next === undefined) throw new Error(`This layout has no widget "${widgetId}".`);
+
+    this.writePages(this.replacing(next), next.id);
+    return Promise.resolve();
+  };
+
+  /**
+   * Move several widgets on the page being shown, as one edit.
+   *
+   * **One write, so it is one step to undo.** Dragging six selected cards is
+   * one thing a person did; six calls through `placeWidgetOnPage` would be six
+   * entries in the undo stack, five of them arrangements nobody ever saw with
+   * the page half-moved.
+   */
+  private readonly placeWidgetsOnPage = async (
+    moves: readonly { id: string; box: Box }[],
+  ): Promise<void> => {
+    const doc = this.current;
+    if (doc === undefined) throw new Error('No page to place on.');
+
+    const next = placeWidgets(doc, this.breakpoint, new Map(moves.map((m) => [m.id, m.box])));
+    if (next === undefined) throw new Error('This layout has none of those widgets.');
 
     this.writePages(this.replacing(next), next.id);
     return Promise.resolve();
@@ -1635,6 +1657,7 @@ export class HcApp extends LitElement {
         .onAddWidget=${this.mayWriteDashboards() ? this.addWidgetToPage : undefined}
         .onRemoveWidget=${this.mayWriteDashboards() ? this.removeWidgetFromPage : undefined}
         .onPlaceWidget=${this.mayWriteDashboards() ? this.placeWidgetOnPage : undefined}
+        .onPlaceWidgets=${this.mayWriteDashboards() ? this.placeWidgetsOnPage : undefined}
         .onDrawWidget=${this.mayWriteDashboards() ? this.drawWidgetOnPage : undefined}
         .tool=${this.tool}
         mode=${this.editing ? 'edit' : 'view'}

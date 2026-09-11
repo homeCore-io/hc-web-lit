@@ -2265,7 +2265,17 @@ not a failure of it.
 
 **Phase 10 — Designer** *(two modes, §14.1)*
 - [ ] Shared surface: transformed DOM scene + screen-space overlay, one
-      `{ tx, ty, k }`, marquee, multi-select
+      `{ tx, ty, k }`, marquee, multi-select. **Marquee and multi-select are
+      in; the transform is not.** A rubber band sweeps up everything it
+      *touches* — containment is unusable on cards that are most of a row wide
+      — and a group moves by one delta, clamped once so the shape survives the
+      page edge, written as one document so it is one step to undo. The band
+      lives in the untransformed overlay §14.2 asks for, which on a composed
+      page is load-bearing rather than decorative: `.frame` carries a
+      `transform`, and a transformed ancestor becomes the containing block for
+      a `fixed` child. What is left is `{ tx, ty, k }` itself — pan and zoom,
+      which a width-fitted grid page has no use for and which belongs with the
+      free-mode designer below
 - [ ] **Grid mode:** cell placement, the coarse magnet, one grip, no rotation
 - [ ] **Free mode:** `frame` + `rect` + `angle`, eight handles, the fine magnet,
       guides, lift above the grid, groups and group rotation

@@ -254,28 +254,53 @@ export function placeWidget(
   widgetId: string,
   box: Box,
 ): DashboardDefinition | undefined {
+  return placeWidgets(doc, breakpoint, new Map([[widgetId, box]]));
+}
+
+/**
+ * Move several widgets at once, in the layout that is actually on screen.
+ *
+ * **One document, not one per widget.** Dragging six selected cards is one
+ * thing a person did, and six writes would be six entries in the undo stack —
+ * five of them states nobody ever saw, with the page half-moved. It is also
+ * five more saves to the household's store than the gesture deserves.
+ *
+ * Everything `placeWidget` says about *which* layout an edit lands in applies
+ * unchanged; this is that function with more than one placement in it.
+ *
+ * Ids the drawn layout does not have are skipped rather than refused, because
+ * a selection outlives the thing it points at: a widget removed in another
+ * window is a stale id in a set, and losing the other five moves to it would
+ * be the wrong trade. `undefined` only when *none* of them landed, so a caller
+ * can still tell "nothing happened" from "something did".
+ */
+export function placeWidgets(
+  doc: DashboardDefinition,
+  breakpoint: DashboardBreakpoint,
+  moves: ReadonlyMap<string, Box>,
+): DashboardDefinition | undefined {
   const drawn = layoutToDraw(doc, breakpoint);
   if (drawn === undefined) return undefined;
 
   const editing = drawn.borrowedFrom ?? breakpoint;
   const layout = (doc.layouts ?? []).find((l) => l.breakpoint === editing);
   if (layout === undefined) return undefined;
-  if (!(layout.placements ?? []).some((p) => p.widget_id === widgetId)) return undefined;
 
-  const move = (p: DashboardWidgetPlacement): DashboardWidgetPlacement =>
-    layout.flow === 'free'
+  const placements = layout.placements ?? [];
+  if (!placements.some((p) => moves.has(p.widget_id))) return undefined;
+
+  const move = (p: DashboardWidgetPlacement): DashboardWidgetPlacement => {
+    const box = moves.get(p.widget_id);
+    if (box === undefined) return p;
+    return layout.flow === 'free'
       ? { ...p, rect: { ...(p.rect ?? {}), ...box } }
       : { ...p, x: box.x, y: box.y, w: box.w, h: box.h };
+  };
 
   return {
     ...doc,
     layouts: (doc.layouts ?? []).map((l) =>
-      l.breakpoint === editing
-        ? {
-            ...l,
-            placements: (l.placements ?? []).map((p) => (p.widget_id === widgetId ? move(p) : p)),
-          }
-        : l,
+      l.breakpoint === editing ? { ...l, placements: placements.map(move) } : l,
     ),
   };
 }

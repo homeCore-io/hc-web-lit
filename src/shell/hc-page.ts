@@ -77,6 +77,22 @@ function boxBetween(a: { x: number; y: number }, b: { x: number; y: number }, fr
     : { x: x1, y: y1, w: Math.max(1, x2 - x1 + 1), h: Math.max(1, y2 - y1 + 1) };
 }
 
+/**
+ * A gesture in progress: what is being moved, from where, and by how much.
+ *
+ * `with` is everything the gesture carries, which for a move is the whole
+ * selection and for a resize is one card — §14.1 gives grid mode one grip, and
+ * resizing a group is a free-mode gesture with eight handles and a group frame.
+ */
+interface Drag {
+  id: string;
+  grip: 'move' | 'size';
+  from: Box;
+  dx: number;
+  dy: number;
+  with: ReadonlySet<string>;
+}
+
 @customElement('hc-page')
 export class HcPage extends LitElement {
   static override styles = css`
@@ -169,6 +185,24 @@ export class HcPage extends LitElement {
       position: absolute;
       box-sizing: border-box;
     }
+    /* Picked, for a gesture that acts on more than one. Inset rather than an
+       outline, so a card at the very edge of the page still shows all four
+       sides of its own selection. */
+    [data-picked] {
+      outline: 2px solid var(--hc-stroke-focus, #7cc4ff);
+      outline-offset: -2px;
+      border-radius: var(--hc-radius-md, 14px);
+    }
+    /* The rubber band, in screen space (§14.2). Fixed, and a direct child of
+       the shadow root: a transformed ancestor becomes the containing block for
+       a fixed element, and the composed frame is transformed. */
+    .band {
+      position: fixed;
+      z-index: 7;
+      border: 1px solid var(--hc-stroke-focus, #7cc4ff);
+      background: color-mix(in srgb, var(--hc-stroke-focus, #7cc4ff) 14%, transparent);
+      pointer-events: none;
+    }
     .unknown {
       display: grid;
       place-items: center;
@@ -254,6 +288,18 @@ export class HcPage extends LitElement {
   @property({ attribute: false }) onPlaceWidget: MountEnv['onPlaceWidget'];
 
   /**
+   * Move several at once, as one edit.
+   *
+   * Optional, and the surface falls back to moving them one at a time when a
+   * host has not wired it. That fallback is honest rather than equivalent: it
+   * is several saves and several steps to undo, which is exactly the thing
+   * this exists to avoid — so a host that wants a group move to *be* one edit
+   * provides this.
+   */
+  @property({ attribute: false }) onPlaceWidgets:
+    ((moves: readonly { id: string; box: Box }[]) => Promise<void>) | undefined;
+
+  /**
    * The widget type held, waiting to be drawn (§14.1).
    *
    * **Held, not chosen.** Picking a type from a list and having the widget
@@ -335,13 +381,27 @@ export class HcPage extends LitElement {
   }
 
   override willUpdate(changed: Map<string, unknown>): void {
+    // A selection is about this surface, right now. Leaving edit mode ends the
+    // gesture it belonged to, and a page that came back from being *used* with
+    // six cards still highlighted would be offering to move things somebody
+    // stopped arranging some time ago.
+    if (changed.has('mode') && this.mode !== 'edit' && this.picked.size > 0) {
+      this.picked = new Set();
+    }
+
     if (!changed.has('doc')) return;
 
-    // **Another page, not another version of this one.** Widget ids are
-    // unique within a document and not across documents, so an element cached
-    // from the last page would be handed the wrong config — but this used to
-    // fire on *any* new document object, and a page being edited is a new
-    // document object several times a minute.
+    // Ids are unique within a document and not across them, so a selection
+    // carried to another page would point at whatever happened to share a
+    // name. An edit to the *same* page keeps it: that is the case where the
+    // selection is still the one somebody made.
+    //
+    // **Another page, not another version of this one.** The same distinction
+    // the element cache below turns on: widget ids are unique within a
+    // document and not across documents, so an element cached from the last
+    // page would be handed the wrong config — but this used to fire on *any*
+    // new document object, and a page being edited is a new document object
+    // several times a minute.
     //
     // What that cost: every widget on the page destroyed and rebuilt on every
     // save. A history chart re-fetching six hours of readings, a media card
@@ -349,6 +409,7 @@ export class HcPage extends LitElement {
     // which widget it was editing the instant it added one.
     const was = changed.get('doc') as DashboardDefinition | undefined;
     if (was?.id !== this.doc?.id) {
+      if (this.picked.size > 0) this.picked = new Set();
       this.elements.clear();
       return;
     }
@@ -381,10 +442,22 @@ export class HcPage extends LitElement {
     const engine = new Engine(layout.columns, layout.flow ?? 'packed');
     const items = engine.normalize(gridItems(layout, widgets));
 
-    return layout.frame != null
-      ? this.composed(items, byId, layout.frame, layout.gap)
-      : this.grid(items, byId, layout.columns, layout.row_height, layout.gap);
+    // Once per frame, not once per card: a group move is one delta applied to
+    // every member, and recomputing it inside the loop would re-normalise the
+    // whole page for each of them.
+    this.moving = this.dragging === undefined ? undefined : this.movesFrom(this.dragging);
+
+    const scene =
+      layout.frame != null
+        ? this.composed(items, byId, layout.frame, layout.gap)
+        : this.grid(items, byId, layout.columns, layout.row_height, layout.gap);
+
+    // The overlay is a sibling of the scene and never inside it (§14.2).
+    return html`${scene}${this.bandOverlay()}`;
   }
+
+  /** Where each carried widget is going this frame. Derived, not state. */
+  private moving: ReadonlyMap<string, Box> | undefined;
 
   /**
    * A composed page, at the size its author drew it.
@@ -409,7 +482,7 @@ export class HcPage extends LitElement {
       <div
         class="frame"
         ?data-armed=${this.armed}
-        @pointerdown=${(e: PointerEvent) => this.startDraw(e)}
+        @pointerdown=${(e: PointerEvent) => this.onSurfacePress(e)}
         style="width:${frame.width}px;height:${frame.height}px;transform:scale(${scale})"
       >
         ${this.drawPreview()}
@@ -421,7 +494,9 @@ export class HcPage extends LitElement {
           const at = this.previewOf(item.id, { x: r.x, y: r.y, w: r.w, h: r.h });
           return html`<div
             class="placed"
-            ?data-dragging=${this.dragging?.id === item.id}
+            data-widget=${item.id}
+            ?data-picked=${this.mode === 'edit' && this.picked.has(item.id)}
+            ?data-dragging=${this.dragging?.with.has(item.id) === true}
             style="left:${at.x}px;top:${at.y}px;width:${at.w}px;height:${at.h}px;${
               typeof z === 'number' ? `z-index:${z}` : ''
             }"
@@ -441,8 +516,7 @@ export class HcPage extends LitElement {
    * of them; and a page that re-rendered per frame would re-render the thing
    * under the finger, which is how a drag comes off its own handle.
    */
-  @state() private dragging:
-    { id: string; grip: 'move' | 'size'; from: Box; dx: number; dy: number } | undefined;
+  @state() private dragging: Drag | undefined;
 
   /**
    * Start a drag, and follow it to the end.
@@ -454,6 +528,14 @@ export class HcPage extends LitElement {
     if (this.mode !== 'edit' || this.onPlaceWidget === undefined) return;
     e.preventDefault();
     e.stopPropagation();
+
+    // **Grabbing an unpicked card picks it**, rather than moving something
+    // that is not selected while the selection sits highlighted elsewhere.
+    // Shift adds to the selection the way it does everywhere else; a plain
+    // grab on something already picked leaves the group alone, because that
+    // is the press that is about to move all of it.
+    if (!this.picked.has(id)) this.pick(id, e.shiftKey);
+    const carrying = grip === 'move' ? new Set(this.picked) : new Set([id]);
 
     const target = e.currentTarget as HTMLElement;
     try {
@@ -468,7 +550,7 @@ export class HcPage extends LitElement {
     }
     const startX = e.clientX;
     const startY = e.clientY;
-    this.dragging = { id, grip, from: box, dx: 0, dy: 0 };
+    this.dragging = { id, grip, from: box, dx: 0, dy: 0, with: carrying };
 
     const move = (m: PointerEvent): void => {
       if (this.dragging === undefined) return;
@@ -484,18 +566,20 @@ export class HcPage extends LitElement {
       this.dragging = undefined;
       if (drag === undefined) return;
 
-      const to = this.boxFrom(drag);
+      const moves = this.movesFrom(drag);
+      const from = this.boxesOf(drag.with);
       // A press that moved nothing is a press, not a drag, and writing the
-      // numbers it already had would be a save nobody asked for.
-      if (
-        to.x === drag.from.x &&
-        to.y === drag.from.y &&
-        to.w === drag.from.w &&
-        to.h === drag.from.h
-      ) {
-        return;
+      // numbers it already had would be a save nobody asked for. For a group
+      // it is the same question asked of all of them: one delta moved every
+      // card or none of them, so if the first is where it was, so is the rest.
+      for (const [id, to] of moves) {
+        const was = id === drag.id ? drag.from : from.get(id);
+        if (was === undefined) continue;
+        if (to.x !== was.x || to.y !== was.y || to.w !== was.w || to.h !== was.h) {
+          void this.commit(moves);
+          return;
+        }
       }
-      void this.onPlaceWidget?.(drag.id, to);
     };
 
     target.addEventListener('pointermove', move);
@@ -514,46 +598,90 @@ export class HcPage extends LitElement {
    * as the finger.
    */
   private boxFrom(drag: { grip: 'move' | 'size'; from: Box; dx: number; dy: number }): Box {
-    const layout =
-      this.doc === undefined ? undefined : layoutToDraw(this.doc, this.breakpoint)?.layout;
-    const free = layout?.flow === 'free';
-
-    let dx: number;
-    let dy: number;
-    if (free) {
-      const scale = this.frameScale();
-      dx = Math.round(drag.dx / scale);
-      dy = Math.round(drag.dy / scale);
-    } else {
-      const cell = this.cellSize(layout);
-      // Nowhere to measure a cell against — a page that has not been laid out
-      // yet. Moving by the raw pixels would send a widget three hundred cells
-      // to the right, so a drag that cannot be measured moves nothing.
-      if (cell === undefined) return drag.from;
-      dx = Math.round(drag.dx / cell.w);
-      dy = Math.round(drag.dy / cell.h);
-    }
+    const step = this.stepOf(drag.dx, drag.dy);
+    // Nowhere to measure a cell against — a page that has not been laid out
+    // yet. Moving by the raw pixels would send a widget three hundred cells to
+    // the right, so a drag that cannot be measured moves nothing.
+    if (step === undefined) return drag.from;
 
     if (drag.grip === 'move') {
       return {
         ...drag.from,
-        x: Math.max(0, drag.from.x + dx),
-        y: Math.max(0, drag.from.y + dy),
+        x: Math.max(0, drag.from.x + step.dx),
+        y: Math.max(0, drag.from.y + step.dy),
       };
     }
     // A widget with no width is a widget that cannot be grabbed again.
-    const least = free ? 40 : 1;
+    const least = this.free ? 40 : 1;
     return {
       ...drag.from,
-      w: Math.max(least, drag.from.w + dx),
-      h: Math.max(least, drag.from.h + dy),
+      w: Math.max(least, drag.from.w + step.dx),
+      h: Math.max(least, drag.from.h + step.dy),
     };
+  }
+
+  /**
+   * A distance the finger travelled, in the layout's own units.
+   *
+   * **The snap is the grid itself.** §14.1's "coarse magnet" on a packed page
+   * is not a separate rule: a cell is the unit, so rounding the pixels to
+   * cells *is* the magnet. A composed page has no cells and takes the pixels,
+   * divided by the scale the frame is drawn at — the page can be shown at two
+   * thirds, and a drag that ignored that would move things half again as far
+   * as the finger.
+   *
+   * `undefined` when there is nothing to measure against, which the callers
+   * treat as "this drag moves nothing" rather than guessing.
+   */
+  private stepOf(dx: number, dy: number): { dx: number; dy: number } | undefined {
+    if (this.free) {
+      const scale = this.frameScale();
+      return { dx: Math.round(dx / scale), dy: Math.round(dy / scale) };
+    }
+    const layout =
+      this.doc === undefined ? undefined : layoutToDraw(this.doc, this.breakpoint)?.layout;
+    const cell = this.cellSize(layout);
+    if (cell === undefined) return undefined;
+    return { dx: Math.round(dx / cell.w), dy: Math.round(dy / cell.h) };
+  }
+
+  /**
+   * Where every widget a drag is carrying ends up, by id.
+   *
+   * **One delta for the whole group, clamped once.** Clamping each widget at
+   * the page edge on its own is how a selection arrives somewhere deformed:
+   * the leftmost card stops at column 0 and the others keep going, so six
+   * cards dragged off the left edge come back as a different arrangement from
+   * the one that went. The distance is shortened until nothing would go off,
+   * and the shape survives.
+   *
+   * A drag carrying one widget is the same function with a group of one, which
+   * is why resize is here too — it has no group, because §14.1 gives grid mode
+   * one grip and a group resize is a free-mode gesture with eight handles.
+   */
+  private movesFrom(drag: Drag): Map<string, Box> {
+    const moves = new Map<string, Box>();
+    if (drag.grip === 'size' || drag.with.size <= 1) {
+      moves.set(drag.id, this.boxFrom(drag));
+      return moves;
+    }
+
+    const boxes = this.boxesOf(drag.with);
+    const step = this.stepOf(drag.dx, drag.dy);
+    if (step === undefined) return moves;
+
+    let { dx, dy } = step;
+    for (const box of boxes.values()) {
+      dx = Math.max(dx, -box.x);
+      dy = Math.max(dy, -box.y);
+    }
+    for (const [id, box] of boxes) moves.set(id, { ...box, x: box.x + dx, y: box.y + dy });
+    return moves;
   }
 
   /** Where this widget should be drawn right now, drag included. */
   private previewOf(id: string, box: Box): Box {
-    const drag = this.dragging;
-    return drag?.id === id ? this.boxFrom(drag) : box;
+    return this.moving?.get(id) ?? box;
   }
 
   /** One cell, in pixels, including the gap that follows it. */
@@ -599,6 +727,88 @@ export class HcPage extends LitElement {
         title="Resize"
         @pointerdown=${(e: PointerEvent) => this.startDrag(e, id, 'size', box)}
       ></div>`;
+  }
+
+  /**
+   * Which placements are picked, for a gesture that acts on more than one.
+   *
+   * **The page's own, not the shell's.** The tool is the shell's because the
+   * palette is chrome and what a household may place is a question about the
+   * session; a selection is made *on this surface*, by a rubber band this
+   * element draws over its own geometry, and nothing outside needs to know.
+   * It survives nothing — another page, leaving edit mode, Escape — because a
+   * selection is about the last few seconds the way undo is about the last few
+   * minutes.
+   */
+  @state() private picked: ReadonlySet<string> = new Set();
+
+  /**
+   * Pick one, or add it to what is picked.
+   *
+   * Plain press replaces, shift extends and toggles — the convention every
+   * file manager and design application shares, and the one place a person
+   * will not read documentation to discover.
+   */
+  private pick(id: string, extend: boolean): void {
+    if (!extend) {
+      this.picked = new Set([id]);
+      return;
+    }
+    const next = new Set(this.picked);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    this.picked = next;
+  }
+
+  /**
+   * Where each of these sits on screen right now, in the layout's own units.
+   *
+   * From the *normalised* items rather than the raw placements, because that
+   * is what is drawn: gravity has already pulled a packed page's cards up, and
+   * a group move computed from the stored numbers would jump the moment it
+   * started (§5.7).
+   */
+  private boxesOf(ids: ReadonlySet<string>): Map<string, Box> {
+    const found = new Map<string, Box>();
+    const now = this.itemsNow();
+    if (now === undefined) return found;
+
+    for (const item of now.items) {
+      if (!ids.has(item.id)) continue;
+      const r = now.layout.flow === 'free' ? item.rect : undefined;
+      found.set(
+        item.id,
+        r != null
+          ? { x: r.x, y: r.y, w: r.w, h: r.h }
+          : { x: item.x, y: item.y, w: item.w, h: item.h },
+      );
+    }
+    return found;
+  }
+
+  /** The layout on screen and its items, laid out the way `render` lays them. */
+  private itemsNow(): { items: readonly GridItem[]; layout: DashboardLayout } | undefined {
+    const doc = this.doc;
+    if (doc === undefined) return undefined;
+    const chosen = layoutToDraw(doc, this.breakpoint);
+    if (chosen === undefined) return undefined;
+
+    const layout = chosen.layout;
+    const engine = new Engine(layout.columns, layout.flow ?? 'packed');
+    return { items: engine.normalize(gridItems(layout, doc.widgets ?? [])), layout };
+  }
+
+  /** Write a set of moves, by whichever door the host has opened. */
+  private async commit(moves: ReadonlyMap<string, Box>): Promise<void> {
+    if (moves.size === 0) return;
+    // One call for a group, so it is one entry in the undo stack and one save.
+    // A host that has not wired the group door still gets the single-widget
+    // one, which is the whole of what this surface could do before.
+    if (moves.size > 1 && this.onPlaceWidgets !== undefined) {
+      await this.onPlaceWidgets([...moves].map(([id, box]) => ({ id, box })));
+      return;
+    }
+    for (const [id, box] of moves) await this.onPlaceWidget?.(id, box);
   }
 
   /**
@@ -687,6 +897,151 @@ export class HcPage extends LitElement {
     target.addEventListener('pointercancel', end);
   }
 
+  /**
+   * What a press on the surface means, which depends on whether a tool is held.
+   *
+   * One handler rather than two listeners, because the two gestures start
+   * identically — a press on the surface that may or may not travel — and
+   * deciding once here is the difference between a rule and a race.
+   */
+  private onSurfacePress(e: PointerEvent): void {
+    if (this.armed) this.startDraw(e);
+    else this.startBand(e);
+  }
+
+  /**
+   * The rubber band, in screen pixels.
+   *
+   * **Screen, not layout.** §14.2 puts the marquee in an untransformed overlay
+   * so it holds a constant pixel size at any zoom, and the same choice makes
+   * the hit test trivial: everything it is compared against is a
+   * `getBoundingClientRect`, which is screen pixels too. A band in cells would
+   * have to be converted back for every comparison, and would snap to the grid
+   * while being dragged — which is the one thing a rubber band must not do.
+   */
+  @state() private band: { x: number; y: number; w: number; h: number } | undefined;
+
+  /**
+   * A press on the surface with no tool held: sweep up what it covers.
+   *
+   * The press may well land on a widget rather than between them — in edit
+   * mode a card is scenery, and §14.2 has the designer taking pointer events
+   * before the widget sees them — so a press that never travels is a click on
+   * whatever was under it, and one that travels is a band.
+   */
+  private startBand(e: PointerEvent): void {
+    if (this.mode !== 'edit' || this.armed) return;
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const target = e.currentTarget as HTMLElement;
+    const extend = e.shiftKey;
+    // What was picked before the sweep, so shift adds to it rather than
+    // replacing it with whatever the band happens to be over right now.
+    const already = extend ? new Set(this.picked) : new Set<string>();
+
+    e.preventDefault();
+    try {
+      target.setPointerCapture(e.pointerId);
+    } catch {
+      // Same trade as every other gesture here: a lost capture costs a drag
+      // that leaves the surface, a throw costs the gesture (see `startDrag`).
+    }
+
+    let travelled = false;
+
+    const move = (m: PointerEvent): void => {
+      if (Math.abs(m.clientX - startX) > NUDGE || Math.abs(m.clientY - startY) > NUDGE) {
+        travelled = true;
+      }
+      if (!travelled) return;
+      this.band = {
+        x: Math.min(startX, m.clientX),
+        y: Math.min(startY, m.clientY),
+        w: Math.abs(m.clientX - startX),
+        h: Math.abs(m.clientY - startY),
+      };
+      const swept = new Set(already);
+      for (const id of this.within(this.band)) swept.add(id);
+      this.picked = swept;
+    };
+
+    const end = (upon: PointerEvent): void => {
+      target.removeEventListener('pointermove', move);
+      target.removeEventListener('pointerup', end);
+      target.removeEventListener('pointercancel', end);
+      this.band = undefined;
+
+      if (travelled) return;
+      // A click, not a sweep. On a card it picks that card; on the gaps
+      // between them it clears, which is where somebody presses to mean
+      // "never mind" without reaching for a key.
+      const on = this.placementAt(upon.clientX, upon.clientY);
+      if (on === undefined) {
+        if (!extend) this.picked = new Set();
+        return;
+      }
+      this.pick(on, extend);
+    };
+
+    target.addEventListener('pointermove', move);
+    target.addEventListener('pointerup', end);
+    target.addEventListener('pointercancel', end);
+  }
+
+  /**
+   * Which placements a screen rectangle touches.
+   *
+   * **Touches, not contains.** A band has to reach round every card it means
+   * to take, and on a page of twelve-column cards that is most of the width
+   * for one row — so a containment test makes the gesture unusable at exactly
+   * the size of thing it is for.
+   */
+  private within(band: { x: number; y: number; w: number; h: number }): string[] {
+    const hit: string[] = [];
+    for (const el of this.shadowRoot?.querySelectorAll('[data-widget]') ?? []) {
+      const at = el.getBoundingClientRect();
+      const misses =
+        at.right < band.x ||
+        at.left > band.x + band.w ||
+        at.bottom < band.y ||
+        at.top > band.y + band.h;
+      if (!misses) {
+        const id = el.getAttribute('data-widget');
+        if (id !== null) hit.push(id);
+      }
+    }
+    return hit;
+  }
+
+  /** Which placement is under a point on screen, if any. */
+  private placementAt(x: number, y: number): string | undefined {
+    for (const el of this.shadowRoot?.querySelectorAll('[data-widget]') ?? []) {
+      const at = el.getBoundingClientRect();
+      if (x >= at.left && x <= at.right && y >= at.top && y <= at.bottom) {
+        return el.getAttribute('data-widget') ?? undefined;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * The rubber band, drawn outside everything the page transforms (§14.2).
+   *
+   * A direct child of the shadow root and `position: fixed`, which matters on
+   * a composed page: `.frame` carries a `transform`, and a transformed
+   * ancestor becomes the containing block for `fixed` — so a band drawn inside
+   * it would be scaled by the very thing it is measuring against.
+   */
+  private bandOverlay() {
+    const band = this.band;
+    if (band === undefined) return nothing;
+    return html`<div
+      class="band"
+      style="left:${band.x}px;top:${band.y}px;width:${band.w}px;height:${band.h}px"
+    ></div>`;
+  }
+
   /** Whether the layout on screen composes by rect rather than by cell. */
   private get free(): boolean {
     const layout =
@@ -756,21 +1111,26 @@ export class HcPage extends LitElement {
     rowHeight: number,
     gap: number,
   ) {
-    // **Somewhere to draw.** A CSS grid is exactly as tall as its rows, so the
-    // empty space below the last widget — which is where a person reaches to
-    // put the next one — does not exist as far as the pointer is concerned.
-    // While a tool is held the surface grows by a few rows, and shrinks again
-    // when it is dropped: a page that was permanently taller than its content
-    // would be scrollable past the end for everyone, including a wall panel
-    // that is only ever looked at.
+    // **Somewhere to draw, and somewhere to press.** A CSS grid is exactly as
+    // tall as its rows, so the empty space below the last widget — which is
+    // where a person reaches to put the next one, and where they press to mean
+    // "never mind" — does not exist as far as the pointer is concerned.
+    //
+    // The whole of edit mode and not only while a tool is held, which is what
+    // it was at first: with no surface below the cards, the only place to
+    // start a rubber band was the gaps between them, and a click meant to
+    // clear the selection landed on nothing and did nothing. It shrinks again
+    // on leaving, because a page permanently taller than its content would be
+    // scrollable past the end for everyone, including a wall panel that is
+    // only ever looked at.
     const used = items.reduce((low, i) => Math.max(low, i.y + i.h), 0);
-    const room = this.armed ? `min-height:${(used + SPARE) * (rowHeight + gap)}px;` : '';
+    const room = this.mode === 'edit' ? `min-height:${(used + SPARE) * (rowHeight + gap)}px;` : '';
 
     return html`
       <div
         class="grid"
         ?data-armed=${this.armed}
-        @pointerdown=${(e: PointerEvent) => this.startDraw(e)}
+        @pointerdown=${(e: PointerEvent) => this.onSurfacePress(e)}
         style="grid-template-columns:repeat(${columns},1fr);
                grid-auto-rows:${rowHeight}px;
                gap:${gap}px;${room}"
@@ -785,7 +1145,9 @@ export class HcPage extends LitElement {
           const at = this.previewOf(item.id, { x: item.x, y: item.y, w: item.w, h: item.h });
           return html`<div
             class="cell"
-            ?data-dragging=${this.dragging?.id === item.id}
+            data-widget=${item.id}
+            ?data-picked=${this.mode === 'edit' && this.picked.has(item.id)}
+            ?data-dragging=${this.dragging?.with.has(item.id) === true}
             style="grid-column:${at.x + 1}/span ${at.w};
                    grid-row:${at.y + 1}/span ${at.h}"
           >
