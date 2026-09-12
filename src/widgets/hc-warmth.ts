@@ -1,11 +1,22 @@
 /**
- * Colour temperature, as the vertical strip from the mockup.
+ * Colour temperature, as a column the width its placement says.
  *
- * 18×46, cool at the top and warm at the bottom, with a 14px knob. The mockup's
- * mapping is `(6500 - K) / (6500 - 2000)`, so the top of the strip is the
- * coolest the bulb goes — which is the right way round: the gradient runs from
- * daylight blue down to candle amber, and the strip reads like a thermometer of
- * light.
+ * Cool at the top and warm at the bottom, with the value in kelvin written
+ * above it. The mapping is `(6500 - K) / (6500 - 2000)`, so the top of the
+ * column is the coolest the bulb goes — which is the right way round: the
+ * gradient runs from daylight blue down to candle amber, and it reads like a
+ * thermometer of light.
+ *
+ * **It is as wide as the box its author drew.** This was an 18px strip
+ * whatever it was given, and the household's room page draws it at 52 — a
+ * third of its placement, leaving a column of empty page beside it. Same rule
+ * and same fix as the wheel next to it (§14.1): a placement is the size the
+ * author drew.
+ *
+ * **The number belongs on the control.** A tunable-white bulb's whole
+ * vocabulary is one number, and it was written only in the slider further
+ * along the row — so the column somebody actually drags said nothing about
+ * where it had got to. It is the reading, in the unit the bulb reports.
  *
  * *"warmth — the same light, tunable white only"*, so it is on the page only
  * when the picked device declares `color_temp` (`core/visibility.ts`).
@@ -20,19 +31,39 @@ import { registerWidget } from '../core/registry.js';
 export class HcWarmth extends LitElement {
   static override styles = css`
     :host {
-      display: inline-block;
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    .column {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    .reading {
+      font-size: var(--hc-text-caption-size, 11px);
+      color: var(--hc-ink-dim, #93a0b4);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      line-height: 1;
     }
     .strip {
-      width: 18px;
-      height: 100%;
+      width: 100%;
+      max-width: 44px;
+      flex: 1 1 auto;
       min-height: 46px;
-      flex: none;
       border-radius: var(--hc-radius-pill, 999px);
       /* Not tokens: this is the colour of light itself, and it means the same
          thing in every skin. A warmth strip tinted by the theme would be
          telling the truth about the theme and a lie about the bulb. */
       background: linear-gradient(#bcd4ff, #fff5ea 52%, #ffb26e);
-      border: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
+      box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.16),
+        0 6px 18px rgba(0, 0, 0, 0.45);
       position: relative;
       cursor: pointer;
       touch-action: none;
@@ -40,13 +71,17 @@ export class HcWarmth extends LitElement {
     .knob {
       position: absolute;
       left: 50%;
-      width: 14px;
-      height: 14px;
-      margin: -7px 0 0 -7px;
+      /* A ring across the column rather than a dot in the middle of it: on a
+         44px strip a 14px dot reads as a bead somebody dropped in. */
+      width: calc(100% + 6px);
+      height: 18px;
+      translate: -50% -50%;
       border-radius: var(--hc-radius-pill, 999px);
-      background: #ffd9ae;
-      border: 2.5px solid #fff;
-      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+      background: transparent;
+      border: 3px solid #fff;
+      box-shadow:
+        0 2px 6px rgba(0, 0, 0, 0.6),
+        inset 0 0 0 1px rgba(0, 0, 0, 0.2);
     }
     .strip:focus-visible {
       outline: 2px solid var(--hc-stroke-focus, #7cc4ff);
@@ -75,7 +110,7 @@ export class HcWarmth extends LitElement {
 
   override render() {
     const d = this.device;
-    if (d === undefined) return html`<div class="strip"></div>`;
+    if (d === undefined) return html`<div class="column"><div class="strip"></div></div>`;
 
     const { min, max } = this.range();
     const live = d.attributes[this.attribute];
@@ -83,19 +118,22 @@ export class HcWarmth extends LitElement {
     // Cool at the top: the mockup's (6500 - K) / (6500 - 2000).
     const pos = k === undefined ? 55 : ((max - k) / (max - min)) * 100;
 
-    return html`<div
-      class="strip"
-      part="strip"
-      role="slider"
-      tabindex="0"
-      aria-label="Warmth"
-      aria-valuemin=${min}
-      aria-valuemax=${max}
-      aria-valuenow=${Math.round(k ?? (min + max) / 2)}
-      @pointerdown=${(e: PointerEvent) => this.scrub(e, min, max)}
-      @keydown=${(e: KeyboardEvent) => this.key(e, k ?? (min + max) / 2, min, max)}
-    >
-      <span class="knob" part="knob" style="top:${Math.min(100, Math.max(0, pos))}%"></span>
+    return html`<div class="column">
+      <span class="reading" part="value">${k === undefined ? '' : `${Math.round(k)} K`}</span>
+      <div
+        class="strip"
+        part="strip"
+        role="slider"
+        tabindex="0"
+        aria-label="Warmth"
+        aria-valuemin=${min}
+        aria-valuemax=${max}
+        aria-valuenow=${Math.round(k ?? (min + max) / 2)}
+        @pointerdown=${(e: PointerEvent) => this.scrub(e, min, max)}
+        @keydown=${(e: KeyboardEvent) => this.key(e, k ?? (min + max) / 2, min, max)}
+      >
+        <span class="knob" part="knob" style="top:${Math.min(100, Math.max(0, pos))}%"></span>
+      </div>
     </div>`;
   }
 

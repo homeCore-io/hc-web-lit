@@ -32,23 +32,25 @@ export class HcSlider extends LitElement {
       display: flex;
       align-items: baseline;
       justify-content: space-between;
-      font-size: 11.5px;
-      color: var(--hc-ink-muted, #8b95a4);
-      margin-bottom: 8px;
+      font-size: var(--hc-text-label-size, 12px);
+      color: var(--hc-ink-dim, #93a0b4);
+      margin-bottom: 10px;
+      letter-spacing: 0.01em;
     }
     .row b {
       font-family: var(--hc-font-mono, ui-monospace, monospace);
-      font-weight: 400;
+      font-weight: 500;
+      font-size: var(--hc-text-body-size, 13px);
       color: var(--hc-ink, #e9edf2);
       font-variant-numeric: tabular-nums;
     }
     .track {
-      height: 4px;
+      height: 8px;
       border-radius: var(--hc-radius-pill, 999px);
       background: var(--hc-surface-sunken, #1e2530);
       position: relative;
-      /* The bar is 4px; the thing a finger has to hit is not. */
-      padding: 20px 0;
+      /* The bar is 8px; the thing a finger has to hit is not. */
+      padding: 18px 0;
       background-clip: content-box;
       cursor: pointer;
       touch-action: none;
@@ -58,31 +60,49 @@ export class HcSlider extends LitElement {
       left: 0;
       right: 0;
       top: 50%;
-      height: 4px;
-      margin-top: -2px;
+      height: 8px;
+      margin-top: -4px;
       border-radius: var(--hc-radius-pill, 999px);
       background: var(--hc-surface-sunken, #1e2530);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
     }
     .fill {
       position: absolute;
       left: 0;
       top: 50%;
-      height: 4px;
-      margin-top: -2px;
+      height: 8px;
+      margin-top: -4px;
       border-radius: var(--hc-radius-pill, 999px);
-      background: var(--hc-accent-active, #ffb661);
+      /* Lit along its length rather than flat, so the filled part reads as the
+         quantity it is and not as a coloured rule. */
+      background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--hc-accent-active, #ffb661) 70%, transparent),
+        var(--hc-accent-active, #ffb661)
+      );
     }
     .fill[data-cool] {
-      background: var(--hc-accent-primary, #7cc4ff);
+      background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--hc-accent-primary, #7cc4ff) 70%, transparent),
+        var(--hc-accent-primary, #7cc4ff)
+      );
     }
     .knob {
       position: absolute;
       top: 50%;
-      width: 14px;
-      height: 14px;
-      margin: -7px 0 0 -7px;
+      width: 20px;
+      height: 20px;
+      margin: -10px 0 0 -10px;
       border-radius: var(--hc-radius-pill, 999px);
-      background: var(--hc-ink, #e9edf2);
+      background: #fff;
+      box-shadow:
+        0 2px 8px rgba(0, 0, 0, 0.55),
+        0 0 0 1px rgba(0, 0, 0, 0.18);
+      transition: transform 90ms ease-out;
+    }
+    .track:active .knob {
+      transform: scale(1.12);
     }
     .track:focus-visible {
       outline: 2px solid var(--hc-stroke-focus, #7cc4ff);

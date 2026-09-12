@@ -1,10 +1,31 @@
 /**
- * Colour, as the wheel from the mockup.
+ * Colour, as a wheel the size its placement says.
  *
- * 46×46, a hue ring with a white centre, and a 13px thumb sitting where the
- * light currently is. *"colour_wheel — aimed at the light you picked"*, and on
- * the page only when that light declares `color_xy` (`core/visibility.ts`) —
- * the mockup gates it the same way, on `supports_color_xy`.
+ * A hue wheel with a white centre and a thumb sitting where the light
+ * currently is. *"colour_wheel — aimed at the light you picked"*, and on the
+ * page only when that light declares `color_xy` (`core/visibility.ts`).
+ *
+ * **It is as big as the box its author drew.** This was 46×46 whatever it was
+ * given, and the household's room page draws it at 132 — so the wheel was
+ * rendering at about a third of its placement, in the corner of an empty
+ * square, which is most of why it read as a washed-out dot next to the
+ * client this replaced. §14.1's rule is the general one and it applies here:
+ * a placement is the size the author drew and a widget does not get to
+ * disagree. Square, because a hue wheel is, and centred in whatever
+ * rectangle it was actually handed.
+ *
+ * **Hues every 30°, not every 60°.** A six-stop conic gradient interpolates
+ * through the middle of sRGB and comes out muddy — cyan and magenta in
+ * particular arrive as grey. Twelve stops plus the repeat is the whole colour
+ * circle at even spacing, which is what a wheel is for. The white centre is
+ * pulled in to a quarter of the radius too: at 62% it bleached everything
+ * inside the rim, so most of the wheel was a pale wash rather than colour.
+ *
+ * **The thumb is the colour it is pointing at**, which the accent token
+ * cannot be: a control for choosing a colour that shows the same orange
+ * wherever you put it is not showing you anything. Derived from the same
+ * angle and radius that place it, so the swatch and the position cannot
+ * disagree.
  *
  * **CIE xy in, angle and radius out.** A device reports `{x, y}` on the CIE 1931
  * chromaticity diagram, not a hue. Converting properly means going through XYZ
@@ -29,31 +50,75 @@ const GAMUT = 0.22;
 export class HcColourWheel extends LitElement {
   static override styles = css`
     :host {
-      display: inline-block;
+      display: block;
+      width: 100%;
+      height: 100%;
+      container-type: size;
+    }
+    .box {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      place-items: center;
     }
     .wheel {
-      width: 46px;
-      height: 46px;
+      /* Square, and as large as the shorter side of the box allows. A hue
+         wheel that stretched to a rectangle would put the same hue at two
+         distances from the centre. */
+      aspect-ratio: 1;
+      width: 100%;
+      max-width: 100%;
+      max-height: 100%;
+      min-width: 36px;
       border-radius: var(--hc-radius-pill, 999px);
       /* Not tokens, for the same reason the warmth strip is not: this is the
          colour of light, and it means the same in every skin. */
       background:
-        radial-gradient(circle at 50% 50%, #fff 0%, rgba(255, 255, 255, 0) 62%),
-        conic-gradient(#ff6b6b, #ffb661, #f5e86b, #6fd1a6, #7cc4ff, #9e8bff, #ff6b6b);
-      border: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
+        radial-gradient(
+          circle at 50% 50%,
+          #fff 0%,
+          rgba(255, 255, 255, 0.85) 12%,
+          rgba(255, 255, 255, 0) 26%
+        ),
+        conic-gradient(
+          from 90deg,
+          #ff3b3b,
+          #ff7a1a 30deg,
+          #ffb300 60deg,
+          #e8e021 90deg,
+          #8ede2b 120deg,
+          #2fd36f 150deg,
+          #17d6b4 180deg,
+          #1fb6ff 210deg,
+          #3d7bff 240deg,
+          #8a5cff 270deg,
+          #d64cff 300deg,
+          #ff3fa4 330deg,
+          #ff3b3b 360deg
+        );
+      box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.14),
+        0 6px 18px rgba(0, 0, 0, 0.45);
       position: relative;
       cursor: pointer;
       touch-action: none;
     }
     .thumb {
       position: absolute;
-      width: 13px;
-      height: 13px;
-      margin: -6.5px 0 0 -6.5px;
+      /* Scales with the wheel: a 13px thumb that was right at 46px is a speck
+         at 132, and the grab target goes with it. */
+      width: 16cqmin;
+      height: 16cqmin;
+      min-width: 14px;
+      min-height: 14px;
+      max-width: 22px;
+      max-height: 22px;
+      translate: -50% -50%;
       border-radius: var(--hc-radius-pill, 999px);
-      background: var(--hc-accent-active, #ffb661);
-      border: 2.5px solid #fff;
-      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+      border: 3px solid #fff;
+      box-shadow:
+        0 2px 6px rgba(0, 0, 0, 0.65),
+        inset 0 0 0 1px rgba(0, 0, 0, 0.25);
     }
     .wheel:focus-visible {
       outline: 2px solid var(--hc-stroke-focus, #7cc4ff);
@@ -93,19 +158,33 @@ export class HcColourWheel extends LitElement {
     const dy = xy === undefined ? 0 : (xy.y - WHITE.y) / GAMUT;
     const r = Math.min(1, Math.hypot(dx, dy));
     const angle = Math.atan2(dy, dx);
-    const left = 50 + Math.cos(angle) * r * 46;
+    // 46 was the wheel's old pixel size used as a percentage, which held the
+    // thumb inside the rim by accident. 47 of the 50% radius is the same inset
+    // said on purpose, and it no longer changes if the wheel is resized.
+    const left = 50 + Math.cos(angle) * r * 47;
     // y is up in CIE and down in CSS.
-    const top = 50 - Math.sin(angle) * r * 46;
+    const top = 50 - Math.sin(angle) * r * 47;
+    // The swatch, from the position — 90° is where the gradient starts, and
+    // the wheel runs clockwise from it, which is what `from 90deg` above says.
+    const hue = (((90 - (angle * 180) / Math.PI) % 360) + 360) % 360;
 
-    return html`<div
-      class="wheel"
-      part="wheel"
-      role="button"
-      tabindex="0"
-      aria-label="Colour"
-      @pointerdown=${(e: PointerEvent) => this.scrub(e)}
-    >
-      <span class="thumb" part="knob" style="left:${left}%;top:${top}%"></span>
+    return html`<div class="box">
+      <div
+        class="wheel"
+        part="wheel"
+        role="button"
+        tabindex="0"
+        aria-label="Colour"
+        @pointerdown=${(e: PointerEvent) => this.scrub(e)}
+      >
+        <span
+          class="thumb"
+          part="knob"
+          style="left:${left}%;top:${top}%;background:hsl(${Math.round(hue)} ${Math.round(
+            r * 100,
+          )}% ${Math.round(72 - r * 22)}%)"
+        ></span>
+      </div>
     </div>`;
   }
 
