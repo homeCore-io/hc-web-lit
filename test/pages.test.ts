@@ -8,8 +8,9 @@
 import { describe, expect, it } from 'vitest';
 import type { DashboardDefinition } from '../src/core/dashboard.js';
 import {
-  stackGroup,
   addWidget,
+  moveGroupBox,
+  stackGroup,
   boxOf,
   duplicatePage,
   newPage,
@@ -503,5 +504,53 @@ describe('giving a group a body, and taking it away again', () => {
     deep.widgets![0]!.config = { group: 'Doors/Head' };
     const made = stackGroup(deep, 'desktop', 'Doors', true)!;
     expect(rect(made, 'head')).toEqual({ x: 0, y: 0, w: 300, h: 18 });
+  });
+});
+
+describe('moving a container', () => {
+  const doc = (): DashboardDefinition => ({
+    id: 'd',
+    name: 'D',
+    icon: 'home',
+    owner_user_id: 'u',
+    widgets: [{ id: 'a', type: 'text', config: { group: 'Doors' } }],
+    layouts: [
+      {
+        breakpoint: 'desktop',
+        columns: 12,
+        row_height: 100,
+        gap: 10,
+        flow: 'free',
+        frame: { width: 1240, height: 900 },
+        groups: [
+          { path: 'Doors', rect: { x: 0, y: 520, w: 723, h: 60 }, frame: true, stack: true },
+        ],
+        placements: [
+          { widget_id: 'a', x: 0, y: 0, w: 1, h: 1, rect: { x: 0, y: 20, w: 300, h: 18 } },
+        ],
+      },
+    ],
+  });
+
+  it('writes the box and nothing inside it', async () => {
+    // A member's rectangle is stated in the container's space, so moving all
+    // of them moves them *within* it and leaves the box where it was — which
+    // on a column does not even show.
+    const next = moveGroupBox(doc(), 'desktop', 'Doors', { x: 0, y: 150 })!;
+    expect(next.layouts?.[0]?.groups?.[0]?.rect).toEqual({ x: 0, y: 670, w: 723, h: 60 });
+    expect(next.layouts?.[0]?.placements?.[0]?.rect).toEqual({ x: 0, y: 20, w: 300, h: 18 });
+  });
+
+  it('is reordering, when the container is in a column', async () => {
+    // A column is ordered by its members' stored tops, so dragging a section
+    // up or down the column moves it up or down the column. One write, two
+    // readings, and the parent decides which.
+    const next = moveGroupBox(doc(), 'desktop', 'Doors', { x: 0, y: 150 })!;
+    expect(next.layouts?.[0]?.groups?.[0]?.rect?.y).toBeGreaterThan(520);
+  });
+
+  it('writes nothing for a box that is not there, or a move that is not one', async () => {
+    expect(moveGroupBox(doc(), 'desktop', 'Nothing', { x: 10, y: 10 })).toBeUndefined();
+    expect(moveGroupBox(doc(), 'desktop', 'Doors', { x: 0, y: 0 })).toBeUndefined();
   });
 });

@@ -777,3 +777,112 @@ describe('what one press holds, now that a section is a group', () => {
     expect(held(el, 'label')).toEqual(['label', 'list']);
   });
 });
+
+describe('what a drag on a whole container writes', () => {
+  const section: DashboardGroupBox = {
+    path: 'Left/doors',
+    rect: { x: 0, y: 520, w: 700, h: 60 },
+    frame: true,
+    stack: true,
+  };
+
+  const layout = {
+    breakpoint: 'desktop' as const,
+    columns: 12,
+    row_height: 120,
+    gap: 12,
+    flow: 'free' as const,
+    frame: { width: 1240, height: 900, fit: 'scroll' as const },
+    groups: [section],
+    placements: [
+      { widget_id: 'head', x: 0, y: 0, w: 1, h: 1, rect: { x: 0, y: 0, w: 300, h: 18 } },
+      { widget_id: 'list', x: 0, y: 0, w: 1, h: 1, rect: { x: 0, y: 30, w: 700, h: 30 } },
+      { widget_id: 'loose', x: 0, y: 0, w: 1, h: 1, rect: { x: 900, y: 0, w: 100, h: 40 } },
+    ],
+  };
+
+  const mount = async () => {
+    const el = document.createElement('hc-page');
+    const groups: { path: string; by: { x: number; y: number } }[] = [];
+    const widgets: unknown[] = [];
+    el.doc = {
+      id: 'd',
+      name: 'D',
+      icon: 'home',
+      owner_user_id: 'u',
+      layouts: [layout],
+      widgets: [
+        { id: 'head', type: 'text', config: { text: 'DOORS', group: 'Left/doors' } },
+        { id: 'list', type: 'text', config: { text: 'rows', group: 'Left/doors' } },
+        { id: 'loose', type: 'text', config: { text: 'elsewhere' } },
+      ],
+    };
+    el.store = new DeviceStore();
+    el.mode = 'edit';
+    el.onPlaceGroup = (path, by) => {
+      groups.push({ path, by });
+    };
+    // Both doors, because `commit` uses the batch one only for more than one
+    // move — a single widget still goes through the single-widget door.
+    el.onPlaceWidgets = async (moves) => {
+      widgets.push(moves);
+    };
+    el.onPlaceWidget = async (id, box) => {
+      widgets.push([{ id, box }]);
+    };
+    document.body.append(el);
+    await el.updateComplete;
+    return { el, groups, widgets };
+  };
+
+  /**
+   * A drag, in the page coordinates every gesture on this surface works in.
+   *
+   * `by` is how far the pointer travelled; where each member starts is its own
+   * rectangle plus the origin of the container it is stated in, which is the
+   * conversion `gridItems` does on the way in and the one the delta has to be
+   * measured against.
+   */
+  const drag = async (el: HcPage, ids: string[], by: { x: number; y: number }) => {
+    const origin = (id: string) =>
+      el.doc?.widgets?.find((w) => w.id === id)?.config?.['group'] === undefined
+        ? { x: 0, y: 0 }
+        : { x: section.rect!.x, y: section.rect!.y };
+    const boxes = new Map(
+      ids.map((id) => {
+        const p = layout.placements.find((q) => q.widget_id === id)!;
+        const from = origin(id);
+        return [
+          id,
+          { x: p.rect.x + from.x + by.x, y: p.rect.y + from.y + by.y, w: p.rect.w, h: p.rect.h },
+        ];
+      }),
+    );
+    await (el as unknown as { commit: (m: Map<string, unknown>) => Promise<void> }).commit(boxes);
+  };
+
+  it('moves the box, and writes nothing inside it', async () => {
+    // The members do not move at all. Writing them is how a drag on a section
+    // ends up shuffling its contents while the section stays where it was.
+    const { el, groups, widgets } = await mount();
+    await drag(el, ['head', 'list'], { x: 0, y: 150 });
+    expect(groups).toEqual([{ path: 'Left/doors', by: { x: 0, y: 150 } }]);
+    expect(widgets).toEqual([]);
+  });
+
+  it('moves the members when only some of them are in hand', async () => {
+    // Half a section being dragged out of one is a different edit and a real
+    // one: those members are leaving, and moving the box would take the rest
+    // with them.
+    const { el, groups, widgets } = await mount();
+    await drag(el, ['head'], { x: 0, y: 150 });
+    expect(groups).toEqual([]);
+    expect(widgets).toHaveLength(1);
+  });
+
+  it('leaves a selection that is not a container alone', async () => {
+    const { el, groups } = await mount();
+    await drag(el, ['loose'], { x: 50, y: 0 });
+    expect(groups).toEqual([]);
+  });
+});

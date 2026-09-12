@@ -2466,6 +2466,19 @@ not a failure of it.
       rows is the one thing chosen rather than carried, and it is the median of
       the gaps their author drew. Offered only on a composed page, because a
       column of rectangles is not expressible in cells
+- [x] **Move a container**, which is one write to its box and none at all to
+      the things inside it. A drag on a whole section used to apply one delta
+      to every member — right for a cluster, exactly wrong here, since a
+      member's rectangle is stated in the container's space, so moving all of
+      them moved them *within* it and left the box where it was. On a column
+      it did not even show: a column ignores its members' tops, so the gesture
+      read as having failed while quietly rewriting three rectangles. What the
+      new rect *means* is the parent's business and both readings are the same
+      write — a container on the page moves where it was dragged; one in a
+      column is ordered by its stored top, so dragging it up or down the column
+      is reordering, which is what a card in a column already did. Half a
+      section in hand is still a move of those members: they are leaving, and
+      moving the box would take the rest with them
 - [x] Expression editor: SyntaxError on blur, live preview against real state.
       An `ƒx` toggle on every value-shaped field turns a literal into
       `{ $expr }` and back, keeping what it came to on the way out. **Offered

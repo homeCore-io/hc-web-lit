@@ -598,3 +598,51 @@ function drawnGap(rects: readonly DashboardRect[]): number {
   const mid = gaps[Math.floor(gaps.length / 2)] ?? 12;
   return Math.round(mid);
 }
+
+/**
+ * A container moved, by writing its box rather than everything inside it.
+ *
+ * **What a drag on a whole section used to do was rewrite its contents.** One
+ * delta applied to every member, which is right for a cluster of cards and
+ * exactly wrong for a container: a member's rectangle is stated in the
+ * container's space, so moving all of them moves them *within* it and leaves
+ * the box where it was. On a column it did not even show — a column ignores
+ * its members' tops — so the gesture read as having failed while quietly
+ * rewriting three rectangles.
+ *
+ * What the new rect *means* is the parent's business, and both readings are
+ * the same write. A container on the page moves to where it was dragged. A
+ * container in a column is ordered by its stored top, so dragging it up or
+ * down moves it up or down the column — which is reordering, and is the same
+ * thing a card in a column already does.
+ */
+export function moveGroupBox(
+  doc: DashboardDefinition,
+  breakpoint: DashboardBreakpoint,
+  path: string,
+  by: { x: number; y: number },
+): DashboardDefinition | undefined {
+  const drawn = layoutToDraw(doc, breakpoint);
+  if (drawn === undefined) return undefined;
+  const editing = drawn.borrowedFrom ?? breakpoint;
+  const layout = (doc.layouts ?? []).find((l) => l.breakpoint === editing);
+  if (layout === undefined) return undefined;
+
+  const box = (layout.groups ?? []).find((b) => b.path === path);
+  const rect = box?.rect;
+  if (box === undefined || rect == null) return undefined;
+  if (by.x === 0 && by.y === 0) return undefined;
+
+  const moved: DashboardGroupBox = {
+    ...box,
+    rect: { ...rect, x: Math.round(rect.x + by.x), y: Math.round(rect.y + by.y) },
+  };
+  return {
+    ...doc,
+    layouts: (doc.layouts ?? []).map((l) =>
+      l.breakpoint === editing
+        ? { ...l, groups: (l.groups ?? []).map((b) => (b.path === path ? moved : b)) }
+        : l,
+    ),
+  };
+}

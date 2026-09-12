@@ -21,6 +21,7 @@ import {
   newPage,
   placeWidget,
   placeWidgets,
+  moveGroupBox,
   regroupWidgets,
   stackGroup,
   transformWidgets,
@@ -777,6 +778,26 @@ export class HcApp extends LitElement {
     const next = placeWidgets(doc, this.breakpoint, new Map(moves.map((m) => [m.id, m.box])));
     if (next === undefined) throw new Error('This layout has none of those widgets.');
 
+    this.writePages(this.replacing(next), next.id);
+    return Promise.resolve();
+  };
+
+  /**
+   * Move a container on the composed page being shown (§14.2b).
+   *
+   * One write to its box, and none at all to the things inside it — a
+   * member's rectangle is stated in the container's space, so writing the
+   * members is how a drag on a section ends up shuffling its contents while
+   * the section stays where it was.
+   */
+  private readonly placeGroupOnPage = async (
+    path: string,
+    by: { x: number; y: number },
+  ): Promise<void> => {
+    const doc = this.current;
+    if (doc === undefined) return;
+    const next = moveGroupBox(doc, this.breakpoint, path, by);
+    if (next === undefined) return;
     this.writePages(this.replacing(next), next.id);
     return Promise.resolve();
   };
@@ -2026,6 +2047,7 @@ export class HcApp extends LitElement {
         .onRemoveWidget=${this.mayWriteDashboards() ? this.removeWidgetFromPage : undefined}
         .onPlaceWidget=${this.mayWriteDashboards() ? this.placeWidgetOnPage : undefined}
         .onPlaceWidgets=${this.mayWriteDashboards() ? this.placeWidgetsOnPage : undefined}
+        .onPlaceGroup=${this.mayWriteDashboards() ? this.placeGroupOnPage : undefined}
         .onTurnWidget=${this.mayWriteDashboards() ? this.turnWidgetOnPage : undefined}
         .onTurnWidgets=${this.mayWriteDashboards() ? this.turnWidgetsOnPage : undefined}
         .onDrawWidget=${this.mayWriteDashboards() ? this.drawWidgetOnPage : undefined}

@@ -43,7 +43,7 @@ import {
   toLocal,
 } from '../core/frames.js';
 import { deriveDensity } from '../design/tokens.js';
-import { clickTarget, groupOf, isUnder, membersOf, stepOut } from '../core/groups.js';
+import { clickTarget, groupOf, isUnder, membersOf, segmentsOf, stepOut } from '../core/groups.js';
 import type { SelectionContext } from '../core/selection.js';
 import { isVisible, selectsDevices } from '../core/visibility.js';
 import type { DeviceStore } from '../core/store.js';
@@ -629,6 +629,16 @@ export class HcPage extends LitElement {
    * this exists to avoid — so a host that wants a group move to *be* one edit
    * provides this.
    */
+  /**
+   * Move a container, which is one write to its box (§14.2b).
+   *
+   * A separate door from `onPlaceWidgets` because it is a different edit, not
+   * a batch of the same one: the members do not move at all, and writing them
+   * is precisely the bug this exists to stop.
+   */
+  @property({ attribute: false }) onPlaceGroup:
+    ((path: string, by: { x: number; y: number }) => void | Promise<void>) | undefined;
+
   @property({ attribute: false }) onPlaceWidgets:
     ((moves: readonly { id: string; box: Box }[]) => Promise<void>) | undefined;
 
@@ -844,6 +854,28 @@ export class HcPage extends LitElement {
   private moving: ReadonlyMap<string, Box> | undefined;
 
   /**
+   * The container being carried this frame, and how far, if that is the drag.
+   *
+   * Derived per frame like `moving` rather than held, for the same reason: a
+   * preview is what the surface is showing right now, and state written during
+   * a render outlives the gesture (the guides learnt that one).
+   *
+   * Without it a container drag shows nothing at all — the members do not
+   * move, which is the whole fix, so the box is what has to follow the
+   * pointer.
+   */
+  private get carrying(): { path: string; by: { x: number; y: number } } | undefined {
+    const moves = this.moving;
+    if (moves === undefined || moves.size === 0 || this.onPlaceGroup === undefined) {
+      return undefined;
+    }
+    const path = this.wholeContainer(moves.keys());
+    if (path === undefined) return undefined;
+    const by = this.deltaOf(moves);
+    return by === undefined ? undefined : { path, by };
+  }
+
+  /**
    * How far the tallest content-fitting placement reaches, in frame units.
    *
    * Measured after a render rather than computed before one, because the
@@ -993,7 +1025,11 @@ export class HcPage extends LitElement {
     // own — absolutely positioned children contribute none — so one that asks
     // to fit its content is measured after layout, like the page is.
     const tall = box.fit === 'content' && !grows ? (this.fitted.get(box.path) ?? at.h) : at.h;
-    const place = inFlow ? '' : `left:${at.x}px;top:${at.y}px;width:${at.w}px;`;
+    // Carried, if this is the one in hand: the box follows the pointer and its
+    // members hold still inside it, which is what moving a container is.
+    const carry = this.carrying;
+    const lift = carry?.path === box.path ? carry.by : { x: 0, y: 0 };
+    const place = inFlow ? '' : `left:${at.x + lift.x}px;top:${at.y + lift.y}px;width:${at.w}px;`;
     const size = grows ? '' : `height:${tall}px;${box.clip === true ? 'overflow:hidden;' : ''}`;
 
     // Ordering only means something in a column. A positioned container places
@@ -1124,13 +1160,18 @@ export class HcPage extends LitElement {
   private placement(item: GridItem, w: DashboardWidget, within?: string) {
     const r = item.rect;
     if (r == null) return nothing;
+    // A member of a container being carried holds still inside it: the box is
+    // what moved, and previewing both would show the contents sliding out of
+    // the thing that is carrying them.
+    const still = within !== undefined && this.carrying !== undefined;
     // In a column the container decides the top and the width; in a positioned
     // container the member's own rectangle does, and it is already stated in
     // that container's space — which is what `toLocal` gives back, the inverse
     // of the conversion `gridItems` did on the way in.
     const inColumn = within !== undefined && this.stacksAt(within);
     const z = w.config?.['z'];
-    const at = this.previewOf(item.id, { x: r.x, y: r.y, w: r.w, h: r.h });
+    const drawn = { x: r.x, y: r.y, w: r.w, h: r.h };
+    const at = still ? drawn : this.previewOf(item.id, drawn);
     // A placement that says so is as tall as what is in it (§14.1) — **both
     // ways**. The drawn rect was a floor at first, and a section that is
     // usually empty showed that to be wrong: a PLAYING frame with nothing
@@ -2005,6 +2046,18 @@ export class HcPage extends LitElement {
   /** Write a set of moves, by whichever door the host has opened. */
   private async commit(moves: ReadonlyMap<string, Box>): Promise<void> {
     if (moves.size === 0) return;
+
+    // **The whole of a container in hand is a move of the container.** One
+    // delta applied to every member is right for a cluster and exactly wrong
+    // here: a member's rectangle is stated in the container's space, so moving
+    // all of them moves them within it and leaves the box where it was.
+    const held = this.wholeContainer(moves.keys());
+    if (held !== undefined && this.onPlaceGroup !== undefined) {
+      const by = this.deltaOf(moves);
+      if (by !== undefined) await this.onPlaceGroup(held, by);
+      return;
+    }
+
     // One call for a group, so it is one entry in the undo stack and one save.
     // A host that has not wired the group door still gets the single-widget
     // one, which is the whole of what this surface could do before.
@@ -2013,6 +2066,51 @@ export class HcPage extends LitElement {
       return;
     }
     for (const [id, box] of moves) await this.onPlaceWidget?.(id, box);
+  }
+
+  /**
+   * The container whose entire contents are in hand, if that is what this is.
+   *
+   * Entire, because half a section being dragged out of one is a different
+   * edit and a real one — those members are leaving, and moving the box would
+   * take the rest with them. Outermost where several match, since holding a
+   * column holds every section in it and the column is what somebody grabbed.
+   */
+  private wholeContainer(ids: Iterable<string>): string | undefined {
+    const layout =
+      this.doc === undefined ? undefined : layoutToDraw(this.doc, this.breakpoint)?.layout;
+    const flow = flowFrames(layout?.groups);
+    if (flow.size === 0) return undefined;
+
+    const held = new Set(ids);
+    const paths = this.groupPaths();
+    let found: string | undefined;
+    for (const path of flow.keys()) {
+      const members = [...paths].filter(
+        ([, at]) => at !== undefined && (at === path || isUnder(at, path)),
+      );
+      if (members.length === 0 || members.length !== held.size) continue;
+      if (!members.every(([id]) => held.has(id))) continue;
+      if (found === undefined || segmentsOf(path).length < segmentsOf(found).length) found = path;
+    }
+    return found;
+  }
+
+  /**
+   * How far a set of moves actually moved, from the first one that did.
+   *
+   * Every member of a container moves by the same delta — that is what makes
+   * it one gesture — so one of them is the answer and reading more would be
+   * averaging numbers that agree.
+   */
+  private deltaOf(moves: ReadonlyMap<string, Box>): { x: number; y: number } | undefined {
+    const was = this.boxesOf(new Set(moves.keys()));
+    for (const [id, box] of moves) {
+      const from = was.get(id);
+      if (from === undefined) continue;
+      return { x: box.x - from.x, y: box.y - from.y };
+    }
+    return undefined;
   }
 
   /**
