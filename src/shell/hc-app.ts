@@ -14,7 +14,7 @@ import { applyTokens } from '../design/css.js';
 import { builtInSeeds, defaultSkin } from '../design/seeds.js';
 import { deriveTokens } from '../design/tokens.js';
 import type { DashboardBreakpoint, DashboardDefinition } from '../core/dashboard.js';
-import { withWidgetConfig } from '../core/dashboard.js';
+import { layoutToDraw, withWidgetConfig } from '../core/dashboard.js';
 import {
   addWidget,
   duplicatePage,
@@ -22,6 +22,7 @@ import {
   placeWidget,
   placeWidgets,
   regroupWidgets,
+  stackGroup,
   transformWidgets,
   removeWidget,
   turnWidget,
@@ -810,6 +811,53 @@ export class HcApp extends LitElement {
    * underneath the new one, so putting a loose card beside a cluster does not
    * dissolve the cluster.
    */
+  /**
+   * Give the group in hand a body, or take its body away (§14.2b).
+   *
+   * Group writes a *tag*: several elements agreeing on a name, which holds
+   * them together for a gesture and has no geometry at all. A column is the
+   * tag with a box round it — a real container, whose members push each other
+   * down as they grow. The nine sections on the household's room page are
+   * that, and every one of them was made by editing the document by hand
+   * because the product had no way to say it (§19.9).
+   *
+   * Exactly reversible, which is the point: nothing about a member's size,
+   * order or relative position moves, so a household can try it on a real page
+   * and press it again.
+   */
+  private readonly stackHeld = (stacked: boolean) => (): void => {
+    const doc = this.current;
+    const path = this.heldGroup();
+    if (doc === undefined || path === undefined) return;
+    const next = stackGroup(doc, this.breakpoint, path, stacked);
+    if (next === undefined) return;
+    this.writePages(this.replacing(next), doc.id);
+  };
+
+  /**
+   * Whether the page being shown is composed rather than packed.
+   *
+   * A column of rectangles is not expressible in cells, and grid mode has an
+   * engine that would re-pack it on the next save (§14.1) — so the offer is
+   * not made rather than made and refused.
+   */
+  private free(): boolean {
+    const layout =
+      this.current === undefined ? undefined : layoutToDraw(this.current, this.breakpoint)?.layout;
+    return layout?.flow === 'free' && layout.frame != null;
+  }
+
+  /** Whether the group in hand already has a body. */
+  private heldStacks(): boolean {
+    const path = this.heldGroup();
+    if (path === undefined) return false;
+    const layout =
+      this.current === undefined ? undefined : layoutToDraw(this.current, this.breakpoint)?.layout;
+    return (layout?.groups ?? []).some(
+      (b) => b.path === path && b.stack === true && b.rect != null,
+    );
+  }
+
   private readonly groupHeld = (): void => {
     const doc = this.current;
     const ids = this.held.ids;
@@ -1809,6 +1857,23 @@ export class HcApp extends LitElement {
         : html`<button title=${`Take "${shared}" apart`} @click=${this.ungroupHeld}>
             Ungroup
           </button>`
+    }
+    ${
+      shared === undefined || !this.free()
+        ? nothing
+        : this.heldStacks()
+          ? html`<button
+              title=${`Let "${shared}" be positioned again`}
+              @click=${this.stackHeld(false)}
+            >
+              Unstack
+            </button>`
+          : html`<button
+              title=${`Lay "${shared}" out in a column that grows`}
+              @click=${this.stackHeld(true)}
+            >
+              Stack
+            </button>`
     }
     ${
       this.held.inside === undefined

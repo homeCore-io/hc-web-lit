@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DashboardDefinition } from '../src/core/dashboard.js';
 import {
+  stackGroup,
   addWidget,
   boxOf,
   duplicatePage,
@@ -401,5 +402,106 @@ describe('drawing a widget, which is adding and placing at once (§14.1)', () =>
     const { doc, id } = addWidget(composed, 'text');
     const next = placeWidget(doc, 'desktop', id, { x: 100, y: 100, w: 300, h: 200 });
     expect(placementIn(next!, 'desktop', id)?.rect).toEqual({ x: 100, y: 100, w: 300, h: 200 });
+  });
+});
+
+describe('giving a group a body, and taking it away again', () => {
+  // §19.9: every option is GUI-editable and no widget ships that requires
+  // hand-editing JSON. The nine sections on the household's room page were
+  // made by editing the document, because Group writes a tag and nothing in
+  // the product could give one a body.
+  const doc = (): DashboardDefinition => ({
+    id: 'd',
+    name: 'D',
+    icon: 'home',
+    owner_user_id: 'u',
+    widgets: [
+      { id: 'head', type: 'text', config: { group: 'Doors' } },
+      { id: 'list', type: 'device_list', config: { group: 'Doors' } },
+      { id: 'loose', type: 'text', config: {} },
+    ],
+    layouts: [
+      {
+        breakpoint: 'desktop',
+        columns: 12,
+        row_height: 100,
+        gap: 10,
+        flow: 'free',
+        frame: { width: 1240, height: 900 },
+        placements: [
+          { widget_id: 'head', x: 0, y: 0, w: 1, h: 1, rect: { x: 40, y: 100, w: 300, h: 18 } },
+          { widget_id: 'list', x: 0, y: 0, w: 1, h: 1, rect: { x: 40, y: 130, w: 700, h: 60 } },
+          { widget_id: 'loose', x: 0, y: 0, w: 1, h: 1, rect: { x: 900, y: 0, w: 100, h: 40 } },
+        ],
+      },
+    ],
+  });
+
+  const boxes = (d: DashboardDefinition) => d.layouts?.[0]?.groups ?? [];
+  const rect = (d: DashboardDefinition, id: string) =>
+    d.layouts?.[0]?.placements?.find((p) => p.widget_id === id)?.rect;
+
+  it('puts the box round exactly what its members cover', async () => {
+    const made = stackGroup(doc(), 'desktop', 'Doors', true);
+    expect(made, 'nothing written').not.toBeUndefined();
+    expect(boxes(made!)[0]).toMatchObject({
+      path: 'Doors',
+      frame: true,
+      stack: true,
+      rect: { x: 40, y: 100, w: 700, h: 90 },
+    });
+  });
+
+  it('restates its members in the space the box just made', async () => {
+    // A member's rect is stated in the space of its nearest framed ancestor,
+    // and the box is now that ancestor. Leaving them in page coordinates would
+    // move everything inside it by the frame's own offset.
+    const made = stackGroup(doc(), 'desktop', 'Doors', true)!;
+    expect(rect(made, 'head')).toEqual({ x: 0, y: 0, w: 300, h: 18 });
+    expect(rect(made, 'list')).toEqual({ x: 0, y: 30, w: 700, h: 60 });
+  });
+
+  it('leaves everything outside the group alone', async () => {
+    const made = stackGroup(doc(), 'desktop', 'Doors', true)!;
+    expect(rect(made, 'loose')).toEqual({ x: 900, y: 0, w: 100, h: 40 });
+  });
+
+  it('takes the gap from the gaps its author drew', async () => {
+    // A column spaces its members evenly and the drawn ones are not, so this
+    // is the one thing that has to be chosen rather than carried.
+    const made = stackGroup(doc(), 'desktop', 'Doors', true)!;
+    expect(boxes(made)[0]?.stack_gap).toBe(12);
+  });
+
+  it('comes back byte-identical when it is taken away', async () => {
+    // The same invariant group-then-ungroup keeps, and the reason a household
+    // can try this on a real page without wondering what it cost.
+    const before = doc();
+    const made = stackGroup(before, 'desktop', 'Doors', true)!;
+    const back = stackGroup(made, 'desktop', 'Doors', false)!;
+    expect(back.layouts?.[0]?.placements).toEqual(before.layouts?.[0]?.placements);
+    expect(boxes(back)).toEqual([]);
+  });
+
+  it('writes nothing when there is nothing to do', async () => {
+    const made = stackGroup(doc(), 'desktop', 'Doors', true)!;
+    expect(stackGroup(made, 'desktop', 'Doors', true)).toBeUndefined();
+    expect(stackGroup(doc(), 'desktop', 'Doors', false)).toBeUndefined();
+    expect(stackGroup(doc(), 'desktop', 'Nothing', true)).toBeUndefined();
+  });
+
+  it('declines on a packed page, where the engine would undo it', async () => {
+    // A column of rectangles is not expressible in cells, and grid mode has an
+    // engine that immediately re-packs (§14.1).
+    const packed = doc();
+    packed.layouts![0]!.flow = 'packed';
+    expect(stackGroup(packed, 'desktop', 'Doors', true)).toBeUndefined();
+  });
+
+  it('gathers a nested group too, because a path is the membership', async () => {
+    const deep = doc();
+    deep.widgets![0]!.config = { group: 'Doors/Head' };
+    const made = stackGroup(deep, 'desktop', 'Doors', true)!;
+    expect(rect(made, 'head')).toEqual({ x: 0, y: 0, w: 300, h: 18 });
   });
 });

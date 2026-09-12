@@ -15,13 +15,15 @@
 import type {
   DashboardBreakpoint,
   DashboardDefinition,
+  DashboardGroupBox,
   DashboardLayout,
   DashboardWidget,
   DashboardWidgetPlacement,
 } from './dashboard.js';
 import { layoutToDraw } from './dashboard.js';
+import type { DashboardRect } from './layout.js';
 import { cellsOf } from './geometry.js';
-import { groupOf, withGroup } from './groups.js';
+import { groupOf, isUnder, withGroup } from './groups.js';
 import { framesByPath, toLocal } from './frames.js';
 
 /**
@@ -465,4 +467,134 @@ export function boxOf(
   }
   const { x, y, w, h } = placement;
   return { box: { x, y, w, h }, units: 'cells' };
+}
+
+/**
+ * A group turned into a column, or turned back into a plain tag.
+ *
+ * **The gap this closes is a stated constraint, not a nicety.** §19.9 says
+ * every option is GUI-editable and no widget ships that requires hand-editing
+ * JSON — and the nine sections on this household's room page were made by
+ * editing the document by hand, because Group and Ungroup write a *tag* and
+ * nothing in the product could give one a body (§14.2b).
+ *
+ * **Reversible, exactly.** Stacking adds the box and restates every member's
+ * rectangle in the new space; unstacking removes it and adds the origin back.
+ * No member's size, order or relative position moves, so stack-then-unstack
+ * leaves the document byte-identical — the same invariant group-then-ungroup
+ * already keeps, and the reason a household can try this on a real page
+ * without wondering what it cost.
+ *
+ * The gap between the rows is the one thing that has to be *chosen* rather
+ * than carried, because a column spaces its members evenly and the drawn ones
+ * are not. The median of the gaps their author actually drew is the closest a
+ * single number gets to what was there.
+ *
+ * `undefined` when there is nothing to do — no such layout, no members, or the
+ * group is already the way it was asked to be — so a caller can leave the
+ * document alone rather than write an identical one.
+ */
+export function stackGroup(
+  doc: DashboardDefinition,
+  breakpoint: DashboardBreakpoint,
+  path: string,
+  stacked: boolean,
+): DashboardDefinition | undefined {
+  const drawn = layoutToDraw(doc, breakpoint);
+  if (drawn === undefined) return undefined;
+  const editing = drawn.borrowedFrom ?? breakpoint;
+  const layout = (doc.layouts ?? []).find((l) => l.breakpoint === editing);
+  // Composed only: a column of rectangles is not expressible in packed cells,
+  // and grid mode has an engine that would immediately undo it (§14.1).
+  if (layout === undefined || layout.flow !== 'free') return undefined;
+
+  const boxes = layout.groups ?? [];
+  const existing = boxes.find((b) => b.path === path);
+  const already = existing?.stack === true && existing.rect != null;
+  if (already === stacked) return undefined;
+
+  const mine = new Set(
+    (doc.widgets ?? [])
+      .filter((w) => {
+        const at = groupOf(w.config);
+        return at !== undefined && (at === path || isUnder(at, path));
+      })
+      .map((w) => w.id),
+  );
+  if (mine.size === 0) return undefined;
+
+  const shift = (by: { x: number; y: number }): DashboardWidgetPlacement[] =>
+    (layout.placements ?? []).map((p) =>
+      !mine.has(p.widget_id) || p.rect == null
+        ? p
+        : { ...p, rect: { ...p.rect, x: p.rect.x + by.x, y: p.rect.y + by.y } },
+    );
+
+  const within = (
+    groups: DashboardGroupBox[],
+    places: DashboardWidgetPlacement[],
+  ): DashboardLayout => ({ ...layout, groups, placements: places });
+
+  const swap = (next: DashboardLayout): DashboardDefinition => ({
+    ...doc,
+    layouts: (doc.layouts ?? []).map((l) => (l.breakpoint === editing ? next : l)),
+  });
+
+  if (!stacked) {
+    const rect = existing?.rect;
+    if (rect == null) return undefined;
+    return swap(
+      within(
+        boxes.filter((b) => b.path !== path),
+        shift({ x: rect.x, y: rect.y }),
+      ),
+    );
+  }
+
+  // The members' own rectangles, which are already stated in the space this
+  // box will sit in — so their bounding box is the box, with nothing to
+  // convert on the way in.
+  const rects = (layout.placements ?? [])
+    .filter((p) => mine.has(p.widget_id) && p.rect != null)
+    .map((p) => p.rect as DashboardRect);
+  if (rects.length === 0) return undefined;
+
+  const x = Math.min(...rects.map((r) => r.x));
+  const y = Math.min(...rects.map((r) => r.y));
+  const w = Math.max(...rects.map((r) => r.x + r.w)) - x;
+  const h = Math.max(...rects.map((r) => r.y + r.h)) - y;
+
+  const box: DashboardGroupBox = {
+    ...(existing ?? { path }),
+    rect: { x, y, w, h },
+    frame: true,
+    stack: true,
+    stack_gap: drawnGap(rects),
+    padding: existing?.padding ?? 0,
+  };
+
+  return swap(within([...boxes.filter((b) => b.path !== path), box], shift({ x: -x, y: -y })));
+}
+
+/**
+ * The gap a column should use, from the gaps its members were drawn with.
+ *
+ * The median rather than the mean, because one member drawn a long way below
+ * the rest — a footer under a list, a heading with air over it — would drag an
+ * average somewhere nothing actually is. Negative gaps are overlaps and count
+ * as nothing.
+ */
+function drawnGap(rects: readonly DashboardRect[]): number {
+  const sorted = [...rects].sort((a, b) => a.y - b.y);
+  const gaps: number[] = [];
+  for (let i = 1; i < sorted.length; i++) {
+    const above = sorted[i - 1];
+    const below = sorted[i];
+    if (above === undefined || below === undefined) continue;
+    gaps.push(Math.max(0, below.y - (above.y + above.h)));
+  }
+  if (gaps.length === 0) return 12;
+  gaps.sort((a, b) => a - b);
+  const mid = gaps[Math.floor(gaps.length / 2)] ?? 12;
+  return Math.round(mid);
 }

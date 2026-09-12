@@ -2453,6 +2453,19 @@ not a failure of it.
       surface cannot cover, a keyboard. It says why, because a control that
       silently does nothing is the worst kind
 - [ ] Undo/redo stack
+- [x] **Give a group a body** (§14.2b). Group writes a *tag* — several
+      elements agreeing on a name, which holds them together for a gesture and
+      has no geometry at all — and nothing in the product could turn one into a
+      container, so the nine sections on this household's room page were made
+      by editing the document by hand. Against §19.9, which is the constraint
+      and not a preference. Stack and Unstack are beside Group and Ungroup, and
+      the conversion is exactly reversible: nothing about a member's size,
+      order or relative position moves, so stack-then-unstack leaves the
+      document byte-identical — the invariant group-then-ungroup already keeps,
+      and the reason a household can try it on a real page. The gap between the
+      rows is the one thing chosen rather than carried, and it is the median of
+      the gaps their author drew. Offered only on a composed page, because a
+      column of rectangles is not expressible in cells
 - [x] Expression editor: SyntaxError on blur, live preview against real state.
       An `ƒx` toggle on every value-shaped field turns a literal into
       `{ $expr }` and back, keeping what it came to on the way out. **Offered
