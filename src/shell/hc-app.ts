@@ -1333,10 +1333,31 @@ export class HcApp extends LitElement {
    * place, so a skin change repaints everything including third-party widgets
    * and floorplan layers (§15).
    */
+  /** Set once: the machine's answer can change while the page is open. */
+  private stillnessWatched = false;
+
+  /**
+   * Repaint when the person changes their mind about movement.
+   *
+   * The tokens are written once at paint, so a preference turned on after load
+   * would otherwise not take until a reload — and the person who has just
+   * asked for less movement is the least likely to be told to refresh.
+   */
+  private watchStillness(): void {
+    if (this.stillnessWatched) return;
+    const query = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)');
+    if (query === undefined) return;
+    this.stillnessWatched = true;
+    query.addEventListener('change', () => this.paint());
+  }
+
   private paint(): void {
     const seeds = builtInSeeds[this.skin];
     if (seeds === undefined) return;
     applyTokens(document.documentElement, deriveTokens(seeds));
+    // Re-applied when the machine's answer changes, so turning the preference
+    // on stops the product moving without a reload.
+    this.watchStillness();
   }
 
   override willUpdate(changed: Map<string, unknown>): void {

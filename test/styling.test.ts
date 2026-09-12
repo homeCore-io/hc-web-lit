@@ -215,3 +215,34 @@ describe('the spacing scale', () => {
     expect([...new Set(off)]).toEqual([]);
   });
 });
+
+describe('how fast a thing moves', () => {
+  it('takes its duration from the motion scale', () => {
+    // **Reduced motion works by the token or it does not work.** The scale is
+    // written as inline styles on the document root, so setting the durations
+    // to zero there stops every transition in the product at once — but only
+    // the ones that asked the scale. Four were written as literals (120ms,
+    // 90ms, 0.16s and a 1s), and each would have kept moving for somebody who
+    // had asked their machine to stop.
+    const off: string[] = [];
+    for (const file of files) {
+      for (const m of source(file).matchAll(/transition:\s*([^;]+);/g)) {
+        const decl = (m[1] as string).replace(/\s+/g, ' ');
+        // The timer's bar is a second of real time being shown rather than a
+        // UI flourish, so it cannot come off the scale; it carries its own
+        // reduced-motion rule instead.
+        if (file === 'hc-timer.ts') continue;
+        if (/[0-9.]+m?s/.test(decl.replace(/var\([^)]*\)/g, ''))) off.push(`${file}: ${decl}`);
+      }
+    }
+    expect(off, 'use var(--hc-motion-fast | -base | -slow)').toEqual([]);
+  });
+
+  it('keeps the one exception honest about being one', () => {
+    // A literal duration is allowed exactly where the widget also turns itself
+    // off for somebody who asked for stillness.
+    const timer = source('hc-timer.ts');
+    expect(timer).toMatch(/transition:\s*width\s*1s/);
+    expect(timer).toMatch(/@media \(prefers-reduced-motion: reduce\)/);
+  });
+});

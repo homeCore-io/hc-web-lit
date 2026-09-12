@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { builtInSeeds } from '../src/design/seeds.js';
-import { cssVariables } from '../src/design/css.js';
+import { cssVariables, applyTokens } from '../src/design/css.js';
 import {
   deriveDensity,
   deriveMetrics,
@@ -240,5 +240,48 @@ describe('blue_hour', () => {
     // rather than a rule to bend, and the alternative — amber readings on an
     // amber-branded page — is the monochrome this change exists to undo.
     expect(t.metric.reading).toBe('#7CC4FF');
+  });
+});
+
+describe('when somebody asks their machine for less movement', () => {
+  const withQuery = (matches: boolean, run: () => void): void => {
+    const had = Object.getOwnPropertyDescriptor(globalThis, 'matchMedia');
+    Object.defineProperty(globalThis, 'matchMedia', {
+      configurable: true,
+      value: () => ({ matches, addEventListener: () => undefined }),
+    });
+    try {
+      run();
+    } finally {
+      if (had) Object.defineProperty(globalThis, 'matchMedia', had);
+      else delete (globalThis as { matchMedia?: unknown }).matchMedia;
+    }
+  };
+
+  const durations = (el: HTMLElement) =>
+    ['fast', 'base', 'slow'].map((k) => el.style.getPropertyValue(`--hc-motion-${k}`));
+
+  it('stops every transition in the product, including ones we did not write', () => {
+    // **One line here rather than sixteen media queries**, three of which
+    // existed. The tokens are inline styles on the document root and an inline
+    // style beats any stylesheet, so a `@media (prefers-reduced-motion)` block
+    // inside a component could not have overridden them even where somebody
+    // had remembered to write one — and an extension's widget could never have
+    // been reached at all (§7.2).
+    const el = document.createElement('div');
+    withQuery(true, () => applyTokens(el, deriveTokens(builtInSeeds['midnight']!)));
+    expect(durations(el)).toEqual(['0s', '0s', '0s']);
+  });
+
+  it('leaves the easing curve alone, which has nothing left to shape', () => {
+    const el = document.createElement('div');
+    withQuery(true, () => applyTokens(el, deriveTokens(builtInSeeds['midnight']!)));
+    expect(el.style.getPropertyValue('--hc-motion-curve')).not.toBe('');
+  });
+
+  it('moves at the skin s own pace when nobody asked', () => {
+    const el = document.createElement('div');
+    withQuery(false, () => applyTokens(el, deriveTokens(builtInSeeds['midnight']!)));
+    expect(durations(el).every((d) => d !== '0s' && d !== '')).toBe(true);
   });
 });

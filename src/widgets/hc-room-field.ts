@@ -65,7 +65,7 @@ export class HcRoomField extends LitElement {
          the quiet end of the cell, where it is also where a treemap is read
          from. */
       justify-content: flex-start;
-      transition: border-color 0.16s ease;
+      transition: border-color var(--hc-motion-fast, 140ms) var(--hc-motion-curve, ease-out);
     }
     /* The glow. Rises from the bottom of the cell like light in a room, and
        takes the skin's active colour so a blue_hour house glows blue. */

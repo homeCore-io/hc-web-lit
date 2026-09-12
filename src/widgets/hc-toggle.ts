@@ -61,7 +61,7 @@ export class HcToggle extends HcBoundControl {
       background: var(--hc-surface-sunken, #0d1116);
       border: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
       position: relative;
-      transition: background 120ms ease;
+      transition: background var(--hc-motion-fast, 140ms) var(--hc-motion-curve, ease-out);
     }
     .knob {
       position: absolute;
@@ -73,8 +73,8 @@ export class HcToggle extends HcBoundControl {
       background: var(--hc-ink-muted, #8b95a4);
       transform: translate(0, -50%);
       transition:
-        transform 120ms ease,
-        background 120ms ease;
+        transform var(--hc-motion-fast, 140ms) var(--hc-motion-curve, ease-out),
+        background var(--hc-motion-fast, 140ms) var(--hc-motion-curve, ease-out);
     }
     [data-on] .knob {
       transform: translate(1rem, -50%);

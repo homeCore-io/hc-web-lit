@@ -92,10 +92,33 @@ export function cssVariables(t: Tokens): Record<string, string> {
   return vars;
 }
 
-/** Write the tokens onto an element — the document root, in the shell. */
+/**
+ * Whether the person at the screen has asked for less movement.
+ *
+ * Read here rather than written as a media query in each widget, because the
+ * tokens are set as inline styles on the document root and an inline style
+ * beats any stylesheet — a `@media (prefers-reduced-motion)` block inside a
+ * component could not have overridden them even where somebody remembered to
+ * write one. Three widgets out of sixteen had.
+ */
+function prefersStillness(): boolean {
+  return globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+}
+
+/**
+ * Write the tokens onto an element — the document root, in the shell.
+ *
+ * **Reduced motion is one line here rather than sixteen media queries.** Every
+ * transition in this client is a duration token away from stopping, so a
+ * person who has asked their machine for less movement gets a product that
+ * stops moving — including the parts of it written by somebody else, which is
+ * the half a per-widget rule could never reach (§7.2). The easing curve is
+ * left alone: with a zero duration there is nothing for it to shape.
+ */
 export function applyTokens(el: HTMLElement, t: Tokens): void {
+  const still = prefersStillness();
   for (const [name, value] of Object.entries(cssVariables(t))) {
-    el.style.setProperty(name, value);
+    el.style.setProperty(name, still && /^--hc-motion-(fast|base|slow)$/.test(name) ? '0s' : value);
   }
   // `color-scheme` is what makes form controls, scrollbars and the canvas the
   // browser paints behind the page follow the skin. Without it a dark skin gets

@@ -47,6 +47,15 @@ export class HcTimer extends HcLayoutShell {
         background: var(--hc-accent-active, #ffb661);
         transition: width 1s linear;
       }
+      @media (prefers-reduced-motion: reduce) {
+        /* The one duration in the product that is not a token: this is a
+           second of real time being shown, not a UI flourish, so it cannot
+           come off the motion scale. It still stops when somebody asks the
+           machine for stillness — the bar jumps rather than sweeps. */
+        .fill {
+          transition: none;
+        }
+      }
     `,
   ];
 
