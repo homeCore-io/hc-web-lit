@@ -165,10 +165,16 @@ export class HcDevicePill extends HcLayoutShell {
       const id = this.device?.device_id;
       if (id !== undefined) this.onPick?.(id);
     });
-    attachInspect(this, () => {
-      const id = this.device?.device_id;
-      if (id !== undefined) this.onDetails?.(id);
-    });
+    // A tap on a pill aims the controls below it — the page says so in words
+    // right there — so only the hold opens the sheet here.
+    attachInspect(
+      this,
+      () => {
+        const id = this.device?.device_id;
+        if (id !== undefined) this.onDetails?.(id);
+      },
+      { tap: false },
+    );
   }
 
   override willUpdate(changed: Map<string, unknown>): void {

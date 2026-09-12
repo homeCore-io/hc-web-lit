@@ -30,7 +30,7 @@ import { selectDevices, type SelectionContext } from '../core/selection.js';
 import { icon, iconFor, metricVar } from '../design/icons.js';
 import { registerWidget } from '../core/registry.js';
 import { HcLayoutShell } from '../sdk/shell.js';
-import { attachInspect } from './hold.js';
+import { attachInspect, hasInspect } from './hold.js';
 import './hc-controls.js';
 
 @customElement('hc-device-card')
@@ -117,13 +117,21 @@ export class HcDeviceCard extends HcLayoutShell {
   @state() private pending: boolean | undefined;
 
   override firstUpdated(): void {
-    // Hold to inspect (§5.10). On the host rather than in the template,
+    // Opening the device (§5.10). On the host rather than in the template,
     // because the shell owns the markup now — and once, because the gesture
     // is the element's and not the render's.
-    attachInspect(this, () => {
-      const id = this.chosen?.device_id;
-      if (id !== undefined) this.onDetails?.(id);
-    });
+    //
+    // **Only when nothing else has given it one.** A set attaches the gesture
+    // to every card it builds, so a generic card inside one had it twice and
+    // opened the sheet twice on a single tap. The set has to be the one that
+    // can, because it also holds cards written by somebody else (§7.2) — so
+    // this is the case of a card standing on its own.
+    if (!hasInspect(this)) {
+      attachInspect(this, () => {
+        const id = this.chosen?.device_id;
+        if (id !== undefined) this.onDetails?.(id);
+      });
+    }
   }
 
   override willUpdate(changed: Map<string, unknown>): void {

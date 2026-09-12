@@ -54,12 +54,12 @@ export class HcDeviceGrid extends LitElement {
        line. Five switches in two columns are two shapes to scan instead of
        one.
 
-       Each row draws its own hairline all the way round, as a shadow rather
-       than a border so it costs no layout and **overlaps its neighbour's** —
-       which is what leaves one line between every pair and one at the outside,
-       with no rule anywhere that has to know which row is first, last, or at
-       the end of a line. A column count nobody has to state, and no arithmetic
-       to get wrong.
+       **A line between the rows, and none around them.** Each row used to
+       draw its own hairline all the way round, overlapping its neighbour's, so
+       that a wrapping grid needed no first-or-last rule anywhere. It also drew
+       a box around every row — which is a table, and reads as one. A list is
+       rows with a line between them. In one column that is every row but the
+       first, which is one selector and no arithmetic at all.
 
        Drawn by the rows and not by the gaps, because a section with one device
        in it has one row and the rest of the line is *nothing* — a container
@@ -110,7 +110,11 @@ export class HcDeviceGrid extends LitElement {
       --hc-shell-surface: var(--hc-surface-raised, #141922);
       --hc-shell-edge: 0;
       --hc-shell-radius: 0;
-      box-shadow: 0 0 0 var(--hc-stroke-width, 1px) var(--hc-stroke-hairline, #262d38);
+    }
+    /* Inset, so it is drawn inside the row and costs no layout — the reason
+       the ring was a shadow too. */
+    .list > * + * {
+      box-shadow: inset 0 var(--hc-stroke-width, 1px) 0 0 var(--hc-stroke-hairline, #262d38);
     }
     .empty {
       color: var(--hc-ink-muted, #8b95a4);

@@ -6,6 +6,7 @@
  * looking at it. These close the last three that §7.3 names by name.
  */
 import { describe, expect, it } from 'vitest';
+import { attachInspect } from '../src/widgets/hold.js';
 import { HcDeviceGrid } from '../src/widgets/hc-device-grid.js';
 import { HcLayoutShell } from '../src/sdk/shell.js';
 import '../src/widgets/hc-fan.js';
@@ -235,12 +236,13 @@ describe('a set is the object, and a row in it is not', () => {
     expect(css).toMatch(/\.flowing\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fit/);
   });
 
-  it('draws the separators on the rows, so one row is a whole row', () => {
-    // A container painting the surface underneath puts an empty half-width box
-    // beside the only leak sensor in the house. A shadow costs no layout and
-    // overlaps its neighbour's, which leaves one line between every pair and
-    // one at the outside with no first-or-last rule anywhere.
-    expect(css).toMatch(/\.list > \*\s*\{[^}]*box-shadow:[^;]*hairline/);
+  it('draws a line between the rows and none around them', () => {
+    // A box around every row is a table, and reads as one. A list is rows with
+    // a line between them — in one column, every row but the first. Inset, so
+    // it costs no layout, which is why the ring it replaces was a shadow too.
+    expect(css).toMatch(/\.list > \* \+ \*\s*\{[^}]*box-shadow:\s*inset[^;]*hairline/);
+    // And the container still paints nothing: one leak sensor is one full-width
+    // row, not a half-width box beside an empty one.
     expect(css).not.toMatch(/\.list\s*\{[^}]*background:/);
   });
 });
@@ -308,5 +310,78 @@ describe('a widget that is one line of a room rather than the subject of a page'
 
     const card = await mount('hc-keypad', pico, false);
     expect(card.shadowRoot?.querySelectorAll('.keys .key')).toHaveLength(5);
+  });
+});
+
+describe('opening a device, and the controls that must not', () => {
+  /** A row with a control in it, wired the way a set wires one. */
+  const row = (): { el: HTMLElement; opened: string[] } => {
+    const el = document.createElement('div');
+    el.innerHTML = '<span class="primary">Ceiling Fan</span><select><option>Off</option></select>';
+    document.body.append(el);
+    const opened: string[] = [];
+    attachInspect(el, () => opened.push('sheet'));
+    return { el, opened };
+  };
+
+  const press = (target: Element, type: string): void => {
+    target.dispatchEvent(new MouseEvent(type, { bubbles: true, composed: true, button: 0 }));
+  };
+
+  it('does not open when a press lands on a control', async () => {
+    // **The way the household found it.** A native select opens its popup on
+    // pointerdown and the platform keeps the pointer, so no pointerup ever
+    // comes back to cancel the hold — the speed menu opened, and half a second
+    // later the details sheet opened on top of it.
+    const { el, opened } = row();
+    const select = el.querySelector('select') as HTMLElement;
+    press(select, 'pointerdown');
+    await new Promise((r) => setTimeout(r, 700));
+    expect(opened, 'the menu is the menu').toEqual([]);
+  });
+
+  it('does not open when a control is clicked', async () => {
+    const { el, opened } = row();
+    const select = el.querySelector('select') as HTMLElement;
+    press(select, 'pointerdown');
+    press(select, 'pointerup');
+    press(select, 'click');
+    expect(opened, 'a flicked switch is not a request to read about it').toEqual([]);
+  });
+
+  it('opens on a tap on the row itself', async () => {
+    // Hold was the whole gesture, which made the only way to a device's
+    // details a gesture with no affordance: nothing on a row says "press me
+    // for half a second".
+    const { el, opened } = row();
+    const name = el.querySelector('.primary') as HTMLElement;
+    press(name, 'pointerdown');
+    press(name, 'pointerup');
+    press(name, 'click');
+    expect(opened).toEqual(['sheet']);
+  });
+
+  it('opens once for a hold, not again for the click behind it', async () => {
+    const { el, opened } = row();
+    const name = el.querySelector('.primary') as HTMLElement;
+    press(name, 'pointerdown');
+    await new Promise((r) => setTimeout(r, 700));
+    press(name, 'click');
+    expect(opened).toEqual(['sheet']);
+  });
+
+  it('leaves a row whose tap already means something', async () => {
+    // A light pill aims the colour wheel at whatever you touch, and the page
+    // says so in words right above it.
+    const el = document.createElement('div');
+    el.innerHTML = '<span class="primary">Desk Lamp</span>';
+    document.body.append(el);
+    const opened: string[] = [];
+    attachInspect(el, () => opened.push('sheet'), { tap: false });
+    const name = el.querySelector('.primary') as HTMLElement;
+    press(name, 'pointerdown');
+    press(name, 'pointerup');
+    press(name, 'click');
+    expect(opened).toEqual([]);
   });
 });
