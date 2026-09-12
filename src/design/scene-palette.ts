@@ -66,8 +66,20 @@ const PALETTES: Record<string, ScenePalette> = {
   off: { dot: '#5d6675', gradient: ['#5d6675', '#2a2f3a'] },
 };
 
-/** Longest key first, so a specific name beats a word inside it. */
-const KEYS = Object.keys(PALETTES).sort((a, b) => b.length - a.length);
+/**
+ * Longest key first, so a specific name beats a word inside it, and matched on
+ * whole words.
+ *
+ * **`includes` is not enough, and the Flutter version it came from has the
+ * bug.** A raw substring test makes "off" match *Office*, so a scene called
+ * "Office evening" came out the grey of a scene that turns things off — and
+ * "light" would claim "Nightlight" if the longest key did not happen to win
+ * first. Word boundaries settle both properly rather than by luck of length.
+ * A key with a space in it ("on air") is still one phrase to match.
+ */
+const KEYS: readonly { key: string; re: RegExp }[] = Object.keys(PALETTES)
+  .sort((a, b) => b.length - a.length)
+  .map((key) => ({ key, re: new RegExp(`\\b${key}\\b`) }));
 
 /**
  * A stable hue for a name nobody wrote a palette for.
@@ -93,9 +105,9 @@ function derived(name: string): ScenePalette {
 /** The palette for a scene called this. Never absent. */
 export function paletteFor(name: string): ScenePalette {
   const n = name.toLowerCase();
-  for (const key of KEYS) {
+  for (const { key, re } of KEYS) {
     const found = PALETTES[key];
-    if (found !== undefined && n.includes(key)) return found;
+    if (found !== undefined && re.test(n)) return found;
   }
   return derived(n);
 }
@@ -123,5 +135,5 @@ export function orbFor(name: string): string {
 
 /** Exported so a test can pin that the table is reachable and complete. */
 export function paletteNames(): string[] {
-  return [...KEYS];
+  return KEYS.map((k) => k.key);
 }

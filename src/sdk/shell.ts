@@ -101,13 +101,18 @@ export abstract class HcLayoutShell extends LitElement {
       min-width: 0;
       flex: 1 1 auto;
     }
+    /* **Smaller than the row it is in.** At 2.25rem the tile was exactly the
+       height of a 36px row, so it ran edge to edge and a device that was on
+       read as a solid block of accent with a name beside it rather than as a
+       mark. Inset, and rounder, so the tint is a glow behind the mark instead
+       of a tile in its own right. */
     .tile {
       flex: none;
       display: grid;
       place-items: center;
-      width: 2.25rem;
-      height: 2.25rem;
-      border-radius: var(--hc-radius-sm, 8px);
+      width: 1.75rem;
+      height: 1.75rem;
+      border-radius: var(--hc-radius-md, 14px);
       background: color-mix(
         in srgb,
         var(--hc-shell-colour) var(--hc-shell-tint),
@@ -122,8 +127,8 @@ export abstract class HcLayoutShell extends LitElement {
     }
     .tile ::slotted(*),
     .tile svg {
-      width: 1.25rem;
-      height: 1.25rem;
+      width: 1.125rem;
+      height: 1.125rem;
       fill: none;
       stroke: currentColor;
       stroke-width: 1.6;

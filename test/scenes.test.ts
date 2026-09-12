@@ -229,3 +229,22 @@ describe('the colour a scene is recognised by', () => {
     expect(orb).toContain('#b98bff 58%');
   });
 });
+
+describe('matching a scene name to a palette', () => {
+  it('does not let a key match inside a longer word', () => {
+    // The Flutter version this came from tests `name.contains(key)`, so "off"
+    // matches *Office* — and a scene called "Office evening" came out the grey
+    // of one that turns things off.
+    expect(paletteFor('Office evening').dot).not.toBe(paletteFor('Deck Off').dot);
+    expect(paletteFor('Deck Off').dot).toBe('#5d6675');
+  });
+
+  it('still matches a key that is a whole word in a longer name', () => {
+    expect(paletteFor('Deck On').dot).not.toBe(paletteFor('Deck Off').dot);
+    expect(paletteFor('Savanna sunset').dot).toBe('#ff6b4a');
+  });
+
+  it('matches a key that is a phrase', () => {
+    expect(paletteFor('On Air').dot).toBe('#ff5b5b');
+  });
+});
