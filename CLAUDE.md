@@ -5,6 +5,8 @@
 > picks it up per session.
 
 **Status:** Phases 0–3 done, Phase 4 all but the last of §7.3's family.
+Phase 10 is in progress: both authoring modes, containers (§14.2b), and
+host-enforced edit mode are in.
 The boxes in §18.3 are kept ticked as work lands; an item naming something
 that was deliberately not built says so on the line rather than staying blank.
 **Supersedes:** the Flutter/wasm implementation of hc-web
@@ -1894,6 +1896,81 @@ heatmaps, coverage — are canvas (§11.6), where thousands of primitives and
 per-pixel fields actually live. A dashboard holds tens of elements, which is the
 regime DOM is comfortable in.
 
+### 14.2b Containers — a frame that holds what is in it
+
+**Everything before this arranged elements beside each other.** Two cards can
+overlap, a group can be drawn round a cluster, a rectangle can sit behind one —
+but nothing was ever *in* anything. `core/groups.ts` was blunt about it in its
+own words: *"This is not a container. A real group in a drawing tool is a node
+in the document tree with its own frame, its own coordinate space and its own
+clipping. Ours is a tag that several elements agree on."* It also predicted the
+fix: *"A path is the shape that survives it."* The tree was there; what was
+missing was somewhere to measure from.
+
+`core/frames.ts` is that, and it needs **one new key**: `frame` on a group box,
+saying whether its rect is a decoration drawn round some elements or the origin
+they are measured from. Membership is already `group: "Wall/Lights"` in the
+element's own config. The rule, and there is only one: *an element's rectangle
+is stated in the space of its nearest framed ancestor.*
+
+**Which frames are real elements, and which are backdrops.** A positioned frame
+can be drawn *behind* its members, because they know where they are. Three
+kinds cannot:
+
+| | |
+|---|---|
+| `stack: true` | a column — a member that grows pushes the ones below it down, which only happens if they are really its children |
+| `fit: "content"` | as tall as what is in it — a measurement of its members, and a box whose members are drawn elsewhere on the page has none to measure |
+| nested inside either | its position comes from the flow while its contents would sit at page coordinates, which is two halves of one thing |
+
+`stack` is **not** inherited. A container that does not stack lays its members
+out at their stored rectangles, which are already stated in its own space — the
+same arithmetic the page does, one level in. That is what lets the house's
+footer be a modes block *beside* a scenes block and still be as tall as what is
+in it.
+
+**Heights are measured, not stated, wherever the content decides them.**
+`fit: "content"` on a widget's config says a placement is as tall as what it
+holds; on a group box it says the same of a container; `fit: "page"` says a
+placement reaches the foot of the page, which is what the ground a page is
+painted on and the hairline between its columns both want. A column is
+content-height always — its drawn height is what its author saw on the day, and
+keeping it as a floor is what a household calls *not dynamic*. `clip` is how a
+container asks for the size it was drawn.
+
+And the page itself: **as tall as what is on it**, in both directions. A canvas
+that could only grow left every room but the busiest ending in a screenful of
+ground, because the number its author drew was a guess about one room. The one
+thing left out of that measurement is a placement drawn *to* the page, which
+would otherwise set the height it reads.
+
+**A container paints nothing.** It is a coordinate space and a layout; the
+ground belongs to the page, which these documents draw explicitly with a shape.
+A raised surface on a container put a panel the same colour as every device row
+behind every device row, and the household's words for the result were that the
+widgets blend together — a page with two grounds on it.
+
+**A container is structure, not a cluster** (§14.1's groups). The cluster
+gesture was written for groups somebody assembled, and the value of one is that
+an ordinary press holds all of it. Sections and columns are groups too, so the
+press walk starts at the deepest container an element is in rather than at the
+page. Stepping out still wins in both directions: a second press goes further
+in, Escape goes out, and out of a container is how somebody deliberately takes
+hold of a whole section again.
+
+**A section goes when its set does.** `hide_when_empty` was something
+`scene_row` answered inside itself, which is as far as it went — the row drew
+nothing and its heading, its rule and the space they were drawn in all stayed.
+It is a question about the section now, asked from outside the widget: a
+container holding something that *chooses* devices is as present as those
+members are, and one holding none of them hides only when everything in it is
+hidden. That second half is what leaves a band of three labels alone.
+
+**Nothing saved changes.** No document in this household sets `frame`, so
+`originOf` returns the page origin for every path in every one of them and
+every layout resolves to precisely the numbers it did before. There is no
+migration because there is nothing to migrate.
+
 ### 14.3 The document
 
 **Dashboard document format — already exists.** It is
@@ -2364,8 +2441,17 @@ not a failure of it.
       that is held and does nothing reads as broken rather than as strict. The
       property panel's catalogue is untouched and still appends at the bottom
 - [ ] Decorative elements: image, icon, text — no device binding, action optional
-- [ ] Host-enforced `mode: "edit"`: pointer capture, `ctx.action` refuses to
-      dispatch (§14.2)
+- [x] Host-enforced `mode: "edit"`: pointer capture, `ctx.action` refuses to
+      dispatch (§14.2). **Both halves, and it was not theoretical**: the move
+      grip was a 24px triangle in one corner and the rest of a card was live,
+      so pressing the toggle in a device row while arranging the page switched
+      a real outlet. The body is inert in edit mode — on the body and not the
+      placement, because the placement also holds the handles, and the press
+      still reaches the surface, which picks by hit test rather than by event
+      target. The host refusing is the other half and the one that holds when
+      a widget gets an event anyway: an extension's control, something the
+      surface cannot cover, a keyboard. It says why, because a control that
+      silently does nothing is the worst kind
 - [ ] Undo/redo stack
 - [x] Expression editor: SyntaxError on blur, live preview against real state.
       An `ƒx` toggle on every value-shaped field turns a literal into
