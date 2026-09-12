@@ -157,24 +157,32 @@ export class HcApp extends LitElement {
       color: var(--hc-ink, #e9edf2);
       font-family: var(--hc-font-body, system-ui, sans-serif);
     }
+    /* **A toolbar is a desk surface, like a dialog and like the page.** This
+       was the last thing still drawn at the skin's comfortable step — 44px
+       buttons and a 14px label that is on no ramp — while everything it sits
+       above is compact. In Arrange, where the row carries a tool menu, undo,
+       redo and four page verbs, its content came to 1474px in 1328 and the
+       row wrapped: the connection status dropped onto a line of its own and
+       the header stood 94px tall. */
     header {
+      --hc-density-min-tap: 30px;
       display: flex;
       align-items: center;
       /* Wrapping, because a phone is a stated target and this row does not fit
          one: at 390px the status was pushed 180px past the right edge and took
          the whole document with it, so every page scrolled sideways. */
       flex-wrap: wrap;
-      gap: 0.5rem 1rem;
-      padding: 0.75rem 1rem;
+      gap: 0.5rem 0.75rem;
+      padding: 0.5rem 1rem;
       border-bottom: 1px solid var(--hc-stroke-hairline, #262d38);
-      font-size: 0.875rem;
+      font-size: var(--hc-text-body-size, 13px);
     }
     header select {
       max-width: 40vw;
     }
     header button {
       min-height: var(--hc-density-min-tap, 44px);
-      padding: 0 0.75rem;
+      padding: 0 0.5rem;
       border: 1px solid var(--hc-stroke-hairline, #262d38);
       border-radius: var(--hc-radius-sm, 8px);
       background: var(--hc-surface-raised, #141922);
