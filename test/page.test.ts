@@ -221,6 +221,90 @@ describe('@room reads two ways', () => {
   });
 });
 
+describe('a device picked on the page, which the shell must not wipe', () => {
+  /**
+   * A room page whose one widget is there only while something is picked —
+   * the shape the household's SETS band has, where a colour wheel and two
+   * sliders all aim at `@picked`.
+   */
+  const room = (): DashboardDefinition =>
+    base({
+      widgets: [{ id: 'knob', type: 'text', config: { text: 'aim', hide_with: '@picked' } }],
+      layouts: [
+        {
+          breakpoint: 'desktop',
+          columns: 12,
+          row_height: 100,
+          gap: 8,
+          placements: [{ widget_id: 'knob', x: 0, y: 0, w: 2, h: 1 }],
+        },
+      ],
+    });
+
+  // The placement's wrapper is drawn either way; a hidden widget is an empty
+  // body inside it, which is what `draw` returns `nothing` for.
+  /** The lamp itself, because a control aimed at a device the house does not
+   *  have is aimed at nothing (`core/visibility.ts`). */
+  const lamp = () => ({
+    device_id: 'desk-lamp',
+    name: 'Office Desk Lamp',
+    device_type: 'light',
+    area: 'office',
+    available: true,
+    attributes: { on: true },
+  });
+
+  const showing = (el: HcPage): boolean =>
+    el.shadowRoot?.querySelector('[data-widget="knob"] hc-text') != null;
+
+  const pick = (el: HcPage, id: string): void => {
+    (el as unknown as { env: () => { onPick?: (d: string) => void } }).env().onPick?.(id);
+  };
+
+  it('keeps what was picked when the shell renders again', async () => {
+    // **The bug, and it was reported as "I click the desk lamp and the
+    // functions appear and then disappear on their own".** The pick used to be
+    // written back into `context`, which the shell owns and binds — and
+    // lit-html re-commits an object-valued property binding on *every* render
+    // whether its identity changed or not, so one render of the shell put the
+    // old context back. Not a change of room: the same object, re-committed.
+    // A house that streams device updates re-renders the shell every few
+    // seconds, so the controls never survived long enough to be used.
+    const el = await mount(room());
+    el.store?.upsert(lamp() as never);
+    el.context = { room: 'office' };
+    await el.updateComplete;
+    expect(showing(el), 'nothing picked yet').toBe(false);
+
+    pick(el, 'desk-lamp');
+    await el.updateComplete;
+    expect(showing(el), 'picked').toBe(true);
+
+    // Exactly what the shell does: hand over the same context object again.
+    el.context = { room: 'office' };
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(showing(el), 'still picked after the shell renders').toBe(true);
+  });
+
+  it('lets go of it on the way into another room', async () => {
+    // The room page is one document reused for every room, so nothing else
+    // would clear it — and the office's lamp would still be what `@picked`
+    // meant on the kitchen page.
+    const el = await mount(room());
+    el.store?.upsert(lamp() as never);
+    el.context = { room: 'office' };
+    await el.updateComplete;
+    pick(el, 'desk-lamp');
+    await el.updateComplete;
+    expect(showing(el)).toBe(true);
+
+    el.context = { room: 'kitchen' };
+    await el.updateComplete;
+    expect(showing(el), 'another room, nothing in hand').toBe(false);
+  });
+});
+
 describe('what a composed page does on a narrower screen', () => {
   const composed = (fit: 'scroll' | 'contain' | 'cover'): DashboardDefinition =>
     base({

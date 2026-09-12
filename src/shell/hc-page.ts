@@ -774,6 +774,39 @@ export class HcPage extends LitElement {
    */
   @property({ attribute: false }) context: SelectionContext = {};
 
+  /**
+   * The device somebody touched, which is this page's half of the seam.
+   *
+   * **Held here rather than written back into `context`, which is the host's.**
+   * `onPick` used to do `this.context = { ...this.context, picked }` — and the
+   * host binds `.context=${this.roomContext}`, so the next render of the shell
+   * put it straight back. Not because the room changed: lit-html re-commits an
+   * **object-valued** property binding on every render whether or not its
+   * identity changed (`!isPrimitive(value)` is its own "has changed"), so one
+   * render of `hc-app` was enough. In a house that streams device updates
+   * something re-renders the shell every few seconds, so picking a lamp made
+   * the controls for it appear and then vanish on their own, with nothing on
+   * screen to say why — reported from the office, reproduced with one forced
+   * render of the shell.
+   *
+   * A room and a pick are owned by different elements and now live in
+   * different places, which is the fix and also the simpler arrangement: the
+   * host says which room a page is for, the page says what is in hand.
+   */
+  @state() private pickedDevice: string | undefined;
+
+  /**
+   * `@room` and `@picked` together, which is what every widget resolves
+   * against.
+   *
+   * One reader for both halves so no site has to remember there are two.
+   */
+  private get selection(): SelectionContext {
+    return this.pickedDevice === undefined
+      ? this.context
+      : { ...this.context, picked: this.pickedDevice };
+  }
+
   /** The host's history reader — §5.9's `ctx.history`, passed rather than held. */
   @property({ attribute: false }) onFetch: HistoryFetch | undefined;
 
@@ -814,6 +847,18 @@ export class HcPage extends LitElement {
     // stopped arranging some time ago.
     if (changed.has('mode') && this.mode !== 'edit' && this.picked.size > 0) {
       this.picked = new Set();
+    }
+
+    // **A lamp in hand belongs to the room it is in.** The room page is one
+    // document reused for every room, so nothing else would clear the pick on
+    // the way out — and the office's desk lamp would still be what `@picked`
+    // meant on the kitchen page, aiming a colour wheel at a light in another
+    // room. On the room rather than on the object: the host is free to hand
+    // over an equal context it happened to rebuild, and that is not somebody
+    // walking into another room.
+    if (changed.has('context')) {
+      const was = changed.get('context') as SelectionContext | undefined;
+      if (was?.room !== this.context.room) this.pickedDevice = undefined;
     }
 
     if (!changed.has('doc')) return;
@@ -1177,7 +1222,7 @@ export class HcPage extends LitElement {
     for (const item of items) {
       const w = byId.get(item.id);
       if (w === undefined || this.stackedIn(w) !== box.path) continue;
-      const shown = isVisible(w.config ?? {}, devices, this.context, w.type);
+      const shown = isVisible(w.config ?? {}, devices, this.selection, w.type);
       if (selectsDevices(w.type, w.config ?? {})) {
         if (shown) return true;
         chooses = true;
@@ -2958,11 +3003,11 @@ export class HcPage extends LitElement {
   private env(): MountEnv {
     return {
       store: this.store,
-      context: this.context,
+      context: this.selection,
       // The page owns `@picked`, because every other element resolving that
       // token is resolving it here (§14.1).
       onPick: (deviceId: string) => {
-        this.context = { ...this.context, picked: deviceId };
+        this.pickedDevice = deviceId;
       },
       // Tapping a room opens it: the same document, a different `@room`.
       onOpenRoom: (room, page) => {
@@ -3021,7 +3066,8 @@ export class HcPage extends LitElement {
     // An element the document says to hide is not drawn at all, rather than
     // drawn and hidden: the SETS controls exist to aim at a light you have
     // touched, and before you touch one there is nothing to aim at (§14.1).
-    if (!isVisible(w.config ?? {}, this.store?.list() ?? [], this.context, w.type)) return nothing;
+    if (!isVisible(w.config ?? {}, this.store?.list() ?? [], this.selection, w.type))
+      return nothing;
 
     // A template instance stands for another widget entirely, so what to draw
     // is decided before which tag draws it (§5.4).
