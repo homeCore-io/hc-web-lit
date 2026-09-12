@@ -2030,7 +2030,57 @@ config.
 
 ## 15. Design tokens
 
-### 15.0 Icons — Phosphor, inlined
+### 15.0 Three scales, and a test for each
+
+**A system nobody applies is a system that does not exist.** The token set in
+this section was right and largely unused. Measured on the household's office
+page: **twelve font sizes** where the ramp defines seven, **eleven box-shadows**
+where the set defines two, and **123 raw spacing values** against 31 using the
+space unit. That is what "the whole site needs refining" turned out to mean,
+and none of it was a matter of taste.
+
+**Type — the ramp had no middle.** It ran 26, 16, 14, 13, 12.5, 11, 10: one
+display size and then six inside six pixels, with `title` three pixels above
+body. Nothing could take the lead using the scale, so every widget that needed
+presence invented a size — 34px in a device panel, 20 in a media card, 18 in a
+gauge, a stepper and a heading. The top three are a scale now (28, 20, 16) and
+the bottom four stay bunched on purpose: those are the UI sizes, and a dense
+row of devices wants gradations rather than steps you can see.
+
+`hc-text` — the most-used widget in the product — sized in `rem`, a fraction of
+the browser root, and was the source of every off-ramp size on the page. It is
+a calc against the body token. Not `em`: that compounds through every wrapper
+that sets a size, and the same `scale` came out 8.84px in one placement and
+11.44 in another.
+
+**Depth — a knob is not a card.** The set had `card` and `overlay` and nothing
+for the small raised things, so six drop shadows were written by hand, several
+differing only by a decimal, and all of them dark-only literals — on the light
+skin every one was a black smudge. `control` is the third height, derived per
+skin like the others. Insets stay literal: a rim light drawn inside a box is
+not a height off the page.
+
+**Space — 2, 4, 6, 8, 12, 16, 20, 24, 32.** Fifteen declarations were on no
+grid at all. `em` is exempt (prose spaces itself against its own type size), as
+is a negative value (that centres something rather than spacing it).
+
+**Semantic colour is not the accent.** Accent means a device is on; a wet floor
+is not a device being on. `severityOf` (`core/attention.ts`) runs the checks
+`worth_knowing` already had, so there is one definition of what is worth
+noticing — water and a declared fault are critical, a lock or door left open is
+a warning, an unreachable device is offline. Batteries are deliberately absent:
+a battery needs a threshold somebody chose, and a page of sensors each a shade
+of amber because one is at 19% is a page where the colour has stopped meaning
+anything. The word colours, not the row — a row washed red for one open door is
+an alarm about a house that is fine.
+
+`styling.test.ts` fails on a text token that is not a role, a fallback that
+disagrees with the ramp, a non-inset shadow written as a black literal, and a
+gap or padding off the scale. **An invented token is the worst of these**: a
+`var(--hc-ink-dim, #93a0b4)` compiles, renders, and silently ignores every
+skin, while reading as though it were part of the system.
+
+### 15.0.1 Icons — Phosphor, inlined
 
 The marks were hand-drawn here first: 32 stroke paths on a 24×24 grid, added by
 whoever needed one. The household's verdict on them was that the icons suck,
