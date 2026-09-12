@@ -117,6 +117,41 @@ function notice(d: DeviceState, kind: Watch, detail: string, weight: number): No
   };
 }
 
+/** How loudly one device is asking to be looked at. */
+export type Severity = 'critical' | 'warn' | 'offline';
+
+/**
+ * The severity of one device's own state, for a row to draw it with.
+ *
+ * **The house already knew, and the rows did not show it.** `worth_knowing`
+ * derives exactly this and puts it in a panel; meanwhile a wet leak sensor
+ * drew "Wet" in the same grey as "Dry", with the same grey droplet beside it,
+ * because the generic row is what draws a water sensor and the generic row had
+ * no notion of severity. The single most important state in a house was
+ * indistinguishable from the good case at a glance.
+ *
+ * Same checks, so there is one definition of what is worth noticing and no
+ * second opinion to drift from it. Nothing here invents urgency either: every
+ * kind is a declared attribute or a device the house says it cannot reach.
+ *
+ * **Batteries are left out on purpose.** A battery needs a threshold somebody
+ * chose, which is a `worth_knowing` configuration rather than a property of
+ * the device — and a page of sensors each a shade of amber because one is at
+ * 19% is a page where the colour has stopped meaning anything.
+ */
+export function severityOf(d: DeviceState): Severity | undefined {
+  let worst: Notice | undefined;
+  for (const kind of ['water', 'faults', 'locks', 'offline', 'open'] as Watch[]) {
+    const found = CHECKS[kind](d, {});
+    if (found !== undefined && (worst === undefined || found.weight > worst.weight)) worst = found;
+  }
+  if (worst === undefined) return undefined;
+  if (worst.kind === 'offline') return 'offline';
+  // Water and a declared fault are the two the house cannot wait on; a lock
+  // left open and a door left open are worth seeing, not worth alarming about.
+  return worst.weight >= 600 ? 'critical' : 'warn';
+}
+
 /** Every `watch` name this client understands. */
 export function knownWatches(): Watch[] {
   return Object.keys(CHECKS) as Watch[];

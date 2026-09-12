@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { knownWatches, noticesFor } from '../src/core/attention.js';
+import { knownWatches, noticesFor, severityOf } from '../src/core/attention.js';
 import type { DeviceState } from '../src/core/device.js';
 
 const d = (over: Partial<DeviceState> & { device_id: string }): DeviceState => ({
@@ -128,5 +128,54 @@ describe('noticesFor', () => {
   it('ignores a watch name it does not know rather than throwing', () => {
     expect(() => noticesFor({ watch: ['sunspots'] }, [d({ device_id: 'a' })])).not.toThrow();
     expect(knownWatches()).toContain('batteries');
+  });
+});
+
+describe('how loudly one device is asking to be looked at', () => {
+  const dev = (attributes: Record<string, unknown>, over: Record<string, unknown> = {}) =>
+    ({
+      device_id: 'd1',
+      name: 'Thing',
+      available: true,
+      attributes,
+      last_seen: '2026-09-12T00:00:00Z',
+      ...over,
+    }) as never;
+
+  it('calls water and a declared fault critical', () => {
+    // **The most important state in a house was drawn in the same grey as the
+    // good case.** A water sensor is drawn by the generic row, which had no
+    // notion of severity, so "Wet" and "Dry" were the same colour with the
+    // same grey droplet beside them.
+    expect(severityOf(dev({ water_detected: true }))).toBe('critical');
+    expect(severityOf(dev({ fault: true }))).toBe('critical');
+    expect(severityOf(dev({ error: 'jammed' }))).toBe('critical');
+  });
+
+  it('calls a lock or a door left open a warning, not an alarm', () => {
+    expect(severityOf(dev({ locked: false }))).toBe('warn');
+    expect(severityOf(dev({ open: true }))).toBe('warn');
+  });
+
+  it('says offline for a device the house cannot reach', () => {
+    expect(severityOf(dev({}, { available: false }))).toBe('offline');
+  });
+
+  it('is quiet about a house that is fine', () => {
+    expect(severityOf(dev({ water_detected: false, locked: true, open: false }))).toBeUndefined();
+    expect(severityOf(dev({ on: true, brightness_pct: 40 }))).toBeUndefined();
+  });
+
+  it('leaves batteries to whoever chose the threshold', () => {
+    // A battery needs a number somebody picked, which is a `worth_knowing`
+    // configuration rather than a property of the device — and a page of
+    // sensors each a shade of amber because one is at 19% is a page where the
+    // colour has stopped meaning anything.
+    expect(severityOf(dev({ battery_pct: 4 }))).toBeUndefined();
+    expect(severityOf(dev({ battery_low: true }))).toBeUndefined();
+  });
+
+  it('reports the worst of several at once', () => {
+    expect(severityOf(dev({ water_detected: true, open: true }))).toBe('critical');
   });
 });

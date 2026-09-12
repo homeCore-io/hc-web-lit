@@ -25,6 +25,7 @@ import type { DeviceState } from '../core/device.js';
 import type { CommandRequest } from '../core/widget.js';
 import { formatReading, hasPowerState, readingOf } from '../core/facet.js';
 import { effectiveName, isOn, levelOf, sceneKind } from '../core/present.js';
+import { severityOf } from '../core/attention.js';
 import { withoutRoom } from '../core/text.js';
 import { selectDevices, type SelectionContext } from '../core/selection.js';
 import { icon, iconFor, metricVar } from '../design/icons.js';
@@ -152,6 +153,26 @@ export class HcDeviceCard extends HcLayoutShell {
     // (§1.1) — so it takes its metric's colour rather than the on/off pair,
     // and a thermometer reads as an instrument instead of a lamp left off.
     if (d === undefined) return;
+
+    // **A state worth noticing outranks how the device is tinted.** A wet
+    // sensor is not interesting because of its metric, and a lock that failed
+    // is not interesting because it is on: the severity is the thing the row
+    // is now about, so it takes the mark as well as the word.
+    const severity = severityOf(d);
+    this.toggleAttribute('data-severity', severity !== undefined);
+    if (severity !== undefined) this.setAttribute('data-severity', severity);
+    if (severity !== undefined) {
+      const tone =
+        severity === 'critical'
+          ? 'var(--hc-accent-danger, #ff7b72)'
+          : severity === 'warn'
+            ? 'var(--hc-accent-warn, #ffc978)'
+            : 'var(--hc-accent-offline, #6b7686)';
+      this.style.setProperty('--hc-shell-colour', tone);
+      this.style.setProperty('--hc-shell-tint', '0%');
+      return;
+    }
+
     const on = isOn(d);
     const level = levelOf(d);
     if (on === true) {

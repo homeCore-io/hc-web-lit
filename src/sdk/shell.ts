@@ -218,6 +218,34 @@ export abstract class HcLayoutShell extends LitElement {
     :host([data-row]) .secondary {
       display: none;
     }
+    /* **A state worth noticing is coloured, wherever it is drawn.**
+
+       Here rather than in each widget, for the reason the switch and the open
+       gesture are: a row is a row, and a type-specific card written by anyone
+       — us today, an extension tomorrow — gets the treatment by setting one
+       attribute rather than by knowing the palette. Semantic colour is its own
+       vocabulary and deliberately not the accent: accent means a device is on,
+       and a wet floor is not a device being on.
+
+       The word only. A whole row washed in red for one open door is an alarm
+       about a house that is fine, which is how a person learns to stop looking
+       at the colour. */
+    :host([data-severity]) .badge,
+    :host([data-severity]) .secondary {
+      font-weight: 600;
+    }
+    :host([data-severity='critical']) .badge,
+    :host([data-severity='critical']) .secondary {
+      color: var(--hc-accent-danger, #ff7b72);
+    }
+    :host([data-severity='warn']) .badge,
+    :host([data-severity='warn']) .secondary {
+      color: var(--hc-accent-warn, #ffc978);
+    }
+    :host([data-severity='offline']) .badge,
+    :host([data-severity='offline']) .secondary {
+      color: var(--hc-accent-offline, #6b7686);
+    }
     .badge {
       flex: none;
       font-size: var(--hc-text-body-small-size, 12.5px);
