@@ -22,14 +22,15 @@ This was listed as a shipping target and measured as one — the household's
 verdict is that it will definitely not work on a phone — so the line now says
 what the product does.
 
-**A phone layout is a page somebody authors for a phone, and this client
-already draws one.** Not a theory: the household's own `Getting Started` page
-carries four layouts (mobile, tablet, desktop, tv) in the *packed* flow, and
-its mobile layout is a single column that reflows with no sideways scroll —
-checked by switching the breakpoint on it. So the phone gap is a question of
-authoring rather than of capability: a composed 1240px canvas cannot become a
-phone page, and a grid page already is one. Whoever takes the phone on should
-start from that page's shape and not from the room page's.
+**A phone layout is a page somebody authors for a phone**, not a smaller
+rendering of a composed one — and this client can draw one today. The
+household's `Getting Started` page proved it before it was deleted: four
+layouts (mobile, tablet, desktop, tv) in the *packed* flow, whose mobile layout
+was a single column that reflowed with no sideways scroll. So the phone gap is
+a question of authoring rather than of capability: a composed 1240px canvas
+cannot become a phone page, and a grid page already is one. Whoever takes the
+phone on starts from a packed layout with a `mobile` breakpoint, not from the
+room page's shape.
 
 ---
 
