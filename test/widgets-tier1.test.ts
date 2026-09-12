@@ -218,9 +218,19 @@ describe('a set is the object, and a row in it is not', () => {
     expect(css).toMatch(/\.list > \*,\s*\n?\s*\.pills > \*\s*\{[^}]*--hc-shell-radius:\s*0/);
   });
 
-  it('flows rows into as many columns as the width will take', () => {
-    // Each row ran the whole page to hold an icon, a name and one word.
-    expect(css).toMatch(/\.list\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fit/);
+  it('draws a list in one column, because that is what a list is', () => {
+    // The list type is the grid type in one column — its own tag says so — and
+    // it had drifted into flowing across as many columns as the width would
+    // take, which made it the grid type with extra steps. The room page names
+    // the list type for every section it has, so the household had already
+    // said which they wanted.
+    expect(css).toMatch(/\.list\s*\{[^}]*grid-template-columns:\s*1fr/);
+  });
+
+  it('still flows a grid, which is the type for that', () => {
+    // The argument for flowing is real where it applies: thirteen sensors down
+    // one column is a page of scrolling. It is the grid type's argument.
+    expect(css).toMatch(/\.flowing\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fit/);
   });
 
   it('draws the separators on the rows, so one row is a whole row', () => {

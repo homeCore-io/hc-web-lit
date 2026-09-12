@@ -295,11 +295,16 @@ export class HcMediaCard extends LitElement {
       overflow: hidden;
       box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
     }
+    /* **Transport is chrome, not state.** Accent is what this client uses to
+       say a device is *on*, and a media card was spending it on a progress
+       bar, a volume slider, a hover border and a play button the size of a
+       coin — four amber things on a card where nothing was on. Position is
+       not a state; it is the card telling you where it has got to. Ink. */
     .fill {
       display: block;
       height: 100%;
       border-radius: var(--hc-radius-pill, 999px);
-      background: var(--hc-accent-active, #ffb661);
+      background: var(--hc-ink, #e9edf2);
     }
     .controls {
       position: relative;
@@ -331,7 +336,7 @@ export class HcMediaCard extends LitElement {
         border-color var(--hc-motion-fast, 140ms) var(--hc-motion-curve, ease-out);
     }
     button:hover {
-      border-color: color-mix(in srgb, var(--hc-accent-active, #ffb661) 45%, transparent);
+      border-color: color-mix(in srgb, var(--hc-ink, #e9edf2) 30%, transparent);
     }
     /* **Play is the one button on the card somebody is looking for.** It was
        2.75rem against the others' 2.5, in the same square with the same
@@ -342,10 +347,10 @@ export class HcMediaCard extends LitElement {
       width: 3.25rem;
       height: 3.25rem;
       border-radius: var(--hc-radius-pill, 999px);
-      background: var(--hc-accent-active, #ffb661);
+      background: var(--hc-ink, #e9edf2);
       border-color: transparent;
       color: var(--hc-accent-on-primary, #06131f);
-      box-shadow: 0 4px 14px color-mix(in srgb, var(--hc-accent-active, #ffb661) 35%, transparent);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
     }
     button[data-primary]:hover {
       border-color: transparent;
@@ -395,7 +400,7 @@ export class HcMediaCard extends LitElement {
       max-width: 8rem;
       height: var(--hc-density-min-tap, 44px);
       margin: 0;
-      accent-color: var(--hc-accent-active, #ffb661);
+      accent-color: var(--hc-ink, #e9edf2);
       background: none;
       cursor: pointer;
     }

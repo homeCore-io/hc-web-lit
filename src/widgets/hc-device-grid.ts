@@ -39,11 +39,20 @@ export class HcDeviceGrid extends LitElement {
     /* **The set is the object; a row in it is not.**
 
        Thirteen bordered boxes stacked in a column read as thirteen things when
-       the point is one list, and each of them ran the full width of the page
-       to hold an icon, a name and one word — about five hundred pixels of
-       nothing down the middle, thirteen times. So the rows give up their
-       chrome to the set (the shell hooks, §5.8) and the set flows them into as
-       many columns as the width will take.
+       the point is one list. So the rows give up their chrome to the set (the
+       shell hooks, §5.8) and the set draws the edges.
+
+       **One column, because the document asked for one.** The list type is
+       the grid type in one column — its own tag says so — and it was flowing
+       into as many columns as the width would take, which made it the grid
+       type with extra steps. The room page names the list type for every
+       section it has; the household had already said which they wanted and
+       the widget was not listening. The argument for flowing was the five
+       hundred pixels of nothing down the middle of a wide row, and the
+       household has now looked at both: the empty middle is not waste, it is
+       what leaves the name and its control as the only two things on the
+       line. Five switches in two columns are two shapes to scan instead of
+       one.
 
        Each row draws its own hairline all the way round, as a shadow rather
        than a border so it costs no layout and **overlaps its neighbour's** —
@@ -60,9 +69,15 @@ export class HcDeviceGrid extends LitElement {
        row is a full-width row rather than a half of one. */
     .list {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(var(--hc-set-column, 17rem), 1fr));
+      grid-template-columns: 1fr;
       border-radius: var(--hc-radius-md, 14px);
       overflow: hidden;
+    }
+    /* A set that flows into as many columns as the width will take, which is
+       what the grid type is for and what the list type stopped being. */
+    .grid.flowing,
+    .list.flowing {
+      grid-template-columns: repeat(auto-fit, minmax(var(--hc-set-column, 17rem), 1fr));
     }
     /* One row, filling the height it was given. The room page asks for these
        in a 44px placement, which is a pill and not a card — and a row of
@@ -118,6 +133,26 @@ export class HcDeviceGrid extends LitElement {
   /** `grid` packs columns; `list` is one per row. */
   @property({ type: String }) mode: 'grid' | 'list' = 'grid';
 
+  /**
+   * How many columns the author wants, rather than as many as the width takes.
+   *
+   * **The flow is a default, not a rule.** A set flows into as many columns as
+   * it can fit, which is right for a wall of thirteen sensors and wrong for a
+   * short list somebody wants to read down: five switches in two columns are
+   * two shapes to scan instead of one, and the household's verdict comparing
+   * this to the client it replaces was that a single full-width list is
+   * calmer. The empty middle of a wide row is not waste — it is what makes the
+   * name and its control the only two things on the line.
+   *
+   * Absent means the flow decides, so every set that has not asked is exactly
+   * as it was.
+   */
+  private get columns(): number | undefined {
+    const want = this.config['columns'];
+    const n = typeof want === 'number' ? want : Number(want);
+    return Number.isFinite(n) && n >= 1 ? Math.floor(n) : undefined;
+  }
+
   override render() {
     const chosen = selectDevices(this.config, this.devices, this.context);
 
@@ -169,7 +204,15 @@ export class HcDeviceGrid extends LitElement {
     }
 
     return html`
-      <div class=${this.mode === 'list' ? 'list' : 'grid'} part="set">
+      <div
+        class=${`${this.mode === 'list' ? 'list' : 'grid'}${this.columns === undefined && this.mode === 'grid' ? ' flowing' : ''}`}
+        part="set"
+        style=${
+          this.columns === undefined
+            ? nothing
+            : `grid-template-columns:repeat(${this.columns},minmax(0,1fr))`
+        }
+      >
         ${chosen.map((d) => this.cardFor(d))}
       </div>
     `;

@@ -124,6 +124,33 @@ const SPARE = 3;
  * x=400 means 300 pixels, because a pixel is a distance. Getting this wrong
  * gives a grid widget that is one column short of what somebody drew.
  */
+/**
+ * A rectangle trimmed back onto the page.
+ *
+ * **A move is clamped and a resize was not.** `boxFrom` has always held a
+ * dragged card at zero, but the eight handles went through `resizedBy`
+ * untouched — so pulling a top-left grip far enough up put a placement at a
+ * negative coordinate, off the top of the canvas, where it draws nowhere and
+ * has no handle left to drag it back by. This client's own development did it
+ * to the household's room page: a section's list ended up at y -304, which is
+ * a row that exists, answers every query, and cannot be seen.
+ *
+ * The edge stops at the page edge rather than the box sliding inward, because
+ * the edge is the thing under the pointer — trimming is what somebody dragging
+ * into the corner means, and translating would move an edge they are not
+ * holding.
+ */
+function onPage(rect: Box): Box {
+  const x = Math.max(0, rect.x);
+  const y = Math.max(0, rect.y);
+  return {
+    x,
+    y,
+    w: Math.max(1, rect.w + Math.min(0, rect.x)),
+    h: Math.max(1, rect.h + Math.min(0, rect.y)),
+  };
+}
+
 function boxBetween(a: { x: number; y: number }, b: { x: number; y: number }, free: boolean): Box {
   // **The corners are clamped, not the box.** A drag that leaves the page to
   // the left has a corner off it, and the rectangle somebody drew is the part
@@ -1482,12 +1509,14 @@ export class HcPage extends LitElement {
     // edge stays put, the edge under the pointer snaps, and a rotated card has
     // the delta turned into its own frame first (`core/geometry.ts`).
     if (drag.grip !== 'size') {
-      return resizedBy(drag.from, drag.grip, step, {
-        step: FINE,
-        angle: drag.angle,
-        near: this.neighbours(drag.with),
-        ...this.leastFor(drag.id),
-      });
+      return onPage(
+        resizedBy(drag.from, drag.grip, step, {
+          step: FINE,
+          angle: drag.angle,
+          near: this.neighbours(drag.with),
+          ...this.leastFor(drag.id),
+        }),
+      );
     }
 
     // Grid mode's one grip: the card is anchored top-left and only its extent

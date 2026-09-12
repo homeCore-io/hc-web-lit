@@ -27,14 +27,31 @@ export class HcSlider extends LitElement {
   static override styles = css`
     :host {
       display: block;
+      height: 100%;
+    }
+    /* **The placement is the slider.** The track used to carry 36px of
+       invisible padding to make a 4px bar hittable, which is a reasonable
+       trick right up until the padding is taller than the box: on this
+       household's room page a slider is placed 54px tall and wanted 73, so
+       the bottom of the bar and half the knob were clipped off. A whole
+       placement dedicated to one control *is* the hit target — it is wider
+       and taller than the padding ever was, and it cannot overflow the box it
+       is measured against. */
+    .slider {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-height: 0;
     }
     .row {
+      flex: none;
       display: flex;
       align-items: baseline;
       justify-content: space-between;
       font-size: var(--hc-text-label-size, 12px);
       color: var(--hc-ink-dim, #93a0b4);
-      margin-bottom: 10px;
+      margin-bottom: 6px;
       letter-spacing: 0.01em;
     }
     .row b {
@@ -45,13 +62,9 @@ export class HcSlider extends LitElement {
       font-variant-numeric: tabular-nums;
     }
     .track {
-      height: 8px;
-      border-radius: var(--hc-radius-pill, 999px);
-      background: var(--hc-surface-sunken, #1e2530);
+      flex: 1 1 auto;
+      min-height: 1.25rem;
       position: relative;
-      /* The bar is 8px; the thing a finger has to hit is not. */
-      padding: 18px 0;
-      background-clip: content-box;
       cursor: pointer;
       touch-action: none;
     }
@@ -156,24 +169,26 @@ export class HcSlider extends LitElement {
     const unit = declared?.unit ?? '';
 
     return html`
-      <div class="row" part="label">
-        <span>${label(this.config, attribute)}</span>
-        <b>${Math.round(value)}${unit === '' ? '' : ` ${unit}`}</b>
-      </div>
-      <div
-        class="track"
-        part="track"
-        role="slider"
-        tabindex="0"
-        aria-valuemin=${min}
-        aria-valuemax=${max}
-        aria-valuenow=${Math.round(value)}
-        @pointerdown=${(e: PointerEvent) => this.scrub(e, min, max)}
-        @keydown=${(e: KeyboardEvent) => this.key(e, value, min, max)}
-      >
-        <span class="bar"></span>
-        <span class="fill" part="fill" ?data-cool=${this.cool} style="width:${pct}%"></span>
-        <span class="knob" part="knob" style="left:${pct}%"></span>
+      <div class="slider">
+        <div class="row" part="label">
+          <span>${label(this.config, attribute)}</span>
+          <b>${Math.round(value)}${unit === '' ? '' : ` ${unit}`}</b>
+        </div>
+        <div
+          class="track"
+          part="track"
+          role="slider"
+          tabindex="0"
+          aria-valuemin=${min}
+          aria-valuemax=${max}
+          aria-valuenow=${Math.round(value)}
+          @pointerdown=${(e: PointerEvent) => this.scrub(e, min, max)}
+          @keydown=${(e: KeyboardEvent) => this.key(e, value, min, max)}
+        >
+          <span class="bar"></span>
+          <span class="fill" part="fill" ?data-cool=${this.cool} style="width:${pct}%"></span>
+          <span class="knob" part="knob" style="left:${pct}%"></span>
+        </div>
       </div>
     `;
   }

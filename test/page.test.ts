@@ -221,6 +221,69 @@ describe('@room reads two ways', () => {
   });
 });
 
+describe('a resize that would leave the page', () => {
+  beforeEach(shimPointers);
+
+  const composed = (): DashboardDefinition =>
+    base({
+      widgets: [{ id: 't', type: 'text', config: { text: 'Hall' } }],
+      layouts: [
+        {
+          breakpoint: 'desktop',
+          columns: 12,
+          row_height: 100,
+          gap: 8,
+          flow: 'free',
+          frame: { width: 1240, height: 900 },
+          placements: [
+            { widget_id: 't', x: 0, y: 0, w: 2, h: 1, rect: { x: 40, y: 40, w: 200, h: 80 } },
+          ],
+        },
+      ],
+    });
+
+  it('stops the edge at the page edge instead of going negative', async () => {
+    // **A move was clamped and a resize was not.** Pulling a top-left grip far
+    // enough up put a placement at a negative coordinate, off the canvas,
+    // where it draws nowhere and has no handle left to drag it back by. This
+    // client's own development did exactly that to the household's room page:
+    // a section's device list ended up at y -304, a row that exists, answers
+    // every query, and cannot be seen.
+    const el = await mount(composed());
+    el.mode = 'edit';
+    const place = vi.fn(
+      async (_id: string, _box: { x: number; y: number; w: number; h: number }) => undefined,
+    );
+    el.onPlaceWidget = place;
+    await el.updateComplete;
+
+    // Handles belong to the selection, and a jsdom surface lays nothing out
+    // for a press to hit-test against — so the selection is set directly, the
+    // way the other handle tests in this file do.
+    (el as unknown as { picked: Set<string> }).picked = new Set(['t']);
+    await el.updateComplete;
+
+    const nw = el.shadowRoot?.querySelector('.edge.top-left');
+    expect(nw, 'the card is picked, so it has corner grips').not.toBeNull();
+    nw?.dispatchEvent(
+      new FakePointerEvent('pointerdown', { clientX: 0, clientY: 0, pointerId: 9 }),
+    );
+    nw?.dispatchEvent(
+      new FakePointerEvent('pointermove', { clientX: -4000, clientY: -4000, pointerId: 9 }),
+    );
+    nw?.dispatchEvent(
+      new FakePointerEvent('pointerup', { clientX: -4000, clientY: -4000, pointerId: 9 }),
+    );
+
+    expect(place).toHaveBeenCalled();
+    const box = place.mock.calls.at(-1)?.[1];
+    expect(box?.x, 'never off the left').toBeGreaterThanOrEqual(0);
+    expect(box?.y, 'never off the top').toBeGreaterThanOrEqual(0);
+    expect(box?.w).toBeGreaterThanOrEqual(1);
+    expect(box?.h).toBeGreaterThanOrEqual(1);
+  });
+});
+
 describe('a device picked on the page, which the shell must not wipe', () => {
   /**
    * A room page whose one widget is there only while something is picked —

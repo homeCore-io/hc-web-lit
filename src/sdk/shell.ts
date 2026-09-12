@@ -101,25 +101,27 @@ export abstract class HcLayoutShell extends LitElement {
       min-width: 0;
       flex: 1 1 auto;
     }
-    /* **Smaller than the row it is in.** At 2.25rem the tile was exactly the
-       height of a 36px row, so it ran edge to edge and a device that was on
-       read as a solid block of accent with a name beside it rather than as a
-       mark. Inset, and rounder, so the tint is a glow behind the mark instead
-       of a tile in its own right. */
+    /* **The mark carries the state; it does not sit on a slab that does.**
+       The tile used to paint the shell tint of the state colour behind the
+       glyph, so every lit device on a page was a filled block of accent — and
+       on a room page that is most of the rows at once. The household's word
+       for the result was that the amber is overused, and they were reading a
+       page where the accent had stopped meaning anything because it was
+       everywhere.
+
+       So the tile is a box the mark sits in and nothing else. A device that is
+       on says so in the mark itself, which is the colour *and* the filled
+       weight (§15.0) — two signals on the thing the state is about, and no
+       paint on the row around it. The shell tint hook is untouched and still
+       does what it always did for a caller that wants a wash; nothing in
+       this client asks the tile for one any more. */
     .tile {
       flex: none;
       display: grid;
       place-items: center;
       width: 1.75rem;
       height: 1.75rem;
-      border-radius: var(--hc-radius-md, 14px);
-      background: color-mix(
-        in srgb,
-        var(--hc-shell-colour) var(--hc-shell-tint),
-        var(--hc-surface-sunken, #0d1116)
-      );
-      /* Toward the skin's ink, which lifts the mark off its tile on a dark
-         skin and deepens it on a light one. */
+      background: none;
       color: color-mix(in srgb, var(--hc-shell-colour) 85%, var(--hc-ink, #e9edf2));
       transition:
         background var(--hc-motion-base, 220ms) var(--hc-motion-curve, ease-out),
