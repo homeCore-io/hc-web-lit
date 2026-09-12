@@ -97,8 +97,8 @@ export class HcColourWheel extends LitElement {
           #ff3b3b 360deg
         );
       box-shadow:
-        inset 0 0 0 1px rgba(255, 255, 255, 0.14),
-        0 6px 18px rgba(0, 0, 0, 0.45);
+        inset 0 0 0 1px rgba(255, 255, 255, 0.15),
+        var(--hc-elevation-card, 0 8px 20px rgb(0 0 0 / 0.35));
       position: relative;
       cursor: pointer;
       touch-action: none;
@@ -116,9 +116,7 @@ export class HcColourWheel extends LitElement {
       translate: -50% -50%;
       border-radius: var(--hc-radius-pill, 999px);
       border: 3px solid #fff;
-      box-shadow:
-        0 2px 6px rgba(0, 0, 0, 0.65),
-        inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+      box-shadow: var(--hc-elevation-control, 0 2px 6px rgb(0 0 0 / 0.45));
     }
     .wheel:focus-visible {
       outline: 2px solid var(--hc-stroke-focus, #7cc4ff);

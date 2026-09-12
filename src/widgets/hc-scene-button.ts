@@ -86,8 +86,8 @@ export class HcSceneButton extends HcLayoutShell {
         border-radius: var(--hc-radius-pill, 999px);
         background: var(--hc-scene-orb);
         box-shadow:
-          inset 0 0 0 1px rgba(255, 255, 255, 0.22),
-          0 1px 4px rgba(0, 0, 0, 0.5);
+          inset 0 0 0 1px rgba(255, 255, 255, 0.15),
+          var(--hc-elevation-control, 0 2px 6px rgb(0 0 0 / 0.45));
       }
       /* The glow is the scene's, so hovering it is a preview of the light it
          makes rather than a generic highlight. */

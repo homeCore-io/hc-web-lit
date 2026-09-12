@@ -72,7 +72,7 @@ export interface Tokens {
   motion: MotionTokens;
   glow: { strength: number; radius: number };
   density: DensityTokens;
-  elevation: { card: string; overlay: string };
+  elevation: { card: string; overlay: string; control: string };
   metric: MetricTints;
   text: TypeTokens;
 }
@@ -183,9 +183,24 @@ export function deriveMotion(m: SkinMotion): MotionTokens {
  * overlay shadow, because a modal has to separate from the page whatever the
  * skin thinks about depth.
  */
-export function deriveElevation(s: SkinSeeds): { card: string; overlay: string } {
+/**
+ * Three heights, not two.
+ *
+ * **A knob is not a card.** The set had `card` and `overlay` and nothing for
+ * the small raised things — a slider's thumb, a colour wheel, a play button —
+ * so every one of them was written by hand, in dark-only literals: six drop
+ * shadows across the widgets, several differing from each other by a decimal
+ * (0.14 against 0.16 inset, 0.6 against 0.65 alpha, 2px 6px against 2px 8px).
+ * Differences nobody chose, and on a light skin all six were a black smudge,
+ * because a literal cannot follow a ground it has never heard of.
+ */
+export function deriveElevation(s: SkinSeeds): {
+  card: string;
+  overlay: string;
+  control: string;
+} {
   if (s.glowStrength === 0) {
-    return { card: 'none', overlay: '0 8px 24px rgba(0,0,0,0.8)' };
+    return { card: 'none', overlay: '0 8px 24px rgba(0,0,0,0.8)', control: 'none' };
   }
   if (s.brightness === 'light') {
     // A light ground needs two: a tight contact shadow so the card meets the
@@ -194,6 +209,7 @@ export function deriveElevation(s: SkinSeeds): { card: string; overlay: string }
     return {
       card: '0 1px 2px rgba(0,0,0,0.078), 0 8px 18px rgba(0,0,0,0.059)',
       overlay: '0 18px 40px rgba(0,0,0,0.122)',
+      control: '0 1px 2px rgba(0,0,0,0.14), 0 2px 6px rgba(0,0,0,0.10)',
     };
   }
   // A frosted panel sits further off its wall than a card sits off a desk.
@@ -201,6 +217,7 @@ export function deriveElevation(s: SkinSeeds): { card: string; overlay: string }
   return {
     card: deep ? '0 12px 32px rgba(0,0,0,0.4)' : '0 8px 20px rgba(0,0,0,0.349)',
     overlay: deep ? '0 20px 48px rgba(0,0,0,0.6)' : '0 18px 40px rgba(0,0,0,0.549)',
+    control: '0 2px 6px rgba(0,0,0,0.45)',
   };
 }
 

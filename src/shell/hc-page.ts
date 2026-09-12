@@ -443,7 +443,7 @@ export class HcPage extends LitElement {
        design application puts it and so where a hand goes looking. */
     .turn {
       inset: -1.75rem auto auto calc(50% - 0.375rem);
-      border-radius: 50%;
+      border-radius: var(--hc-radius-pill, 999px);
       cursor: grab;
     }
     /* A surface holding a tool (§14.1). The cursor is the only thing that says

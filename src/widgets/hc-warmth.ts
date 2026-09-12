@@ -62,8 +62,8 @@ export class HcWarmth extends LitElement {
          telling the truth about the theme and a lie about the bulb. */
       background: linear-gradient(#bcd4ff, #fff5ea 52%, #ffb26e);
       box-shadow:
-        inset 0 0 0 1px rgba(255, 255, 255, 0.16),
-        0 6px 18px rgba(0, 0, 0, 0.45);
+        inset 0 0 0 1px rgba(255, 255, 255, 0.15),
+        var(--hc-elevation-card, 0 8px 20px rgb(0 0 0 / 0.35));
       position: relative;
       cursor: pointer;
       touch-action: none;
@@ -82,9 +82,7 @@ export class HcWarmth extends LitElement {
       border-radius: var(--hc-radius-pill, 999px);
       background: transparent;
       border: 3px solid #fff;
-      box-shadow:
-        0 2px 6px rgba(0, 0, 0, 0.6),
-        inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+      box-shadow: var(--hc-elevation-control, 0 2px 6px rgb(0 0 0 / 0.45));
     }
     .strip:focus-visible {
       outline: 2px solid var(--hc-stroke-focus, #7cc4ff);

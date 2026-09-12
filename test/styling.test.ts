@@ -121,3 +121,27 @@ describe('the type scale, as the product actually uses it', () => {
     }
   });
 });
+
+describe('how high a thing sits', () => {
+  it('takes its drop shadow from the elevation set, never from a literal', () => {
+    // **A literal cannot follow a ground it has never heard of.** Six drop
+    // shadows were written by hand across the widgets — a slider's thumb, a
+    // colour wheel, a play button — several differing from each other only by
+    // a decimal, and every one of them a dark-only `rgba(0,0,0,…)`. On the
+    // light skin all six were a black smudge. The set derives `card`,
+    // `overlay` and `control` per skin, which is the whole point of having it.
+    const offenders: string[] = [];
+    for (const file of files) {
+      for (const m of source(file).matchAll(/box-shadow:([^;]+);/g)) {
+        const decl = (m[1] as string).replace(/\s+/g, ' ');
+        // An inset is a rim light or a hairline drawn inside the box, not a
+        // height off the page — those stay literal on purpose.
+        for (const layer of decl.split(/,(?![^()]*\))/)) {
+          if (layer.includes('inset')) continue;
+          if (/rgba?\(\s*0,\s*0,\s*0/.test(layer)) offenders.push(`${file}: ${layer.trim()}`);
+        }
+      }
+    }
+    expect(offenders, 'use --hc-elevation-card / -overlay / -control').toEqual([]);
+  });
+});

@@ -149,7 +149,7 @@ export class HcKeypad extends LitElement {
       flex: none;
       width: 0.5rem;
       height: 0.5rem;
-      border-radius: 50%;
+      border-radius: var(--hc-radius-pill, 999px);
       background: var(--hc-accent-inactive, #2a313b);
     }
     .led[data-lit] {

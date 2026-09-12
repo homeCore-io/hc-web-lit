@@ -61,6 +61,7 @@ export function cssVariables(t: Tokens): Record<string, string> {
 
     '--hc-elevation-card': t.elevation.card,
     '--hc-elevation-overlay': t.elevation.overlay,
+    '--hc-elevation-control': t.elevation.control,
 
     '--hc-metric-temperature': t.metric.temperature,
     '--hc-metric-humidity': t.metric.humidity,

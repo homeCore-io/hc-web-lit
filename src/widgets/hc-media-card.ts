@@ -162,7 +162,7 @@ export class HcMediaCard extends LitElement {
       flex: none;
       width: 0.4rem;
       height: 0.4rem;
-      border-radius: 50%;
+      border-radius: var(--hc-radius-pill, 999px);
       background: var(--hc-stroke-hairline, #262d38);
       align-self: center;
     }
@@ -350,7 +350,7 @@ export class HcMediaCard extends LitElement {
       background: var(--hc-ink, #e9edf2);
       border-color: transparent;
       color: var(--hc-accent-on-primary, #06131f);
-      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+      box-shadow: var(--hc-elevation-control, 0 2px 6px rgb(0 0 0 / 0.45));
     }
     button[data-primary]:hover {
       border-color: transparent;

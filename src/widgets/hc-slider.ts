@@ -121,9 +121,7 @@ export class HcSlider extends LitElement {
       margin: -8px 0 0 -8px;
       border-radius: var(--hc-radius-pill, 999px);
       background: #fff;
-      box-shadow:
-        0 2px 8px rgba(0, 0, 0, 0.55),
-        0 0 0 1px rgba(0, 0, 0, 0.18);
+      box-shadow: var(--hc-elevation-control, 0 2px 6px rgb(0 0 0 / 0.45));
       transition: transform 90ms ease-out;
     }
     .track:active .knob {

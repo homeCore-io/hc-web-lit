@@ -177,7 +177,7 @@ export abstract class HcLayoutShell extends LitElement {
       left: 0.175rem;
       width: 0.95rem;
       height: 0.95rem;
-      border-radius: 50%;
+      border-radius: var(--hc-radius-pill, 999px);
       background: var(--hc-ink-muted, #8b95a4);
       transform: translate(0, -50%);
       transition: transform var(--hc-motion-fast, 140ms) var(--hc-motion-curve, ease-out);
