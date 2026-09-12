@@ -244,7 +244,7 @@ export class HcMediaCard extends LitElement {
        it and the artist below — three lines of the same weight, and nothing
        to land on. */
     .title {
-      font-weight: 650;
+      font-weight: 600;
       font-size: var(--hc-text-title-size, 20px);
       line-height: 1.15;
       letter-spacing: -0.01em;

@@ -11,9 +11,9 @@ import { customElement, property } from 'lit/decorators.js';
 import { registerWidget } from '../core/registry.js';
 
 const SIZE: Record<string, string> = {
-  '1': 'var(--hc-text-display-size, 30px)',
-  '2': 'var(--hc-text-title-size, 18px)',
-  '3': 'var(--hc-text-subtitle-size, 14px)',
+  '1': 'var(--hc-text-display-size, 28px)',
+  '2': 'var(--hc-text-title-size, 20px)',
+  '3': 'var(--hc-text-subtitle-size, 16px)',
   overline: 'var(--hc-text-overline-size, 10px)',
 };
 

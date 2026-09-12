@@ -38,7 +38,7 @@ export class HcHouseStatus extends LitElement {
       color: var(--hc-ink, #e9edf2);
     }
     .line {
-      font-size: var(--hc-text-title-size, 16px);
+      font-size: var(--hc-text-title-size, 20px);
       font-weight: 600;
       letter-spacing: -0.01em;
       text-wrap: balance;
@@ -66,7 +66,7 @@ export class HcHouseStatus extends LitElement {
     }
     .count b {
       font-family: var(--hc-font-mono, ui-monospace, monospace);
-      font-size: var(--hc-text-subtitle-size, 14px);
+      font-size: var(--hc-text-subtitle-size, 16px);
       font-weight: 400;
       color: var(--hc-ink, #e9edf2);
       font-variant-numeric: tabular-nums;

@@ -47,7 +47,7 @@ export class HcThermostat extends HcBoundControl {
       min-width: 0;
     }
     .reading {
-      font-size: var(--hc-text-display-size, 30px);
+      font-size: var(--hc-text-display-size, 28px);
       font-weight: 600;
       font-variant-numeric: tabular-nums;
       line-height: 1;
@@ -76,7 +76,7 @@ export class HcThermostat extends HcBoundControl {
       background: var(--hc-surface-raised, #141922);
       color: var(--hc-ink, #e9edf2);
       font: inherit;
-      font-size: var(--hc-text-title-size, 18px);
+      font-size: var(--hc-text-title-size, 20px);
       line-height: 1;
       cursor: pointer;
     }
@@ -92,7 +92,7 @@ export class HcThermostat extends HcBoundControl {
       flex: 1;
       text-align: center;
       font-variant-numeric: tabular-nums;
-      font-size: var(--hc-text-title-size, 18px);
+      font-size: var(--hc-text-title-size, 20px);
       font-weight: 600;
       color: var(--hc-accent-active, #ffc978);
     }

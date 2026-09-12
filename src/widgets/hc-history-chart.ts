@@ -76,7 +76,7 @@ export class HcHistoryChart extends LitElement {
     .now {
       color: var(--hc-ink, #e9edf2);
       font-variant-numeric: tabular-nums;
-      font-size: var(--hc-text-subtitle-size, 14px);
+      font-size: var(--hc-text-subtitle-size, 16px);
       font-weight: 600;
     }
     svg {

@@ -45,7 +45,7 @@ export class HcStatSummary extends LitElement {
       min-width: 0;
     }
     .value {
-      font-size: var(--hc-text-display-size, 30px);
+      font-size: var(--hc-text-display-size, 28px);
       font-weight: 600;
       font-variant-numeric: tabular-nums;
       line-height: 1;

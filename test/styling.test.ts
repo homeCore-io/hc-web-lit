@@ -15,6 +15,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { knownParts } from '../src/design/parts.js';
+import { deriveType } from '../src/design/tokens.js';
 
 const dir = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'widgets');
 const files = readdirSync(dir).filter((f) => f.startsWith('hc-') && f.endsWith('.ts'));
@@ -78,6 +79,45 @@ describe('the stylesheets themselves', () => {
             .pop()}"`,
         ).toContain(after);
       }
+    }
+  });
+});
+
+describe('the type scale, as the product actually uses it', () => {
+  /** Every `var(--hc-text-…)` a widget reads, with the fallback it declares. */
+  const uses = (): { token: string; fallback: string; file: string }[] => {
+    const out: { token: string; fallback: string; file: string }[] = [];
+    for (const file of files) {
+      for (const m of source(file).matchAll(/var\(--hc-text-([a-z-]+?)-size,\s*([^)]+)\)/g)) {
+        out.push({ token: m[1] as string, fallback: (m[2] as string).trim(), file });
+      }
+    }
+    return out;
+  };
+
+  it('reads only roles the ramp actually defines', () => {
+    // **An invented token is a hard-coded value wearing a token's clothes.**
+    // `--hc-text-label-size` and `--hc-ink-dim` were both written here with a
+    // literal behind them, so they rendered that literal on every skin and
+    // followed none of them. A `var()` that never resolves is worse than the
+    // number it hides, because it reads as if it were part of the system.
+    const roles = new Set(Object.keys(deriveType(1)));
+    for (const u of uses()) {
+      const camel = u.token.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
+      expect(roles.has(camel), `${u.file}: --hc-text-${u.token}-size is not a role`).toBe(true);
+    }
+  });
+
+  it('declares fallbacks that agree with the ramp', () => {
+    // A fallback that disagrees is documentation that lies: `title` was
+    // written as 16px, 18px and 20px in different widgets while the ramp said
+    // one number, so reading any one of them told you the wrong thing.
+    const ramp = deriveType(1) as unknown as Record<string, { size: number }>;
+    for (const u of uses()) {
+      const camel = u.token.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
+      const want = ramp[camel]?.size;
+      if (want === undefined) continue;
+      expect(u.fallback, `${u.file}: --hc-text-${u.token}-size`).toBe(`${want}px`);
     }
   });
 });

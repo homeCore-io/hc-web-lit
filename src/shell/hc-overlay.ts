@@ -162,7 +162,7 @@ export class HcOverlay extends LitElement implements OverlayApi {
     h2 {
       margin: 0;
       margin-right: auto;
-      font-size: var(--hc-text-subtitle-size, 14px);
+      font-size: var(--hc-text-subtitle-size, 16px);
       font-weight: 600;
     }
     .body {

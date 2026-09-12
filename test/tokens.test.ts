@@ -113,11 +113,26 @@ describe('the rules', () => {
   it('sizes the whole ramp from one number', () => {
     const at1 = deriveType(1);
     const at115 = deriveType(1.15);
-    expect(at1.display.size).toBe(26);
-    expect(at115.display.size).toBeCloseTo(29.9);
+    expect(at1.display.size).toBe(28);
+    expect(at115.display.size).toBeCloseTo(32.2);
     // Weights and line heights are not scaled — only sizes are.
     expect(at115.display.weight).toBe(at1.display.weight);
     expect(at115.body.height).toBe(at1.body.height);
+  });
+
+  it('has a step between the top roles and keeps the UI ones close', () => {
+    // **The ramp had nothing between body and display.** `title` sat three
+    // pixels above body, so nothing could take the lead using the scale and
+    // every widget that needed presence invented a size: 34px in a device
+    // panel, 20 in a media card, 18 in a gauge, a stepper and a heading. Seven
+    // roles, and twelve different sizes rendering on one page.
+    const t = deriveType(1);
+    expect(t.display.size / t.title.size, 'display leads title').toBeGreaterThan(1.3);
+    expect(t.title.size / t.subtitle.size, 'title leads subtitle').toBeGreaterThan(1.2);
+    expect(t.subtitle.size / t.body.size, 'subtitle leads body').toBeGreaterThan(1.15);
+    // And the bottom stays bunched on purpose: these are the sizes a dense row
+    // of devices is set in, where fine gradations beat visible steps.
+    expect(t.body.size - t.caption.size).toBeLessThan(3);
   });
 
   it('keeps a skin s corner proportions when rescaled from md', () => {
@@ -143,7 +158,7 @@ describe('css variables', () => {
     expect(vars['--hc-accent-active']).toBe('#FFB661');
     expect(vars['--hc-radius-md']).toBe('14px');
     expect(vars['--hc-motion-base']).toBe('260ms');
-    expect(vars['--hc-text-display-size']).toBe('26px');
+    expect(vars['--hc-text-display-size']).toBe('28px');
     expect(vars['--hc-text-overline-tracking']).toBe('1.1px');
     // Every name is ABI (§19.7); none may be bare.
     for (const k of Object.keys(vars)) expect(k.startsWith('--hc-')).toBe(true);

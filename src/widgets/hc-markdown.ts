@@ -39,10 +39,10 @@ export class HcMarkdown extends LitElement {
       font-weight: 600;
     }
     h1 {
-      font-size: var(--hc-text-title-size, 18px);
+      font-size: var(--hc-text-title-size, 20px);
     }
     h2 {
-      font-size: var(--hc-text-body-size, 14px);
+      font-size: var(--hc-text-body-size, 13px);
     }
     h3,
     h4,

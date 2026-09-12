@@ -73,7 +73,7 @@ export class HcGauge extends LitElement {
     }
     .value {
       color: var(--hc-ink, #e9edf2);
-      font-size: var(--hc-text-title-size, 18px);
+      font-size: var(--hc-text-title-size, 20px);
       font-weight: 600;
       font-variant-numeric: tabular-nums;
       line-height: 1;

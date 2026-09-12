@@ -22,7 +22,7 @@ export class HcDeviceReading extends HcLayoutShell {
       /* The reading is the point, so it takes the primary line and the name
          goes underneath — the shell's two lines, used the other way up. */
       .primary {
-        font-size: var(--hc-text-display-size, 30px);
+        font-size: var(--hc-text-display-size, 28px);
         font-variant-numeric: tabular-nums;
         line-height: 1.05;
         font-weight: 600;

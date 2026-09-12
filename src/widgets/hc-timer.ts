@@ -30,7 +30,7 @@ export class HcTimer extends HcLayoutShell {
     HcLayoutShell.styles,
     css`
       .badge {
-        font-size: var(--hc-text-subtitle-size, 14px);
+        font-size: var(--hc-text-subtitle-size, 16px);
         font-weight: 600;
         color: var(--hc-ink, #e9edf2);
       }

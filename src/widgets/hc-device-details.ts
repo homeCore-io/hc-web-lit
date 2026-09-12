@@ -84,7 +84,7 @@ export class HcDeviceDetails extends LitElement {
       padding-right: 2.25rem;
     }
     .name {
-      font-size: var(--hc-text-subtitle-size, 15px);
+      font-size: var(--hc-text-subtitle-size, 16px);
       font-weight: 600;
       line-height: 1.2;
     }

@@ -41,7 +41,7 @@ export class HcStepper extends HcBoundControl {
       background: var(--hc-surface-raised, #141922);
       color: var(--hc-ink, #e9edf2);
       font: inherit;
-      font-size: var(--hc-text-title-size, 18px);
+      font-size: var(--hc-text-title-size, 20px);
       line-height: 1;
       cursor: pointer;
     }
@@ -61,7 +61,7 @@ export class HcStepper extends HcBoundControl {
     }
     .value {
       font-variant-numeric: tabular-nums;
-      font-size: var(--hc-text-title-size, 18px);
+      font-size: var(--hc-text-title-size, 20px);
       font-weight: 600;
       line-height: 1.1;
     }

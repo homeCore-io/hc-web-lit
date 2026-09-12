@@ -242,9 +242,24 @@ export function deriveType(scale: number): TypeTokens {
     family: 'Inter',
     monoFamily: 'JetBrains Mono',
     scale,
-    display: r(26, 700, 1.05),
-    title: r(16, 600, 1.2),
-    subtitle: r(14, 600, 1.3),
+    // **A display group and a UI group, with a real gap between them.**
+    //
+    // The ramp used to run 26, 16, 14, 13, 12.5, 11, 10 — one big number and
+    // then six sizes inside six pixels. `title` at 16 was three pixels above
+    // body, so nothing on a page could take the lead using the scale, and
+    // every widget that needed presence invented a size instead: 34px in a
+    // device panel, 20 in a media card, 18 in a gauge, a stepper and a
+    // heading, all reaching past a ramp that had nothing to offer them. Seven
+    // roles and twelve sizes actually rendering on one page.
+    //
+    // The top three are now a scale — 28, 20, 16, roughly a fourth then a
+    // third apart — and the bottom four stay bunched on purpose: they are the
+    // UI sizes, and a dense row of devices wants fine gradations rather than
+    // steps you can see. Presence comes from the top of the ramp now, which
+    // means it comes from one place.
+    display: r(28, 700, 1.05),
+    title: r(20, 600, 1.2),
+    subtitle: r(16, 600, 1.3),
     body: r(13, 400, 1.4),
     bodySmall: r(12.5, 400, 1.4),
     caption: r(11, 500, 1.35),
