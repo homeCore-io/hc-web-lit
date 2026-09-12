@@ -241,9 +241,13 @@ describe('a set is the object, and a row in it is not', () => {
     // a line between them — in one column, every row but the first. Inset, so
     // it costs no layout, which is why the ring it replaces was a shadow too.
     expect(css).toMatch(/\.list > \* \+ \*\s*\{[^}]*box-shadow:\s*inset[^;]*hairline/);
-    // And the container still paints nothing: one leak sensor is one full-width
-    // row, not a half-width box beside an empty one.
-    expect(css).not.toMatch(/\.list\s*\{[^}]*background:/);
+    // **And the set paints, not the rows.** A background per row is a claim
+    // per row, and a row is not an object — the set is. The old reason for
+    // doing it the other way round was a wrapping grid painting an empty
+    // half-width box beside the only leak sensor in the house; a list is one
+    // column now, so the surface is exactly as wide as its rows.
+    expect(css).toMatch(/\.list\s*\{[^}]*background:\s*var\(--hc-surface-raised/);
+    expect(css).toMatch(/\.list > \*\s*\{[^}]*--hc-shell-surface:\s*transparent/);
   });
 });
 

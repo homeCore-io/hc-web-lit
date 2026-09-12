@@ -143,11 +143,15 @@ export abstract class HcLayoutShell extends LitElement {
        second copy is the one that drifts — and an extension building a row
        gets it without being told (§7.2). Only the primary control belongs on a
        row; the rest of a schema is in the sheet behind a hold. */
+    /* Sized to sit in a row rather than to lead it. At 2.75rem by 1.6 the
+       switch was two thirds the height of a 38px row and the widest thing on
+       it, so a list of five read as a column of switches with names beside
+       them. */
     .switch {
       position: relative;
       flex: none;
-      width: 2.75rem;
-      height: 1.6rem;
+      width: 2.25rem;
+      height: 1.3rem;
       padding: 0;
       border: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
       border-radius: var(--hc-radius-pill, 999px);
@@ -170,9 +174,9 @@ export abstract class HcLayoutShell extends LitElement {
     .thumb {
       position: absolute;
       top: 50%;
-      left: 0.18rem;
-      width: 1.15rem;
-      height: 1.15rem;
+      left: 0.175rem;
+      width: 0.95rem;
+      height: 0.95rem;
       border-radius: 50%;
       background: var(--hc-ink-muted, #8b95a4);
       transform: translate(0, -50%);
@@ -180,7 +184,7 @@ export abstract class HcLayoutShell extends LitElement {
     }
     .switch[aria-pressed='true'] .thumb {
       background: var(--hc-accent-on-primary, #06131f);
-      transform: translate(1.05rem, -50%);
+      transform: translate(0.95rem, -50%);
     }
     .lines {
       min-width: 0;

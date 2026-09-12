@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { orbFor, paletteFor } from '../src/design/scene-palette.js';
 import type { DeviceState } from '../src/core/device.js';
-import { scenesInScope } from '../src/core/scenes.js';
+import { scenesInScope, isLightScene } from '../src/core/scenes.js';
 
 const scene = (id: string, over: Partial<DeviceState> = {}): DeviceState => ({
   device_id: id,
@@ -276,5 +276,30 @@ describe('matching a scene name to a palette', () => {
 
   it('matches a key that is a phrase', () => {
     expect(paletteFor('On Air').dot).toBe('#ff5b5b');
+  });
+});
+
+describe('which scenes get a colour', () => {
+  it('tells a light scene from one that is not', () => {
+    // **A colour orb on a scene that is not about light means nothing.** The
+    // palette answers "what does this scene do to the room", which a Hue scene
+    // can be asked and "Deck Off" cannot — so the house page's row of door and
+    // deck scenes wore six arbitrary swatches, each implying a light it would
+    // set. The test is the one `skip_light_scenes` already draws its line
+    // with: a Hue scene publishes the light group it belongs to.
+    const made = (id: string, name: string, attributes: Record<string, unknown>): DeviceState =>
+      ({
+        device_id: id,
+        name,
+        device_type: 'scene',
+        available: true,
+        attributes,
+        last_seen: '2026-09-12T00:00:00Z',
+        schema: { actions: { activate: {} } },
+      }) as never;
+    const hue = made('h1', 'Concentrate', { group_rid: 'g-office', group_kind: 'room' });
+    const door = made('l1', 'OH Door 01', { area: 'garage' });
+    expect(isLightScene(hue)).toBe(true);
+    expect(isLightScene(door)).toBe(false);
   });
 });

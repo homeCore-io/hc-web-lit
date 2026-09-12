@@ -35,7 +35,7 @@ export interface SceneRowConfig {
  * light group; this reads the attribute the plugin happens to publish. Filed
  * with the rest of the scene modelling (homeCore#28).
  */
-function isLightScene(d: DeviceState): boolean {
+export function isLightScene(d: DeviceState): boolean {
   return 'group_rid' in d.attributes || 'group_kind' in d.attributes;
 }
 

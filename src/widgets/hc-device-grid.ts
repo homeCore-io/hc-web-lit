@@ -67,11 +67,24 @@ export class HcDeviceGrid extends LitElement {
        it, which is what the first attempt did in every room with a single leak
        sensor. auto-fit is here for the same reason: an empty track collapses, so one
        row is a full-width row rather than a half of one. */
+    /* **The set paints, and the devices do not.** Every row carried its own
+       raised surface, so a section was a stack of identically-shaded boxes
+       with a hairline between them — the household's words were that the
+       background used for each device merges things. A background per row is
+       also a claim per row, and a row is not an object (see above): the set
+       is. One surface under the whole list, lines between the rows on it.
+
+       The reason it was not done this way before was real and no longer
+       applies: a wrapping grid with one leak sensor in it painted an empty
+       half-width box beside the only row. A list is one column now, so the
+       surface is exactly as wide as the rows and exactly as tall as all of
+       them. */
     .list {
       display: grid;
       grid-template-columns: 1fr;
       border-radius: var(--hc-radius-md, 14px);
       overflow: hidden;
+      background: var(--hc-surface-raised, #141922);
     }
     /* A set that flows into as many columns as the width will take, which is
        what the grid type is for and what the list type stopped being. */
@@ -107,9 +120,18 @@ export class HcDeviceGrid extends LitElement {
        A pill keeps its own: it is an object, and that is the whole difference
        between the two sets. */
     .list > * {
-      --hc-shell-surface: var(--hc-surface-raised, #141922);
+      --hc-shell-surface: transparent;
       --hc-shell-edge: 0;
       --hc-shell-radius: 0;
+      /* **And no wash behind a device that is on.** A card lights its own
+         surface, which is right for a card: it is one object and its state is
+         the whole of it. In a list it painted a warm band across every lit
+         row, so a garage with three zones on had three shaded stripes through
+         a set that is otherwise one surface — the background per device that
+         the household said merges things. A row says it is on the way
+         everything else here does: in the mark, which is both the colour and
+         the filled weight, and in its switch. */
+      --hc-shell-tint: 0%;
     }
     /* Inset, so it is drawn inside the row and costs no layout — the reason
        the ring was a shadow too. */

@@ -131,13 +131,14 @@ export function deriveRadii(c: readonly [number, number, number, number]) {
 export function deriveDensity(d: SkinDensity): DensityTokens {
   switch (d) {
     case 'compact':
-      // 38 rather than 34. A composed page's sections are compact by
+      // 42 rather than 34. A composed page's sections are compact by
       // construction (`hc-page` picks this step for every list in a column),
       // and at 34 the rows were tighter than the client this replaces — five
       // switches read as a block of text rather than as five things you can
-      // touch. Still well under the comfortable step, which is what a wall
-      // panel gets.
-      return { rowHeight: 38, controlHeight: 30, minTapTarget: 32, cardPadding: 10 };
+      // touch. 42 is what that client's rows measure, and the household asked
+      // for entries that size. Still well under the comfortable step, which is
+      // what a wall panel gets.
+      return { rowHeight: 42, controlHeight: 30, minTapTarget: 32, cardPadding: 10 };
     case 'comfortable':
       return { rowHeight: 52, controlHeight: 44, minTapTarget: 44, cardPadding: 14 };
     case 'wall':

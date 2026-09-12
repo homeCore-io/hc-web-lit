@@ -107,19 +107,9 @@ export class HcDevicePill extends HcLayoutShell {
         color: var(--hc-ink-muted, #8b95a4);
         white-space: nowrap;
       }
-      /* Smaller than a row's, because a pill is a chip and its switch should
-         not be the largest thing on it. */
-      .switch {
-        width: 2.1rem;
-        height: 1.25rem;
-      }
-      .thumb {
-        width: 0.9rem;
-        height: 0.9rem;
-      }
-      .switch[aria-pressed='true'] .thumb {
-        transform: translate(0.82rem, -50%);
-      }
+      /* The shell's switch is now sized for a row, which is the same size a
+         chip wants; a second set of numbers here would only be one to keep in
+         step. */
       :host([data-lit]) .state {
         color: var(--hc-ink, #e9edf2);
       }

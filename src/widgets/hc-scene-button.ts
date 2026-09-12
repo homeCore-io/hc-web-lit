@@ -17,12 +17,13 @@ import { css, html, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { DeviceState } from '../core/device.js';
 import type { CommandRequest } from '../core/widget.js';
-import { activation, sceneKind } from '../core/scenes.js';
+import { activation, isLightScene, sceneKind } from '../core/scenes.js';
 import { noStatusReason } from '../core/present.js';
 import { effectiveName, isOn } from '../core/present.js';
 import { registerForCapability, registerForDevice, registerWidget } from '../core/registry.js';
 import { isScene } from '../core/capability.js';
 import { orbFor, paletteFor } from '../design/scene-palette.js';
+import { icon } from '../design/icons.js';
 import { HcLayoutShell } from '../sdk/shell.js';
 
 @customElement('hc-scene-button')
@@ -70,6 +71,14 @@ export class HcSceneButton extends HcLayoutShell {
         height: 1.75rem;
         border-radius: var(--hc-radius-pill, 999px);
         background: none;
+      }
+      .tile svg {
+        width: 1.05rem;
+        height: 1.05rem;
+        color: var(--hc-ink-muted, #8b95a4);
+      }
+      :host([data-applied]) .tile svg {
+        color: var(--hc-accent-active, #ffb661);
       }
       .orb {
         width: 1.05rem;
@@ -146,15 +155,37 @@ export class HcSceneButton extends HcLayoutShell {
     // The chip is tinted by the scene it runs, so an applied one is washed in
     // the light it made rather than in the page's accent.
     const name = d === undefined ? '' : effectiveName(d);
-    const palette = paletteFor(name);
+    const lit = d !== undefined && isLightScene(d);
+    // A scene with no light to describe takes the page's accent, like any
+    // other control, rather than a colour invented from its name.
+    const palette = lit
+      ? paletteFor(name)
+      : { dot: 'var(--hc-accent-active, #ffb661)', gradient: [] };
     this.style.setProperty('--hc-scene-dot', palette.dot);
-    this.style.setProperty('--hc-scene-orb', orbFor(name));
+    if (lit) this.style.setProperty('--hc-scene-orb', orbFor(name));
     this.style.setProperty('--hc-shell-colour', palette.dot);
     this.style.setProperty('--hc-shell-tint', applied ? '22%' : '0%');
   }
 
+  /**
+   * A light scene shows the light it makes; anything else shows a scene mark.
+   *
+   * **An orb on a scene that is not about light is a colour that means
+   * nothing.** The palette answers "what does this scene do to the room" —
+   * which is a question a Hue scene can be asked and "Deck Off" cannot. Those
+   * got a colour anyway, derived from the name, so the house page's row of
+   * door and deck scenes wore six arbitrary swatches implying a light each
+   * would set. A scene bound to no light group is a scene, and says so.
+   *
+   * `isLightScene` is the same test `skip_light_scenes` draws its line with
+   * (`core/scenes.ts`): a Hue scene publishes the light group it belongs to
+   * and a Lutron room scene carries no such binding.
+   */
   protected override renderIcon() {
-    return html`<span class="orb" part="indicator"></span>`;
+    const d = this.device;
+    return d !== undefined && isLightScene(d)
+      ? html`<span class="orb" part="indicator"></span>`
+      : icon('scene');
   }
 
   protected override renderPrimary(): unknown {
