@@ -11,7 +11,18 @@ containers.
 The boxes in §18.3 are kept ticked as work lands; an item naming something
 that was deliberately not built says so on the line rather than staying blank.
 **Supersedes:** the Flutter/wasm implementation of hc-web
-**Targets:** browser (desktop), phone, tablet. **No desktop-native target.**
+**Targets:** browser — desktop and tablet. **No desktop-native target.**
+
+**A phone is not served by the current design, and saying so is the honest
+line.** The household's pages are composed layouts on a 1240px canvas with
+`frame.fit: "scroll"`, which §5.7 chose deliberately: scaling a composition to
+390px renders 3px type, so a phone scrolls a desktop page sideways instead.
+That is the right call for a *borrowed* layout and it is not a phone design.
+This was listed as a shipping target and measured as one — the household's
+verdict is that it will definitely not work on a phone — so the line now says
+what the product does. A phone layout is a page somebody authors for a phone
+(§14.1's per-breakpoint layouts already allow it), not a smaller rendering of
+this one.
 
 ---
 
