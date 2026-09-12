@@ -143,6 +143,17 @@ const joinIn = (inside: string | undefined, name: string): string =>
  * about locales; kept as a name here because the shell and its tests have
  * always called it this, and "since" alone says less at the call site.
  */
+/**
+ * How long a quiet house is a blip rather than a problem.
+ *
+ * Two minutes. A LAN hiccup, a bridge restarting or a panel's wifi roaming all
+ * resolve well inside it, and saying so loudly every time would teach somebody
+ * to stop reading the one indicator that matters. Past it, what is on the
+ * screen is a picture of the past and the page should say so at the size it
+ * says everything else.
+ */
+const STALE_AFTER_MS = 2 * 60 * 1000;
+
 export function sinceHeard(at: number): string {
   return since(at);
 }
@@ -223,6 +234,17 @@ export class HcApp extends LitElement {
     }
     /* Fixed rather than in the flow: a panel's layout should not move when the
        network drops, or every reconnect reflows the page somebody is reading. */
+    /* **It grows with the thing it is warning about.**
+       §16 asks for a clear stale indicator and calls it the one thing a panel
+       must never hide — and it was drawn at the smallest size in the ramp, in
+       the most muted ink, in a corner, while the readings it qualifies are
+       body size in full ink. On a wall two metres away that is not an
+       indicator, it is a footnote.
+       A socket that dropped four seconds ago and is reconnecting is not worth
+       alarming about; a dashboard that has been showing the same picture since
+       breakfast is. So the age decides: quiet under a couple of minutes, and
+       the warn colour at body size past it. The threshold is a choice and is
+       named once, below; the age itself is a fact. */
     .stale {
       position: fixed;
       right: 0.75rem;
@@ -240,6 +262,15 @@ export class HcApp extends LitElement {
     }
     .stale .dot {
       background: var(--hc-accent-warn, #ffc978);
+    }
+    .stale[data-old] {
+      color: var(--hc-accent-warn, #ffc978);
+      font-size: var(--hc-text-body-size, 13px);
+      font-weight: 600;
+      padding: 0.5rem 0.75rem;
+      box-shadow:
+        var(--hc-elevation-overlay, 0 24px 60px rgb(0 0 0 / 0.5)),
+        0 0 0 1px color-mix(in srgb, var(--hc-accent-warn, #ffc978) 45%, transparent);
     }
     [hidden] {
       display: none !important;
@@ -1851,7 +1882,11 @@ export class HcApp extends LitElement {
         // looking at is four minutes old" stays, because a dashboard that
         // quietly shows the past is worse than one that shows nothing.
         this.phase === 'ready' && !this.live && (this.kiosk || this.restored)
-          ? html`<div class="stale" part="stale">
+          ? html`<div
+              class="stale"
+              part="stale"
+              ?data-old=${Date.now() - this.lastHeard > STALE_AFTER_MS}
+            >
               <span class="dot"></span>
               ${
                 this.restored
