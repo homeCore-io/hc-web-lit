@@ -55,7 +55,16 @@ export class HcRoomField extends LitElement {
       cursor: pointer;
       display: flex;
       flex-direction: column;
-      justify-content: flex-end;
+      /* **The name goes where the glow is not.** Both used to sit at the
+         bottom: the glow rises from there, and the label was written over the
+         brightest part of it. Measured across the skins, a room's name on its
+         own cell goes from about 15:1 when the room is dark to **1.47:1 when
+         it is fully lit** — so the tiles the glow exists to draw the eye to
+         were the ones whose name could not be read, which is the design
+         defeating itself. Nothing about the glow changes; the name moves to
+         the quiet end of the cell, where it is also where a treemap is read
+         from. */
+      justify-content: flex-start;
       transition: border-color 0.16s ease;
     }
     /* The glow. Rises from the bottom of the cell like light in a room, and
@@ -81,7 +90,7 @@ export class HcRoomField extends LitElement {
     }
     .rn {
       position: relative;
-      font-size: 11.5px;
+      font-size: var(--hc-text-caption-size, 11px);
       font-weight: 500;
       line-height: 1.15;
       text-wrap: balance;
@@ -89,7 +98,7 @@ export class HcRoomField extends LitElement {
     .rc {
       position: relative;
       font-family: var(--hc-font-mono, ui-monospace, monospace);
-      font-size: 10px;
+      font-size: var(--hc-text-overline-size, 10px);
       color: var(--hc-ink-muted, #8b95a4);
       margin-top: 0.25rem;
       font-variant-numeric: tabular-nums;
@@ -104,7 +113,7 @@ export class HcRoomField extends LitElement {
       padding: 0.375rem 0.5rem;
     }
     button[data-tiny] .rn {
-      font-size: 10px;
+      font-size: var(--hc-text-overline-size, 10px);
     }
     button[data-tiny] .rc {
       display: none;

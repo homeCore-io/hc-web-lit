@@ -93,7 +93,7 @@ export class HcHistoryChart extends LitElement {
     }
     .axis {
       fill: var(--hc-ink-muted, #8b95a4);
-      font-size: 10px;
+      font-size: var(--hc-text-overline-size, 10px);
       font-variant-numeric: tabular-nums;
       font-family: var(--hc-font-body, system-ui, sans-serif);
     }
@@ -121,7 +121,7 @@ export class HcHistoryChart extends LitElement {
       stroke: var(--hc-surface-ground, #0a0e13);
       stroke-width: 3px;
       paint-order: stroke fill;
-      font-size: 11px;
+      font-size: var(--hc-text-caption-size, 11px);
       font-weight: 600;
       font-variant-numeric: tabular-nums;
       font-family: var(--hc-font-body, system-ui, sans-serif);

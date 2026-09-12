@@ -108,6 +108,27 @@ describe('the type scale, as the product actually uses it', () => {
     }
   });
 
+  it('sets no font size that bypasses the ramp entirely', () => {
+    // **The first version of this test only checked `var()` uses**, so it
+    // passed a widget that never reached for a token at all: `hc-room-field`
+    // set its room names at a flat 11.5px and their counts at 10px, and the
+    // check that was meant to keep the page on one scale walked straight past
+    // the widget covering a third of the house page. A literal is the more
+    // complete bypass, not the lesser one.
+    const off: string[] = [];
+    for (const file of files) {
+      for (const m of source(file).matchAll(/font-size:\s*([^;]+);/g)) {
+        const value = (m[1] as string).trim();
+        // `em` is exempt for the reason it is in the spacing rule: prose sizes
+        // itself against its own type, and `hc-markdown` is the one widget
+        // setting real prose.
+        if (/var\(|calc\(|inherit|em\b|\$\{/.test(value)) continue;
+        off.push(`${file}: ${value}`);
+      }
+    }
+    expect(off, 'use a --hc-text-…-size role').toEqual([]);
+  });
+
   it('declares fallbacks that agree with the ramp', () => {
     // A fallback that disagrees is documentation that lies: `title` was
     // written as 16px, 18px and 20px in different widgets while the ramp said

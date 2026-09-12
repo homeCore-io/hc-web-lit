@@ -133,7 +133,7 @@ export class HcSlider extends LitElement {
     }
     .idle {
       color: var(--hc-ink-muted, #8b95a4);
-      font-size: 11.5px;
+      font-size: var(--hc-text-body-small-size, 12.5px);
     }
   `;
 

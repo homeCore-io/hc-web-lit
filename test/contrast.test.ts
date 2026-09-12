@@ -72,6 +72,29 @@ describe('contrast, in every skin', () => {
     expect(contrast(applied, t.surface.raised)).toBeGreaterThan(1.08);
   });
 
+  it.each(skins)('%s keeps a state worth noticing readable', (name) => {
+    // **These are words, so they answer to the text floor, not the shape one.**
+    // A row says water, a fault, an unreachable device or a lock left open in
+    // the semantic colour rather than the accent (§15.0), and the semantic set
+    // is seeded per skin like everything else — so a sixth skin could put a
+    // red on a red-tinted card and nobody would notice until somebody could
+    // not read the one word on the page that mattered.
+    //
+    // `offline` is the tight one at about 4.55 across the five: it is a grey
+    // by design, and a grey that says "we cannot reach this" has to stay a
+    // grey while remaining legible.
+    const t = deriveTokens(builtInSeeds[name]!);
+    for (const [what, colour] of [
+      ['danger', t.accent.danger],
+      ['warn', t.accent.warn],
+      ['offline', t.accent.offline],
+    ] as const) {
+      expect(contrast(colour, t.surface.raised), `${what} on a row`).toBeGreaterThanOrEqual(
+        READABLE,
+      );
+    }
+  });
+
   it('is arithmetic anyone can check', () => {
     expect(contrast('#ffffff', '#000000')).toBeCloseTo(21, 1);
     expect(contrast('#000000', '#000000')).toBeCloseTo(1, 5);
