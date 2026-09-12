@@ -2479,6 +2479,14 @@ not a failure of it.
       is reordering, which is what a card in a column already did. Half a
       section in hand is still a move of those members: they are leaving, and
       moving the box would take the rest with them
+- [x] **Resize a container** — eight grips round its own box, not round its
+      contents, because a column drawn 600 tall holding 60 of content is 600.
+      The members are untouched, and here that is the point of the gesture
+      rather than only correctness: narrowing a column is how a set of rows
+      goes from three across to two, and the rows have no say in it. Offered
+      only where the *page* positions the container — one in a column takes
+      its width from the column and its height from its contents, so there is
+      nothing there to resize (§5.11's rule, applied to a gesture)
 - [x] Expression editor: SyntaxError on blur, live preview against real state.
       An `ƒx` toggle on every value-shaped field turns a literal into
       `{ $expr }` and back, keeping what it came to on the way out. **Offered

@@ -886,3 +886,94 @@ describe('what a drag on a whole container writes', () => {
     expect(groups).toEqual([]);
   });
 });
+
+describe('the grips a container gets', () => {
+  const column: DashboardGroupBox = {
+    path: 'Left',
+    rect: { x: 0, y: 180, w: 767, h: 600 },
+    frame: true,
+    stack: true,
+  };
+  const section: DashboardGroupBox = {
+    path: 'Left/doors',
+    rect: { x: 0, y: 0, w: 700, h: 60 },
+    frame: true,
+    stack: true,
+  };
+
+  const layout = {
+    breakpoint: 'desktop' as const,
+    columns: 12,
+    row_height: 120,
+    gap: 12,
+    flow: 'free' as const,
+    frame: { width: 1240, height: 900, fit: 'scroll' as const },
+    groups: [column, section],
+    placements: [
+      { widget_id: 'head', x: 0, y: 0, w: 1, h: 1, rect: { x: 0, y: 0, w: 300, h: 18 } },
+      { widget_id: 'list', x: 0, y: 0, w: 1, h: 1, rect: { x: 0, y: 30, w: 700, h: 30 } },
+    ],
+  };
+
+  const mount = async () => {
+    const el = document.createElement('hc-page');
+    const sized: { path: string; rect: unknown }[] = [];
+    el.doc = {
+      id: 'd',
+      name: 'D',
+      icon: 'home',
+      owner_user_id: 'u',
+      layouts: [layout],
+      widgets: [
+        { id: 'head', type: 'text', config: { text: 'DOORS', group: 'Left/doors' } },
+        { id: 'list', type: 'text', config: { text: 'rows', group: 'Left/doors' } },
+      ],
+    };
+    el.store = new DeviceStore();
+    el.mode = 'edit';
+    el.onSizeGroup = (path, rect) => {
+      sized.push({ path, rect });
+    };
+    document.body.append(el);
+    await el.updateComplete;
+    return { el, sized };
+  };
+
+  it('draws eight of them round the container the page positions', async () => {
+    const { el } = await mount();
+    (el as unknown as { picked: Set<string> }).picked = new Set(['head', 'list']);
+    await el.updateComplete;
+    // Both the column and the section hold exactly these two, and the
+    // outermost is what somebody grabbed.
+    const frame = el.shadowRoot?.querySelector('.cluster') as HTMLElement;
+    expect(frame, 'no frame').not.toBeNull();
+    expect(frame.dataset['frame']).toBe('Left');
+    expect(frame.querySelectorAll('.grip')).toHaveLength(8);
+  });
+
+  it('draws it round the container’s own box, not round its contents', async () => {
+    // A column drawn 600 tall holding 60 of content is 600, and the members
+    // only cover the 60.
+    const { el } = await mount();
+    (el as unknown as { picked: Set<string> }).picked = new Set(['head', 'list']);
+    await el.updateComplete;
+    const frame = el.shadowRoot?.querySelector('.cluster') as HTMLElement;
+    expect(frame.style.height).toBe('600px');
+    expect(frame.style.width).toBe('767px');
+  });
+
+  it('offers none for a container a column positions', async () => {
+    // It takes its width from the column and its height from its contents, so
+    // there is nothing there to resize — not offered rather than offered and
+    // refused (§5.11).
+    const { el } = await mount();
+    el.doc = { ...el.doc!, layouts: [{ ...layout, groups: [column, section] }] };
+    (el as unknown as { inside: string }).inside = 'Left';
+    (el as unknown as { picked: Set<string> }).picked = new Set(['head', 'list']);
+    await el.updateComplete;
+    const frame = el.shadowRoot?.querySelector('.cluster') as HTMLElement | null;
+    // The section is the only container holding exactly these, once standing
+    // inside the column — and it is laid out by the column.
+    expect(frame?.dataset['frame']).not.toBe('Left/doors');
+  });
+});

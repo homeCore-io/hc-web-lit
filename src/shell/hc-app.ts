@@ -23,6 +23,7 @@ import {
   placeWidgets,
   moveGroupBox,
   regroupWidgets,
+  sizeGroupBox,
   stackGroup,
   transformWidgets,
   removeWidget,
@@ -797,6 +798,22 @@ export class HcApp extends LitElement {
     const doc = this.current;
     if (doc === undefined) return;
     const next = moveGroupBox(doc, this.breakpoint, path, by);
+    if (next === undefined) return;
+    this.writePages(this.replacing(next), next.id);
+    return Promise.resolve();
+  };
+
+  /**
+   * Resize a container on the composed page being shown (§14.2b).
+   *
+   * Narrowing a column is how a set of rows goes from three across to two, and
+   * the rows have no say in it — so this writes the box and nothing else,
+   * exactly as moving one does.
+   */
+  private readonly sizeGroupOnPage = async (path: string, rect: Box): Promise<void> => {
+    const doc = this.current;
+    if (doc === undefined) return;
+    const next = sizeGroupBox(doc, this.breakpoint, path, rect);
     if (next === undefined) return;
     this.writePages(this.replacing(next), next.id);
     return Promise.resolve();
@@ -2048,6 +2065,7 @@ export class HcApp extends LitElement {
         .onPlaceWidget=${this.mayWriteDashboards() ? this.placeWidgetOnPage : undefined}
         .onPlaceWidgets=${this.mayWriteDashboards() ? this.placeWidgetsOnPage : undefined}
         .onPlaceGroup=${this.mayWriteDashboards() ? this.placeGroupOnPage : undefined}
+        .onSizeGroup=${this.mayWriteDashboards() ? this.sizeGroupOnPage : undefined}
         .onTurnWidget=${this.mayWriteDashboards() ? this.turnWidgetOnPage : undefined}
         .onTurnWidgets=${this.mayWriteDashboards() ? this.turnWidgetsOnPage : undefined}
         .onDrawWidget=${this.mayWriteDashboards() ? this.drawWidgetOnPage : undefined}

@@ -646,3 +646,54 @@ export function moveGroupBox(
     ),
   };
 }
+
+/**
+ * A container resized, which is again one write to its box.
+ *
+ * Only meaningful where the page positions the container: a container in a
+ * column takes its width from the column and its height from its contents, so
+ * there is nothing there to resize and the surface does not offer the grips
+ * (§5.11 — not offered rather than offered and refused).
+ *
+ * The members are untouched, and this time that is not only correctness but
+ * the point of the gesture: narrowing a column is how a set of rows goes from
+ * three across to two, and the rows have no say in it.
+ */
+export function sizeGroupBox(
+  doc: DashboardDefinition,
+  breakpoint: DashboardBreakpoint,
+  path: string,
+  rect: { x: number; y: number; w: number; h: number },
+): DashboardDefinition | undefined {
+  const drawn = layoutToDraw(doc, breakpoint);
+  if (drawn === undefined) return undefined;
+  const editing = drawn.borrowedFrom ?? breakpoint;
+  const layout = (doc.layouts ?? []).find((l) => l.breakpoint === editing);
+  if (layout === undefined) return undefined;
+
+  const box = (layout.groups ?? []).find((b) => b.path === path);
+  const was = box?.rect;
+  if (box === undefined || was == null) return undefined;
+
+  const next = {
+    x: Math.round(rect.x),
+    y: Math.round(rect.y),
+    w: Math.max(1, Math.round(rect.w)),
+    h: Math.max(1, Math.round(rect.h)),
+  };
+  if (next.x === was.x && next.y === was.y && next.w === was.w && next.h === was.h) {
+    return undefined;
+  }
+
+  return {
+    ...doc,
+    layouts: (doc.layouts ?? []).map((l) =>
+      l.breakpoint === editing
+        ? {
+            ...l,
+            groups: (l.groups ?? []).map((b) => (b.path === path ? { ...b, rect: next } : b)),
+          }
+        : l,
+    ),
+  };
+}

@@ -36,6 +36,7 @@ import {
 } from '../core/geometry.js';
 import {
   containerOf,
+  containerOfBox,
   flowFrames,
   framesByPath,
   framesIn,
@@ -639,6 +640,16 @@ export class HcPage extends LitElement {
   @property({ attribute: false }) onPlaceGroup:
     ((path: string, by: { x: number; y: number }) => void | Promise<void>) | undefined;
 
+  /**
+   * Resize a container, which is one write to its box (§14.2b).
+   *
+   * The members are untouched, and here that is not only correctness but the
+   * point of the gesture: narrowing a column is how a set of rows goes from
+   * three across to two, and the rows have no say in it.
+   */
+  @property({ attribute: false }) onSizeGroup:
+    ((path: string, rect: Box) => void | Promise<void>) | undefined;
+
   @property({ attribute: false }) onPlaceWidgets:
     ((moves: readonly { id: string; box: Box }[]) => Promise<void>) | undefined;
 
@@ -1027,10 +1038,17 @@ export class HcPage extends LitElement {
     const tall = box.fit === 'content' && !grows ? (this.fitted.get(box.path) ?? at.h) : at.h;
     // Carried, if this is the one in hand: the box follows the pointer and its
     // members hold still inside it, which is what moving a container is.
+    // Being resized is the same idea, with the grips deciding the rectangle
+    // rather than the pointer's travel.
     const carry = this.carrying;
     const lift = carry?.path === box.path ? carry.by : { x: 0, y: 0 };
-    const place = inFlow ? '' : `left:${at.x + lift.x}px;top:${at.y + lift.y}px;width:${at.w}px;`;
-    const size = grows ? '' : `height:${tall}px;${box.clip === true ? 'overflow:hidden;' : ''}`;
+    const live = this.sizing?.path === box.path ? this.boxPreview(box.path, at) : at;
+    const place = inFlow
+      ? ''
+      : `left:${live.x + lift.x}px;top:${live.y + lift.y}px;width:${live.w}px;`;
+    const size = grows
+      ? ''
+      : `height:${live === at ? tall : live.h}px;${box.clip === true ? 'overflow:hidden;' : ''}`;
 
     // Ordering only means something in a column. A positioned container places
     // everything by coordinate, so its children may render in any order — and
@@ -1550,6 +1568,14 @@ export class HcPage extends LitElement {
    */
   private groupFrame() {
     if (this.mode !== 'edit' || !this.free || this.picked.size < 2) return nothing;
+
+    // **A container in hand is resized rather than turned.** Its box is the
+    // frame, its own rect is what the grips write, and the selection bounds
+    // would be the wrong rectangle anyway — a column drawn 400 tall holding
+    // 300 of content is 400, and the members only cover the 300.
+    const held = this.sizableContainer();
+    if (held !== undefined) return this.containerFrame(held);
+
     if (this.onTurnWidgets === undefined) return nothing;
 
     const box = boundsOf([...this.boxesOf(this.picked)].map(([id, b]) => this.previewOf(id, b)));
@@ -2066,6 +2092,126 @@ export class HcPage extends LitElement {
       return;
     }
     for (const [id, box] of moves) await this.onPlaceWidget?.(id, box);
+  }
+
+  /**
+   * The container in hand that the *page* positions, with its rect.
+   *
+   * A container in a column takes its width from the column and its height
+   * from its contents, so there is nothing there to resize and the grips are
+   * not offered — §5.11's rule, applied to a gesture rather than to a control.
+   */
+  private sizableContainer(): { path: string; rect: DashboardRect } | undefined {
+    if (this.onSizeGroup === undefined) return undefined;
+    const path = this.wholeContainer(this.picked);
+    if (path === undefined) return undefined;
+
+    const layout =
+      this.doc === undefined ? undefined : layoutToDraw(this.doc, this.breakpoint)?.layout;
+    const flow = flowFrames(layout?.groups);
+    const box = flow.get(path);
+    if (box?.rect == null) return undefined;
+    const parent = containerOfBox(box, flow);
+    if (parent !== undefined && this.stacksAt(parent)) return undefined;
+
+    const at = pageRectOf(box, framesByPath(layout?.groups));
+    return at === undefined ? undefined : { path, rect: at };
+  }
+
+  /** The frame round a container, with the grips that write its box. */
+  private containerFrame(held: { path: string; rect: DashboardRect }) {
+    const at = this.boxPreview(held.path, held.rect);
+    return html`<div
+      class="cluster"
+      data-frame=${held.path}
+      style="left:${at.x}px;top:${at.y}px;width:${at.w}px;height:${at.h}px"
+    >
+      ${HANDLES.map(
+        (h) =>
+          html`<div
+            class="grip ${h}"
+            part="action"
+            title=${`Resize ${held.path}`}
+            @pointerdown=${(e: PointerEvent) => this.startBoxResize(e, held, h)}
+          ></div>`,
+      )}
+    </div>`;
+  }
+
+  /** A container resize in progress, in the page's own units. */
+  @state() private sizing:
+    { path: string; from: DashboardRect; grip: Handle; dx: number; dy: number } | undefined;
+
+  /** Where a container's box is right now, preview included. */
+  private boxPreview(path: string, rect: DashboardRect): DashboardRect {
+    const live = this.sizing;
+    if (live === undefined || live.path !== path) return rect;
+    return resizedBy(live.from, live.grip, { dx: live.dx, dy: live.dy });
+  }
+
+  /**
+   * Start resizing a container, and follow it to the end.
+   *
+   * Its own path rather than `startDrag`'s, because every line of that one is
+   * keyed by widget id — what is picked, what is carried, which neighbours to
+   * line up with — and a box is none of those things. What they share is the
+   * arithmetic, which is `core/geometry.ts` and is where it belongs.
+   */
+  private startBoxResize(
+    e: PointerEvent,
+    held: { path: string; rect: DashboardRect },
+    grip: Handle,
+  ): void {
+    if (this.onSizeGroup === undefined) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const target = e.currentTarget as HTMLElement;
+    try {
+      target.setPointerCapture(e.pointerId);
+    } catch {
+      // A pointer the browser no longer considers active. The listeners below
+      // still work; only the capture is missing.
+    }
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    this.sizing = { path: held.path, from: held.rect, grip, dx: 0, dy: 0 };
+
+    const move = (at: PointerEvent): void => {
+      const scale = this.frameScale();
+      const k = scale === 0 ? 1 : scale;
+      this.sizing = {
+        path: held.path,
+        from: held.rect,
+        grip,
+        dx: Math.round((at.clientX - startX) / k),
+        dy: Math.round((at.clientY - startY) / k),
+      };
+    };
+
+    const end = (): void => {
+      target.removeEventListener('pointermove', move);
+      target.removeEventListener('pointerup', end);
+      target.removeEventListener('pointercancel', end);
+      const live = this.sizing;
+      this.sizing = undefined;
+      if (live === undefined || (live.dx === 0 && live.dy === 0)) return;
+      const next = resizedBy(live.from, live.grip, { dx: live.dx, dy: live.dy });
+      // The page rect back into the box's own space, which is the parent's —
+      // the same conversion every other write on this surface makes.
+      const layout =
+        this.doc === undefined ? undefined : layoutToDraw(this.doc, this.breakpoint)?.layout;
+      const flow = flowFrames(layout?.groups);
+      const box = flow.get(held.path);
+      const space = box === undefined ? undefined : containerOfBox(box, flow);
+      const local = toLocal(next, space, framesByPath(layout?.groups));
+      void this.onSizeGroup?.(held.path, { x: local.x, y: local.y, w: local.w, h: local.h });
+    };
+
+    target.addEventListener('pointermove', move);
+    target.addEventListener('pointerup', end);
+    target.addEventListener('pointercancel', end);
   }
 
   /**

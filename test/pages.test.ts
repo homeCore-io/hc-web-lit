@@ -10,6 +10,7 @@ import type { DashboardDefinition } from '../src/core/dashboard.js';
 import {
   addWidget,
   moveGroupBox,
+  sizeGroupBox,
   stackGroup,
   boxOf,
   duplicatePage,
@@ -552,5 +553,51 @@ describe('moving a container', () => {
   it('writes nothing for a box that is not there, or a move that is not one', async () => {
     expect(moveGroupBox(doc(), 'desktop', 'Nothing', { x: 10, y: 10 })).toBeUndefined();
     expect(moveGroupBox(doc(), 'desktop', 'Doors', { x: 0, y: 0 })).toBeUndefined();
+  });
+});
+
+describe('resizing a container', () => {
+  const doc = (): DashboardDefinition => ({
+    id: 'd',
+    name: 'D',
+    icon: 'home',
+    owner_user_id: 'u',
+    widgets: [{ id: 'a', type: 'text', config: { group: 'Left' } }],
+    layouts: [
+      {
+        breakpoint: 'desktop',
+        columns: 12,
+        row_height: 100,
+        gap: 10,
+        flow: 'free',
+        frame: { width: 1240, height: 900 },
+        groups: [
+          { path: 'Left', rect: { x: 0, y: 180, w: 767, h: 1062 }, frame: true, stack: true },
+        ],
+        placements: [
+          { widget_id: 'a', x: 0, y: 0, w: 1, h: 1, rect: { x: 0, y: 20, w: 700, h: 40 } },
+        ],
+      },
+    ],
+  });
+
+  it('writes the box and leaves the rows to reflow', async () => {
+    // Narrowing a column is how a set of rows goes from three across to two,
+    // and the rows have no say in it.
+    const next = sizeGroupBox(doc(), 'desktop', 'Left', { x: 0, y: 180, w: 400, h: 1062 })!;
+    expect(next.layouts?.[0]?.groups?.[0]?.rect).toEqual({ x: 0, y: 180, w: 400, h: 1062 });
+    expect(next.layouts?.[0]?.placements?.[0]?.rect).toEqual({ x: 0, y: 20, w: 700, h: 40 });
+  });
+
+  it('never writes a box with no width or no height', async () => {
+    const next = sizeGroupBox(doc(), 'desktop', 'Left', { x: 0, y: 180, w: -40, h: 0 })!;
+    expect(next.layouts?.[0]?.groups?.[0]?.rect).toMatchObject({ w: 1, h: 1 });
+  });
+
+  it('writes nothing when the rectangle is the one already there', async () => {
+    expect(
+      sizeGroupBox(doc(), 'desktop', 'Left', { x: 0, y: 180, w: 767, h: 1062 }),
+    ).toBeUndefined();
+    expect(sizeGroupBox(doc(), 'desktop', 'Nothing', { x: 0, y: 0, w: 10, h: 10 })).toBeUndefined();
   });
 });
