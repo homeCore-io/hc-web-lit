@@ -74,6 +74,14 @@ export class HcKeypad extends LitElement {
       height: auto;
       overflow: visible;
     }
+    /* A row a set has made openable is focusable, and the ring belongs on the
+       host — the shell draws this one for every widget built on it, and this
+       widget is not. */
+    :host(:focus-visible) {
+      outline: 2px solid var(--hc-stroke-focus, #7cc4ff);
+      outline-offset: -2px;
+      border-radius: var(--hc-radius-md, 14px);
+    }
     :host([data-row]) .card {
       display: flex;
       align-items: center;
@@ -86,19 +94,26 @@ export class HcKeypad extends LitElement {
       gap: 0.75rem;
       min-width: 0;
     }
+    /* **This widget hand-rolls the layout shell rather than extending it**
+       (§7.2), which is why it kept a filled 2.25rem tile after every other row
+       in the product lost one: a shell fix reaches the widgets that use the
+       shell. Matched by hand here; the real answer is for this to be an
+       a layout shell like the rest, which is a structural change and not this
+       one. Same numbers as the shell, so the two cannot look like different
+       products in one list. */
     .tile {
       flex: none;
       display: grid;
       place-items: center;
-      width: 2.25rem;
-      height: 2.25rem;
-      border-radius: var(--hc-radius-sm, 8px);
-      background: var(--hc-surface-sunken, #0d1116);
+      width: 1.75rem;
+      height: 1.75rem;
+      border-radius: var(--hc-radius-md, 14px);
+      background: none;
       color: var(--hc-ink-muted, #8b95a4);
     }
     .tile svg {
-      width: 1.25rem;
-      height: 1.25rem;
+      width: 1.125rem;
+      height: 1.125rem;
     }
     .lines {
       min-width: 0;
