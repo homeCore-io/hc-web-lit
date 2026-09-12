@@ -10,8 +10,8 @@ import type { DashboardDefinition } from '../src/core/dashboard.js';
 import {
   addWidget,
   moveGroupBox,
+  frameGroup,
   sizeGroupBox,
-  stackGroup,
   boxOf,
   duplicatePage,
   newPage,
@@ -444,7 +444,7 @@ describe('giving a group a body, and taking it away again', () => {
     d.layouts?.[0]?.placements?.find((p) => p.widget_id === id)?.rect;
 
   it('puts the box round exactly what its members cover', async () => {
-    const made = stackGroup(doc(), 'desktop', 'Doors', true);
+    const made = frameGroup(doc(), 'desktop', 'Doors', 'column');
     expect(made, 'nothing written').not.toBeUndefined();
     expect(boxes(made!)[0]).toMatchObject({
       path: 'Doors',
@@ -458,20 +458,20 @@ describe('giving a group a body, and taking it away again', () => {
     // A member's rect is stated in the space of its nearest framed ancestor,
     // and the box is now that ancestor. Leaving them in page coordinates would
     // move everything inside it by the frame's own offset.
-    const made = stackGroup(doc(), 'desktop', 'Doors', true)!;
+    const made = frameGroup(doc(), 'desktop', 'Doors', 'column')!;
     expect(rect(made, 'head')).toEqual({ x: 0, y: 0, w: 300, h: 18 });
     expect(rect(made, 'list')).toEqual({ x: 0, y: 30, w: 700, h: 60 });
   });
 
   it('leaves everything outside the group alone', async () => {
-    const made = stackGroup(doc(), 'desktop', 'Doors', true)!;
+    const made = frameGroup(doc(), 'desktop', 'Doors', 'column')!;
     expect(rect(made, 'loose')).toEqual({ x: 900, y: 0, w: 100, h: 40 });
   });
 
   it('takes the gap from the gaps its author drew', async () => {
     // A column spaces its members evenly and the drawn ones are not, so this
     // is the one thing that has to be chosen rather than carried.
-    const made = stackGroup(doc(), 'desktop', 'Doors', true)!;
+    const made = frameGroup(doc(), 'desktop', 'Doors', 'column')!;
     expect(boxes(made)[0]?.stack_gap).toBe(12);
   });
 
@@ -479,17 +479,17 @@ describe('giving a group a body, and taking it away again', () => {
     // The same invariant group-then-ungroup keeps, and the reason a household
     // can try this on a real page without wondering what it cost.
     const before = doc();
-    const made = stackGroup(before, 'desktop', 'Doors', true)!;
-    const back = stackGroup(made, 'desktop', 'Doors', false)!;
+    const made = frameGroup(before, 'desktop', 'Doors', 'column')!;
+    const back = frameGroup(made, 'desktop', 'Doors', undefined)!;
     expect(back.layouts?.[0]?.placements).toEqual(before.layouts?.[0]?.placements);
     expect(boxes(back)).toEqual([]);
   });
 
   it('writes nothing when there is nothing to do', async () => {
-    const made = stackGroup(doc(), 'desktop', 'Doors', true)!;
-    expect(stackGroup(made, 'desktop', 'Doors', true)).toBeUndefined();
-    expect(stackGroup(doc(), 'desktop', 'Doors', false)).toBeUndefined();
-    expect(stackGroup(doc(), 'desktop', 'Nothing', true)).toBeUndefined();
+    const made = frameGroup(doc(), 'desktop', 'Doors', 'column')!;
+    expect(frameGroup(made, 'desktop', 'Doors', 'column')).toBeUndefined();
+    expect(frameGroup(doc(), 'desktop', 'Doors', undefined)).toBeUndefined();
+    expect(frameGroup(doc(), 'desktop', 'Nothing', 'column')).toBeUndefined();
   });
 
   it('declines on a packed page, where the engine would undo it', async () => {
@@ -497,13 +497,13 @@ describe('giving a group a body, and taking it away again', () => {
     // engine that immediately re-packs (§14.1).
     const packed = doc();
     packed.layouts![0]!.flow = 'packed';
-    expect(stackGroup(packed, 'desktop', 'Doors', true)).toBeUndefined();
+    expect(frameGroup(packed, 'desktop', 'Doors', 'column')).toBeUndefined();
   });
 
   it('gathers a nested group too, because a path is the membership', async () => {
     const deep = doc();
     deep.widgets![0]!.config = { group: 'Doors/Head' };
-    const made = stackGroup(deep, 'desktop', 'Doors', true)!;
+    const made = frameGroup(deep, 'desktop', 'Doors', 'column')!;
     expect(rect(made, 'head')).toEqual({ x: 0, y: 0, w: 300, h: 18 });
   });
 });
@@ -599,5 +599,90 @@ describe('resizing a container', () => {
       sizeGroupBox(doc(), 'desktop', 'Left', { x: 0, y: 180, w: 767, h: 1062 }),
     ).toBeUndefined();
     expect(sizeGroupBox(doc(), 'desktop', 'Nothing', { x: 0, y: 0, w: 10, h: 10 })).toBeUndefined();
+  });
+});
+
+describe('the other kind of body, and switching between them', () => {
+  // A band is a row of things side by side that is still as tall as what is in
+  // it, which is what the house's footer is and what no amount of column would
+  // express.
+  const doc = (): DashboardDefinition => ({
+    id: 'd',
+    name: 'D',
+    icon: 'home',
+    owner_user_id: 'u',
+    widgets: [
+      { id: 'modes', type: 'mode_chips', config: { group: 'Foot' } },
+      { id: 'scenes', type: 'scene_row', config: { group: 'Foot' } },
+    ],
+    layouts: [
+      {
+        breakpoint: 'desktop',
+        columns: 12,
+        row_height: 100,
+        gap: 10,
+        flow: 'free',
+        frame: { width: 1240, height: 900 },
+        placements: [
+          { widget_id: 'modes', x: 0, y: 0, w: 1, h: 1, rect: { x: 22, y: 1070, w: 320, h: 56 } },
+          {
+            widget_id: 'scenes',
+            x: 0,
+            y: 0,
+            w: 1,
+            h: 1,
+            rect: { x: 372, y: 1070, w: 846, h: 120 },
+          },
+        ],
+      },
+    ],
+  });
+
+  const box = (d: DashboardDefinition) => d.layouts?.[0]?.groups?.[0];
+  const rects = (d: DashboardDefinition) => d.layouts?.[0]?.placements?.map((p) => p.rect);
+
+  it('is as tall as what is in it, and lays nothing out', async () => {
+    const made = frameGroup(doc(), 'desktop', 'Foot', 'band')!;
+    expect(box(made)).toMatchObject({ path: 'Foot', frame: true, fit: 'content' });
+    expect(box(made)?.stack).not.toBe(true);
+  });
+
+  it('keeps its members side by side, where they were drawn', async () => {
+    // The whole difference from a column: a band honours the tops and the
+    // lefts, so two things beside each other stay beside each other.
+    const made = frameGroup(doc(), 'desktop', 'Foot', 'band')!;
+    expect(rects(made)).toEqual([
+      { x: 0, y: 0, w: 320, h: 56 },
+      { x: 350, y: 0, w: 846, h: 120 },
+    ]);
+  });
+
+  it('changes into a column without moving anything', async () => {
+    // Two keys on the same box: a member's rect is stated in the box's space
+    // either way, so switching is arithmetic-free and switching back gets the
+    // arrangement it started with.
+    const band = frameGroup(doc(), 'desktop', 'Foot', 'band')!;
+    const column = frameGroup(band, 'desktop', 'Foot', 'column')!;
+    expect(rects(column)).toEqual(rects(band));
+    expect(box(column)).toMatchObject({ stack: true, fit: null });
+    expect(box(column)?.rect).toEqual(box(band)?.rect);
+
+    const back = frameGroup(column, 'desktop', 'Foot', 'band')!;
+    expect(rects(back)).toEqual(rects(band));
+  });
+
+  it('comes back byte-identical from either kind', async () => {
+    const before = doc();
+    for (const as of ['band', 'column'] as const) {
+      const made = frameGroup(before, 'desktop', 'Foot', as)!;
+      const back = frameGroup(made, 'desktop', 'Foot', undefined)!;
+      expect(back.layouts?.[0]?.placements, as).toEqual(before.layouts?.[0]?.placements);
+      expect(back.layouts?.[0]?.groups, as).toEqual([]);
+    }
+  });
+
+  it('writes nothing when it is already the kind asked for', async () => {
+    const made = frameGroup(doc(), 'desktop', 'Foot', 'band')!;
+    expect(frameGroup(made, 'desktop', 'Foot', 'band')).toBeUndefined();
   });
 });

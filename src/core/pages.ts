@@ -470,7 +470,8 @@ export function boxOf(
 }
 
 /**
- * A group turned into a column, or turned back into a plain tag.
+ * A group given a body, changed from one kind of body to the other, or turned
+ * back into a plain tag.
  *
  * **The gap this closes is a stated constraint, not a nicety.** §19.9 says
  * every option is GUI-editable and no widget ships that requires hand-editing
@@ -488,17 +489,28 @@ export function boxOf(
  * The gap between the rows is the one thing that has to be *chosen* rather
  * than carried, because a column spaces its members evenly and the drawn ones
  * are not. The median of the gaps their author actually drew is the closest a
- * single number gets to what was there.
+ * single number gets to what was there. A band chooses nothing: it leaves its
+ * members exactly where they are and takes its height from them.
+ *
+ * **Two kinds, because a page needs both.** A column is a section — one thing
+ * under another, growing as it fills. A band is a row of things side by side
+ * that is still as tall as what is in it, which is what the house's footer is
+ * and what no amount of column would express. They are two keys on the same
+ * box, so changing between them moves nothing: a member's rect is stated in
+ * the box's space either way, a column ignores the tops and a band honours
+ * them, and switching back gets the arrangement it started with.
  *
  * `undefined` when there is nothing to do — no such layout, no members, or the
  * group is already the way it was asked to be — so a caller can leave the
  * document alone rather than write an identical one.
  */
-export function stackGroup(
+export type Body = 'column' | 'band';
+
+export function frameGroup(
   doc: DashboardDefinition,
   breakpoint: DashboardBreakpoint,
   path: string,
-  stacked: boolean,
+  as: Body | undefined,
 ): DashboardDefinition | undefined {
   const drawn = layoutToDraw(doc, breakpoint);
   if (drawn === undefined) return undefined;
@@ -510,8 +522,13 @@ export function stackGroup(
 
   const boxes = layout.groups ?? [];
   const existing = boxes.find((b) => b.path === path);
-  const already = existing?.stack === true && existing.rect != null;
-  if (already === stacked) return undefined;
+  const now: Body | undefined =
+    existing?.frame !== true || existing.rect == null
+      ? undefined
+      : existing.stack === true
+        ? 'column'
+        : 'band';
+  if (now === as) return undefined;
 
   const mine = new Set(
     (doc.widgets ?? [])
@@ -540,13 +557,33 @@ export function stackGroup(
     layouts: (doc.layouts ?? []).map((l) => (l.breakpoint === editing ? next : l)),
   });
 
-  if (!stacked) {
+  if (as === undefined) {
     const rect = existing?.rect;
     if (rect == null) return undefined;
     return swap(
       within(
         boxes.filter((b) => b.path !== path),
         shift({ x: rect.x, y: rect.y }),
+      ),
+    );
+  }
+
+  // **Changing how a body lays out moves nothing at all.** A member's rect is
+  // stated in the box's space either way — a column ignores the tops and a
+  // band honours them — so switching between the two is two keys and no
+  // arithmetic, and switching back gets the arrangement it started with.
+  if (now !== undefined && existing?.rect != null) {
+    const same: DashboardGroupBox = {
+      ...existing,
+      frame: true,
+      ...(as === 'column'
+        ? { stack: true, stack_gap: existing.stack_gap ?? 12, fit: null }
+        : { stack: false, fit: 'content' as const }),
+    };
+    return swap(
+      within(
+        boxes.map((b) => (b.path === path ? same : b)),
+        layout.placements ?? [],
       ),
     );
   }
@@ -568,9 +605,13 @@ export function stackGroup(
     ...(existing ?? { path }),
     rect: { x, y, w, h },
     frame: true,
-    stack: true,
-    stack_gap: drawnGap(rects),
     padding: existing?.padding ?? 0,
+    // A column decides where its members go and needs a gap; a band leaves
+    // them where they are and needs a height, which is a measurement of them
+    // (§14.2b).
+    ...(as === 'column'
+      ? { stack: true, stack_gap: drawnGap(rects) }
+      : { fit: 'content' as const }),
   };
 
   return swap(within([...boxes.filter((b) => b.path !== path), box], shift({ x: -x, y: -y })));

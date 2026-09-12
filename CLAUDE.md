@@ -2458,8 +2458,16 @@ not a failure of it.
       has no geometry at all — and nothing in the product could turn one into a
       container, so the nine sections on this household's room page were made
       by editing the document by hand. Against §19.9, which is the constraint
-      and not a preference. Stack and Unstack are beside Group and Ungroup, and
-      the conversion is exactly reversible: nothing about a member's size,
+      and not a preference. **Two kinds**, because a page needs both: a
+      **Column** is a section, one thing under another, growing as it fills; a
+      **Band** is a row of things side by side that is still as tall as what is
+      in it, which is what the house's footer is and what no amount of column
+      would express. They are two keys on the same box, so changing between
+      them moves nothing at all — a member's rect is stated in the box's space
+      either way, a column ignores the tops and a band honours them. Whichever
+      it is not is offered as the switch, and Unframe takes the body off; at
+      most two buttons at a time and each word says what pressing it does. The
+      conversion is exactly reversible: nothing about a member's size,
       order or relative position moves, so stack-then-unstack leaves the
       document byte-identical — the invariant group-then-ungroup already keeps,
       and the reason a household can try it on a real page. The gap between the

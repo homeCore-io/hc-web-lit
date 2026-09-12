@@ -23,12 +23,13 @@ import {
   placeWidgets,
   moveGroupBox,
   regroupWidgets,
+  frameGroup,
   sizeGroupBox,
-  stackGroup,
   transformWidgets,
   removeWidget,
   turnWidget,
   renamed,
+  type Body,
   type Box,
 } from '../core/pages.js';
 import {
@@ -863,11 +864,11 @@ export class HcApp extends LitElement {
    * order or relative position moves, so a household can try it on a real page
    * and press it again.
    */
-  private readonly stackHeld = (stacked: boolean) => (): void => {
+  private readonly frameHeld = (as: Body | undefined) => (): void => {
     const doc = this.current;
     const path = this.heldGroup();
     if (doc === undefined || path === undefined) return;
-    const next = stackGroup(doc, this.breakpoint, path, stacked);
+    const next = frameGroup(doc, this.breakpoint, path, as);
     if (next === undefined) return;
     this.writePages(this.replacing(next), doc.id);
   };
@@ -885,15 +886,15 @@ export class HcApp extends LitElement {
     return layout?.flow === 'free' && layout.frame != null;
   }
 
-  /** Whether the group in hand already has a body. */
-  private heldStacks(): boolean {
+  /** What kind of body the group in hand has, if it has one. */
+  private heldBody(): Body | undefined {
     const path = this.heldGroup();
-    if (path === undefined) return false;
+    if (path === undefined) return undefined;
     const layout =
       this.current === undefined ? undefined : layoutToDraw(this.current, this.breakpoint)?.layout;
-    return (layout?.groups ?? []).some(
-      (b) => b.path === path && b.stack === true && b.rect != null,
-    );
+    const box = (layout?.groups ?? []).find((b) => b.path === path);
+    if (box === undefined || box.frame !== true || box.rect == null) return undefined;
+    return box.stack === true ? 'column' : 'band';
   }
 
   private readonly groupHeld = (): void => {
@@ -1896,23 +1897,7 @@ export class HcApp extends LitElement {
             Ungroup
           </button>`
     }
-    ${
-      shared === undefined || !this.free()
-        ? nothing
-        : this.heldStacks()
-          ? html`<button
-              title=${`Let "${shared}" be positioned again`}
-              @click=${this.stackHeld(false)}
-            >
-              Unstack
-            </button>`
-          : html`<button
-              title=${`Lay "${shared}" out in a column that grows`}
-              @click=${this.stackHeld(true)}
-            >
-              Stack
-            </button>`
-    }
+    ${shared === undefined || !this.free() ? nothing : this.bodyControls(shared)}
     ${
       this.held.inside === undefined
         ? nothing
@@ -1920,6 +1905,37 @@ export class HcApp extends LitElement {
             in ${this.held.inside}
           </span>`
     }`;
+  }
+
+  /**
+   * What a group can be made into, and unmade from (§14.2b).
+   *
+   * Two kinds of body, because a page needs both. A **column** is a section —
+   * one thing under another, growing as it fills — and a **band** is a row of
+   * things side by side that is still as tall as what is in it, which is what
+   * the house's footer is and what no amount of column would express.
+   * Whichever it is not is offered as the switch, and changing between them
+   * moves nothing at all.
+   *
+   * At most two buttons at a time, and each word says what pressing it does.
+   */
+  private bodyControls(shared: string) {
+    const body = this.heldBody();
+    const make = (as: Body, label: string, title: string) =>
+      html`<button title=${title} @click=${this.frameHeld(as)}>${label}</button>`;
+
+    if (body === undefined) {
+      return html`${make('column', 'Column', `Lay "${shared}" out one under another`)}
+      ${make('band', 'Band', `Give "${shared}" a body and leave it as drawn`)}`;
+    }
+    return html`${
+        body === 'column'
+          ? make('band', 'Band', `Leave "${shared}" as drawn instead of in a column`)
+          : make('column', 'Column', `Lay "${shared}" out one under another instead`)
+      }
+      <button title=${`Take the body off "${shared}"`} @click=${this.frameHeld(undefined)}>
+        Unframe
+      </button>`;
   }
 
   private pageControls() {
