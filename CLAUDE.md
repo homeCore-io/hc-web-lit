@@ -2419,6 +2419,15 @@ not a failure of it.
       as well as turning each one — which is the thing an element's own `angle`
       cannot express, and why rectangles and angles are written together as a
       single edit
+- [x] **Handles belong to the selection.** Every placement wore a move grip
+      and, on a composed page, eight resize grips and a turn — so entering
+      Arrange on the house page put about three hundred grips over a page
+      somebody was trying to read, and the household's word for it was noisy.
+      Nothing is selected on entering edit mode, so the page is the page until
+      something is pressed, and a press is what puts the handles on it. Press
+      -anywhere-to-move was tried and taken back out in the same sitting: it
+      costs the marquee, which starts wherever the finger lands, and on a page
+      that is wall-to-wall cards there would then be nowhere to start one
 - [x] Transform geometry — written against the placement model, gestures working
       from the placement alone so a sandboxed element is transformable without
       being inspectable (§14.2). `core/geometry.ts`, pure and tested as such.

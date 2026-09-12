@@ -298,6 +298,8 @@ describe('a widget larger than its placement', () => {
     el.mode = 'edit';
     document.body.append(el);
     await el.updateComplete;
+    (el as unknown as { picked: Set<string> }).picked = new Set(['h']);
+    await el.updateComplete;
 
     const placed = el.shadowRoot?.querySelector('.placed') as HTMLElement;
     // The handles are children of the unclipped box, beside the clipped body.
@@ -483,8 +485,23 @@ describe('dragging a widget on a page being arranged', () => {
     return el;
   };
 
-  /** The handle by name, so a missing one fails as a missing handle. */
+  /**
+   * The handle by name, so a missing one fails as a missing handle.
+   *
+   * **Handles belong to the selection**, so this picks first: three hundred
+   * grips over a page nobody has pressed is the thing they were taken off the
+   * page for. The gesture under test is the same one either way — what changed
+   * is that a card has to be in hand before it wears its grips.
+   */
   const handleIn = (el: HcPage, which: 'grab' | 'grip'): Element => {
+    const card = el.shadowRoot?.querySelector('[data-widget]') as HTMLElement | null;
+    const id = card?.dataset['widget'];
+    if (id !== undefined) {
+      (el as unknown as { picked: Set<string> }).picked = new Set([id]);
+      // Synchronously, because this helper is called from tests that are not
+      // async and the handle has to be in the DOM by the time it returns.
+      (el as unknown as { performUpdate: () => void }).performUpdate();
+    }
     const found = el.shadowRoot?.querySelector(`.${which}`);
     expect(found, `no .${which} handle`).not.toBeNull();
     return found as Element;
@@ -1057,7 +1074,12 @@ describe('picking more than one, and moving them together (§14.2)', () => {
     expect(many).not.toHaveBeenCalled();
   });
 
-  it('grabbing an unpicked card picks it and leaves the rest', async () => {
+  it('wears no handle at all until it is picked', async () => {
+    // **The handles belong to the selection.** Thirty-six widgets each wearing
+    // a move grip and eight resize grips is three hundred grips over a page
+    // somebody is trying to read, and the household's word for it was noisy.
+    // So reaching an unpicked card is a press, and the press is what puts the
+    // handles on it.
     const many = groupSpy();
     const one = vi.fn(async () => undefined);
     const el = await arranged({ onPlaceWidgets: many, onPlaceWidget: one });
@@ -1065,19 +1087,16 @@ describe('picking more than one, and moving them together (§14.2)', () => {
     await el.updateComplete;
     place(el);
 
-    const grab = el.shadowRoot?.querySelector('[data-widget="c"] .grab') as Element;
-    grab.dispatchEvent(
-      new FakePointerEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0, pointerId: 1 }),
-    );
-    grab.dispatchEvent(
-      new FakePointerEvent('pointermove', { clientX: 100, clientY: 0, pointerId: 1 }),
-    );
-    grab.dispatchEvent(
-      new FakePointerEvent('pointerup', { clientX: 100, clientY: 0, pointerId: 1 }),
-    );
+    expect(el.shadowRoot?.querySelector('[data-widget="c"] .grab')).toBeNull();
+    expect(el.shadowRoot?.querySelector('[data-widget="a"] .grab')).not.toBeNull();
 
+    // A press on it, which picks it and leaves the rest.
+    sweep(surface(el), [820, 20], [820, 20]);
+    await el.updateComplete;
+    expect(el.shadowRoot?.querySelector('[data-widget="c"] .grab')).not.toBeNull();
+    expect(el.shadowRoot?.querySelector('[data-widget="a"] .grab')).toBeNull();
     expect(many).not.toHaveBeenCalled();
-    expect(one).toHaveBeenCalledWith('c', { x: 9, y: 0, w: 2, h: 1 });
+    expect(one).not.toHaveBeenCalled();
   });
 
   it('resizes one card even when several are picked', async () => {
@@ -1206,6 +1225,9 @@ describe('composing with eight handles and a turn (§14.1)', () => {
     Object.assign(el, over);
     document.body.append(el);
     await el.updateComplete;
+    // Handles belong to the selection, so the card under test is in hand.
+    (el as unknown as { picked: Set<string> }).picked = new Set(['h']);
+    await el.updateComplete;
     return el;
   };
 
@@ -1257,6 +1279,8 @@ describe('composing with eight handles and a turn (§14.1)', () => {
     el.onPlaceWidget = async () => undefined;
     el.mode = 'edit';
     document.body.append(el);
+    await el.updateComplete;
+    (el as unknown as { picked: Set<string> }).picked = new Set(['t']);
     await el.updateComplete;
 
     expect(el.shadowRoot?.querySelectorAll('.edge')).toHaveLength(0);
@@ -1404,6 +1428,14 @@ describe('guides while composing (§14.1)', () => {
   };
 
   const grabIn = (el: HcPage, id: string): Element => {
+    // Handles belong to the selection, and a card being dragged is in hand by
+    // the time its handle is under the finger — unless a test has already put
+    // a group in hand, which is the gesture it is measuring.
+    const held = (el as unknown as { picked: Set<string> }).picked;
+    if (held.size === 0) {
+      (el as unknown as { picked: Set<string> }).picked = new Set([id]);
+      (el as unknown as { performUpdate: () => void }).performUpdate();
+    }
     const card = [...(el.shadowRoot?.querySelectorAll('[data-widget]') ?? [])].find(
       (e) => e.getAttribute('data-widget') === id,
     );

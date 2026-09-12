@@ -1750,6 +1750,12 @@ export class HcPage extends LitElement {
    */
   private handles(id: string, box: Box, angle = 0) {
     if (this.mode !== 'edit' || this.onPlaceWidget === undefined) return nothing;
+    // **Handles belong to the selection, not to the page.** Thirty-six widgets
+    // each wearing a move grip and eight resize grips is three hundred grips
+    // over a page somebody is trying to read, and the household's word for it
+    // was noisy. Nothing is selected on entering edit mode, so the page is the
+    // page until something is pressed.
+    if (!this.picked.has(id)) return nothing;
 
     const move = html`<div
       class="grab"
