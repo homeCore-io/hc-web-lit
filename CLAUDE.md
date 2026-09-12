@@ -2712,7 +2712,34 @@ not a failure of it.
       one truncated one, time remaining instead of an unchanging duration, and
       a round filled Play instead of a square 0.25rem larger than its
       neighbours
-- [ ] Decorative elements: image, icon, text — no device binding, action optional
+- [x] Decorative elements: image, icon, text — no device binding, action
+      optional. **All three place from the palette by dragging and bind to
+      nothing**; `image` takes a `url` the asset picker fills, `icon` names its
+      mark by facet word, and the host wires `on_tap` / `on_hold` /
+      `on_double_tap` on any widget whatever it is (`attachActions`), so an
+      action is optional on all of them without a widget knowing the word.
+      What was actually missing was not the elements — it was that **the
+      most-used widget in the product was not reading the keys its own
+      documents carry**. Measured against the household's two pages: `face`
+      (8 elements, every one a number or the unit beside one) rendered in the
+      body face; `weight` was passed to CSS as the word a document writes, and
+      three of the four — `regular`, `medium`, `black` — are not CSS, so the
+      declaration was dropped and all three rendered 400, right for one by
+      accident and wrong for the others; `size`, the step `scale` is a
+      percentage *of*, was ignored, so a page asking for `display` was drawn at
+      body and silently shrunk by two thirds; and `vertical` was offered by the
+      panel and did nothing, which §4.4 forbids. Figures are tabular now as
+      well, which is not a key but the same class of thing — a designed page is
+      full of numbers that update in place, and proportional figures make every
+      one of them shuffle sideways on each push. **And the panel was offering
+      an icon picker for `face`**, which is a typeface: a table keyed on field
+      names had guessed from the word alone, and the only values anything draws
+      are `text` and `mono`. A suggestion that can only produce a value nothing
+      renders is the one way that table can cost something rather than merely
+      miss. The 11 marks no facet word reaches — the transport and battery ones
+      — stay unreachable from a decorative icon on purpose: they belong to
+      device cards, and inventing a key core does not declare to reach them
+      would be this client deciding what a widget declares (§4.6)
 - [x] Host-enforced `mode: "edit"`: pointer capture, `ctx.action` refuses to
       dispatch (§14.2). **Both halves, and it was not theoretical**: the move
       grip was a 24px triangle in one corner and the rest of a card was live,

@@ -6,6 +6,7 @@ import { deriveTokens } from '../src/design/tokens.js';
 import '../src/widgets/hc-line.js';
 import '../src/widgets/hc-shape.js';
 import '../src/widgets/hc-text.js';
+import { HcText } from '../src/widgets/hc-text.js';
 
 async function mount<T extends HTMLElement & { config: Record<string, unknown> }>(
   tag: string,
@@ -92,5 +93,70 @@ describe('hc-text', () => {
     const p = el.shadowRoot?.querySelector('p') as HTMLElement;
     expect(p.textContent?.trim()).toBe('EVERY ROOM');
     expect(p.style.color).toContain('--hc-accent-primary');
+  });
+});
+
+describe('the keys a text element was being given and not reading', () => {
+  // The most-used widget in the product — 38 of the widgets on the household's
+  // two pages — and four of the keys its own documents carry did nothing.
+  const text = (config: Record<string, unknown>) =>
+    mount<HTMLElement & { config: Record<string, unknown> }>('hc-text', config);
+  const para = (el: HTMLElement) => el.shadowRoot?.querySelector('p') as HTMLElement;
+
+  it('draws a mono face in the mono family, not in the body one', async () => {
+    // Eight elements on the household's own pages ask for mono — every one a
+    // number or the unit beside one — and all eight rendered in Inter.
+    const el = await text({ text: '73', face: 'mono' });
+    expect(para(el).dataset['face']).toBe('mono');
+  });
+
+  it('leaves anything else in the body face', async () => {
+    const el = await text({ text: 'EVERY ROOM' });
+    expect(para(el).dataset['face']).toBe('text');
+  });
+
+  it('turns the words a document writes into weights CSS knows', async () => {
+    // Three of the four are not CSS at all: the declaration was dropped and
+    // every one of them rendered 400, which is right for `regular` by accident
+    // and wrong for the other two.
+    const weights = await Promise.all(
+      ['regular', 'medium', 'bold', 'black'].map((w) => text({ text: 'x', weight: w })),
+    );
+    expect(weights.map((el) => para(el).style.fontWeight)).toEqual(['400', '500', '700', '900']);
+  });
+
+  it('passes through a weight it does not know, rather than flattening it', async () => {
+    const el = await text({ text: 'x', weight: '600' });
+    expect(para(el).style.fontWeight).toBe('600');
+  });
+
+  it('measures the scale against the step the document named', async () => {
+    // `scale` is a percentage *of the step*. A page that asked for display was
+    // drawn at body and silently shrunk by two thirds.
+    const el = await text({ text: 'x', size: 'display', scale: 200 });
+    expect(para(el).style.fontSize).toBe('calc(var(--hc-text-display-size, 28px) * 2)');
+  });
+
+  it('stays on body when the document names no step, which is every page here', async () => {
+    const el = await text({ text: 'x', scale: 85 });
+    expect(para(el).style.fontSize).toBe('calc(var(--hc-text-body-size, 13px) * 0.85)');
+  });
+
+  it('puts the words where the box says, vertically', async () => {
+    const el = await text({ text: 'x', vertical: 'middle' });
+    expect(el.getAttribute('data-vertical')).toBe('middle');
+    const plain = await text({ text: 'x' });
+    expect(plain.hasAttribute('data-vertical'), 'an attribute for the default').toBe(false);
+  });
+
+  it('keeps figures from shuffling as they change', async () => {
+    // A designed page is full of numbers that update in place — a temperature
+    // at 350% of body — and proportional figures make every one of them twitch.
+    //
+    // Read off the sheet rather than off a computed style: jsdom resolves
+    // neither, and a test that asserted the empty string it returns would pass
+    // whatever the widget declared.
+    const sheet = (HcText as unknown as { styles: { cssText: string } }).styles.cssText;
+    expect(sheet).toContain('font-variant-numeric: tabular-nums');
   });
 });

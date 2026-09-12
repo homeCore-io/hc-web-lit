@@ -129,6 +129,26 @@ export const LAYERS = ['grid', 'free'] as const;
 const isGesture = (name: string): boolean => (GESTURES as readonly string[]).includes(name);
 
 /**
+ * Fields core describes loosely that this client draws exactly.
+ *
+ * **`face` is a typeface, and it was being offered as an icon picker.** The
+ * name is the whole reason: a table keyed on field names guessed from the word
+ * alone, and the only two values anything renders are `text` and `mono` — the
+ * body face and the monospace one. A suggestion that can only produce a value
+ * nothing draws is worse than no suggestion, which is the one way this kind of
+ * table can cost something rather than merely miss.
+ *
+ * Core says `string` with no `one_of`, and that is right for core: a later
+ * release may name a third face. Offering the two this build can actually draw
+ * is the same bargain as `layer` and the gestures below — a key every real
+ * document uses, described loosely upstream, and useless in a GUI until the
+ * client says what it means (§4.4).
+ */
+const CHOICES: Record<string, readonly string[]> = {
+  face: ['text', 'mono'],
+};
+
+/**
  * Fields whose value is a name in a list only the client can produce.
  *
  * Deliberately short, and every entry earns its place by being a field a
@@ -144,7 +164,6 @@ const SUGGESTS: Record<string, Suggest> = {
   room_order: 'area',
   attribute: 'attribute',
   metrics: 'attribute',
-  face: 'icon',
   icon: 'icon',
   status_icon: 'icon',
   color: 'role',
@@ -204,7 +223,7 @@ function formFor(field: VocabularyField): PropertyForm {
   if (isGesture(field.name)) return 'action';
   if (field.type === 'boolean') return 'toggle';
   if (field.type === 'integer' || field.type === 'number') return 'number';
-  if ((field.one_of ?? []).length > 0) return 'select';
+  if ((field.one_of ?? []).length > 0 || CHOICES[field.name] !== undefined) return 'select';
   if (field.type === 'array' || field.type === 'string_or_strings') return 'list';
   if (field.type === 'object') return 'opaque';
   return PROSE.has(field.name) ? 'longText' : 'text';
@@ -312,7 +331,11 @@ export function propertiesFor(
       value,
       required: field.required,
       allowEmpty: field.allow_empty === true,
-      ...(one.length > 0 ? { options: one } : {}),
+      ...(one.length > 0
+        ? { options: one }
+        : CHOICES[field.name] !== undefined
+          ? { options: [...(CHOICES[field.name] as readonly string[])] }
+          : {}),
       ...(field.min !== undefined ? { min: field.min } : {}),
       ...(suggest !== undefined ? { suggest } : {}),
       ...(field.type === 'string_or_strings' ? { scalarOk: true } : {}),
