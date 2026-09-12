@@ -639,6 +639,8 @@ export class HcApp extends LitElement {
    * asks twice before discarding everything for that reason.
    */
   private writePages(next: readonly DashboardDefinition[], showing?: string): void {
+    // Something to put back, for the control that offers to (`cancelArrange`).
+    if (this.editing) this.arranged = true;
     this.undoStack.push(this.docs);
     this.docs = this.authored.saveDashboards(next);
     const want = showing ?? this.current?.id;
@@ -1190,6 +1192,74 @@ export class HcApp extends LitElement {
    * nobody would know why.
    */
   @state() private editing = false;
+
+  /**
+   * The pages as they were when arranging began, and whether anything has
+   * happened since.
+   *
+   * **Every edit here is already live** (§18.2 — there is nothing to deploy
+   * to, so a change is written the moment it is made), which is the right
+   * behaviour and leaves a household with no way to say "never mind, all of
+   * it". Undo walks back a step at a time and a long arranging session is a
+   * lot of steps; this is the whole of it in one, and because the restore goes
+   * through the same door as every other change it is itself one step on that
+   * stack — so a Cancel pressed by mistake is undoable like anything else.
+   *
+   * The snapshot is the whole list of pages rather than the one on screen, for
+   * the reason the undo stack is (`core/undo.ts`): a page made or deleted
+   * while arranging is part of what "the way it was" means.
+   */
+  private arrangedFrom: readonly DashboardDefinition[] | undefined;
+
+  @state() private arranged = false;
+
+  /** Start arranging, remembering what the pages were. */
+  private enterArrange(): void {
+    this.arrangedFrom = this.docs;
+    this.arranged = false;
+    this.editing = true;
+    this.dropTool();
+  }
+
+  /**
+   * Stop arranging.
+   *
+   * The tool goes with it: one held into a page being *used* arms nothing —
+   * the page refuses — and would still be held when arranging resumed, which
+   * is a mode somebody left behind coming back without being asked for.
+   */
+  private leaveArrange(): void {
+    this.editing = false;
+    this.arranged = false;
+    this.arrangedFrom = undefined;
+    this.dropTool();
+  }
+
+  /** Put the pages back the way they were when arranging began. */
+  private readonly cancelArrange = async (): Promise<void> => {
+    const from = this.arrangedFrom;
+    if (from === undefined) return;
+
+    // Asked first, because this throws away real work — and named plainly
+    // rather than as "are you sure", which tells nobody what is about to
+    // happen (§5.6: the confirmation is the host's).
+    const ok = await (this.overlay?.confirm({
+      text: 'Put the page back the way it was before you started arranging? Everything done since then goes.',
+      confirmLabel: 'Put it back',
+      cancelLabel: 'Keep arranging',
+      danger: true,
+    }) ?? Promise.resolve(false));
+    if (!ok) return;
+
+    // Through the same door as every other change, so it is one undo step.
+    // Skipped when nothing actually differs — an undo back to the start
+    // leaves the flag set, and writing an identical document would put a step
+    // on the stack that does nothing.
+    if (JSON.stringify(from) !== JSON.stringify(this.docs)) {
+      this.writePages(from, this.current?.id);
+    }
+    this.leaveArrange();
+  };
 
   /**
    * The widget type held, waiting to be drawn on the page (§14.1).
@@ -2229,22 +2299,34 @@ export class HcApp extends LitElement {
     const id = this.current?.id;
 
     if (this.renaming && this.current !== undefined) {
+      // **Both ways out are on screen.** Escape and Enter are free for a
+      // keyboard and were the *only* way out, which is a rename nobody can
+      // back out of on a wall panel — and the box committed on blur, so
+      // tapping anywhere else saved the words somebody was abandoning. A
+      // rename that has been opened by accident now stays open and says so
+      // until it is told which.
+      const typed = (): string =>
+        this.renderRoot.querySelector<HTMLInputElement>('.rename')?.value ??
+        this.current?.name ??
+        '';
       return html`<input
-        class="rename"
-        aria-label="Page name"
-        .value=${this.current.name}
-        @keydown=${(e: KeyboardEvent) => {
-          // Escape leaves the name alone, which is what somebody who opened
-          // this by accident is reaching for.
-          if (e.key === 'Escape') this.renaming = false;
-          if (e.key === 'Enter') this.renamePage((e.target as HTMLInputElement).value);
-        }}
-        @blur=${(e: Event) => {
-          // Escape has already turned this off, and its own blur must not
-          // then commit the words somebody was abandoning.
-          if (this.renaming) this.renamePage((e.target as HTMLInputElement).value);
-        }}
-      />`;
+          class="rename"
+          aria-label="Page name"
+          .value=${this.current.name}
+          @keydown=${(e: KeyboardEvent) => {
+            if (e.key === 'Escape') this.renaming = false;
+            if (e.key === 'Enter') this.renamePage((e.target as HTMLInputElement).value);
+          }}
+        />
+        <button title="Save this name" @click=${() => this.renamePage(typed())}>Save</button>
+        <button
+          title="Leave the name as it was"
+          @click=${() => {
+            this.renaming = false;
+          }}
+        >
+          Cancel
+        </button>`;
     }
 
     return html`${this.palette()}${this.groupControls()}${this.zoomControls()}
@@ -2267,15 +2349,25 @@ export class HcApp extends LitElement {
         title="Arrange this page"
         aria-pressed=${this.editing ? 'true' : 'false'}
         @click=${() => {
-          this.editing = !this.editing;
-          // A tool held into a page being *used* would arm nothing — the page
-          // refuses — and would still be held when arranging resumed, which is
-          // a mode somebody left behind coming back without being asked for.
-          this.dropTool();
+          if (this.editing) this.leaveArrange();
+          else this.enterArrange();
         }}
       >
         ${this.editing ? 'Done' : 'Arrange'}
       </button>
+      ${
+        // **Offered once there is something to put back**, which is the rule
+        // every control in this row follows: before the first edit, Done is
+        // already the way out that changes nothing.
+        this.editing && this.arranged
+          ? html`<button
+              title="Put the page back the way it was before you started arranging"
+              @click=${this.cancelArrange}
+            >
+              Cancel
+            </button>`
+          : nothing
+      }
       <button
         title="Rename this page"
         @click=${() => {

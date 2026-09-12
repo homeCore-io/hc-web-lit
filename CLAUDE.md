@@ -2753,6 +2753,25 @@ not a failure of it.
       a widget gets an event anyway: an extension's control, something the
       surface cannot cover, a keyboard. It says why, because a control that
       silently does nothing is the worst kind
+- [x] **Every state in the editing row can be backed out of, on screen.** The
+      household's words were that the bar has no cancel, and two states had
+      none. **Rename** opened a bare box — Escape cancelled it and Enter
+      committed it, both keyboard-only on a product whose surfaces are a
+      desktop *and a wall tablet* (§16) — and it committed on **blur**, so a
+      tap anywhere else saved the words somebody was abandoning. It has Save
+      and Cancel now, and looking away leaves the question open rather than
+      answering it. **Arrange** had only Done, and because every edit here is
+      live (§18.2) there was nothing that said "never mind, all of it" short of
+      walking the undo stack back a step at a time; Cancel puts the pages back
+      the way they were when arranging began. Two properties make it safe
+      rather than frightening: it asks first, in words that say what will
+      happen, and it goes through the same door as every other change — so it
+      is **one step on the undo stack**, and a Cancel pressed by mistake is
+      undoable like anything else. Offered once there is something to put back,
+      because before the first edit Done is already the way out that changes
+      nothing. The snapshot is the whole list of pages rather than the one on
+      screen, for the reason the undo stack is: a page made or deleted while
+      arranging is part of what "the way it was" means
 - [x] Undo/redo stack. Whole documents rather than inverse operations
       (`core/undo.ts`): an inverse that is *nearly* right leaves a household
       with a page subtly different from the one they had, and snapshots cannot
