@@ -691,3 +691,89 @@ describe('a container as tall as what is in it', () => {
     expect(flowFrames([plain]).has('Panel')).toBe(false);
   });
 });
+
+describe('what one press holds, now that a section is a group', () => {
+  // §14.1's cluster gesture was written for groups somebody assembled by
+  // selecting cards and pressing Group. A section and a column are groups too
+  // now, and the same rule applied to them held thirty-five widgets.
+  const column: DashboardGroupBox = {
+    path: 'Left',
+    rect: { x: 0, y: 0, w: 700, h: 600 },
+    frame: true,
+    stack: true,
+  };
+  const section: DashboardGroupBox = {
+    path: 'Left/doors',
+    rect: { x: 0, y: 0, w: 700, h: 60 },
+    frame: true,
+    stack: true,
+  };
+
+  const layout = {
+    breakpoint: 'desktop' as const,
+    columns: 12,
+    row_height: 120,
+    gap: 12,
+    flow: 'free' as const,
+    frame: { width: 1240, height: 900, fit: 'scroll' as const },
+    groups: [column, section],
+    placements: [
+      { widget_id: 'label', x: 0, y: 0, w: 1, h: 1, rect: { x: 0, y: 0, w: 300, h: 18 } },
+      { widget_id: 'list', x: 0, y: 0, w: 1, h: 1, rect: { x: 0, y: 30, w: 700, h: 40 } },
+      { widget_id: 'a', x: 0, y: 0, w: 1, h: 1, rect: { x: 800, y: 0, w: 100, h: 40 } },
+      { widget_id: 'b', x: 0, y: 0, w: 1, h: 1, rect: { x: 800, y: 60, w: 100, h: 40 } },
+    ],
+  };
+
+  const mount = async (): Promise<HcPage> => {
+    const el = document.createElement('hc-page');
+    el.doc = {
+      id: 'd',
+      name: 'D',
+      icon: 'home',
+      owner_user_id: 'u',
+      layouts: [layout],
+      widgets: [
+        { id: 'label', type: 'text', config: { text: 'DOORS', group: 'Left/doors' } },
+        { id: 'list', type: 'text', config: { text: 'rows', group: 'Left/doors' } },
+        // An ordinary cluster: two cards somebody grouped, nothing above them.
+        { id: 'a', type: 'text', config: { text: 'one', group: 'Wall/Lights' } },
+        { id: 'b', type: 'text', config: { text: 'two', group: 'Wall/Lights' } },
+      ],
+    };
+    el.store = new DeviceStore();
+    el.mode = 'edit';
+    document.body.append(el);
+    await el.updateComplete;
+    return el;
+  };
+
+  const held = (el: HcPage, id: string): string[] => {
+    const cluster = (el as unknown as { clusterOf: (x: string) => Set<string> }).clusterOf(id);
+    return [...cluster].sort();
+  };
+
+  it('holds the card, not the column it is a section of', async () => {
+    // A page you cannot edit a card on without pressing three times to get
+    // down to it is not a page you can arrange.
+    const el = await mount();
+    expect(held(el, 'label')).toEqual(['label']);
+    expect(held(el, 'list')).toEqual(['list']);
+  });
+
+  it('still holds the whole cluster where somebody made one', async () => {
+    // The case §14.1 describes, and the one this must not change: a group with
+    // no container anywhere above it behaves exactly as it always did.
+    const el = await mount();
+    expect(held(el, 'a')).toEqual(['a', 'b']);
+  });
+
+  it('lets stepping out take hold of the whole section again', async () => {
+    // Out of a container is a real place to stand, and Escape is how you get
+    // there: the automatic position is where a press starts, not a floor
+    // under it. Standing in the column, a press holds the section in it.
+    const el = await mount();
+    (el as unknown as { inside: string }).inside = 'Left';
+    expect(held(el, 'label')).toEqual(['label', 'list']);
+  });
+});

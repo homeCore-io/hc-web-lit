@@ -1896,8 +1896,38 @@ export class HcPage extends LitElement {
       this.inside = undefined;
     }
 
-    const target = clickTarget(path, this.inside);
+    const target = clickTarget(path, this.standingIn(path));
     return target === undefined ? new Set([id]) : membersOf(paths, target);
+  }
+
+  /**
+   * The group a press starts from, which is not always none.
+   *
+   * **A container is structure, and you are always already inside one.** The
+   * cluster gesture was written for groups somebody assembled by selecting
+   * cards and pressing Group — and the whole value of one is that an ordinary
+   * press holds all of it. A section and a column are groups too now, and the
+   * same rule applied to them meant pressing one device row held the
+   * thirty-five widgets in the left column: a page you cannot edit a card on
+   * without pressing three times to get down to it.
+   *
+   * So the walk starts at the deepest container the element is in rather than
+   * at the page, and a press inside a section holds the card. A group with no
+   * container anywhere above it behaves exactly as it always did, which is the
+   * case §14.1 describes and the one this must not change.
+   *
+   * Whatever the surface has been told it is standing in still wins, in both
+   * directions. Pressing twice goes further in; Escape steps *out*, and out of
+   * a container is a real place to be — it is how somebody deliberately takes
+   * hold of a whole section again. The automatic position is where a press
+   * starts, not a floor under it.
+   */
+  private standingIn(path: string | undefined): string | undefined {
+    if (this.inside !== undefined) return this.inside;
+    if (path === undefined) return undefined;
+    const layout =
+      this.doc === undefined ? undefined : layoutToDraw(this.doc, this.breakpoint)?.layout;
+    return containerOf(path, flowFrames(layout?.groups));
   }
 
   /** Every widget's group path, by id. */
@@ -1926,7 +1956,8 @@ export class HcPage extends LitElement {
 
   /** Go into the group this element belongs to, one level down. */
   private enter(id: string): void {
-    const target = clickTarget(this.groupPaths().get(id), this.inside);
+    const path = this.groupPaths().get(id);
+    const target = clickTarget(path, this.standingIn(path));
     if (target === undefined) return;
     this.inside = target;
     // Standing inside it, the same press now holds one level deeper.
