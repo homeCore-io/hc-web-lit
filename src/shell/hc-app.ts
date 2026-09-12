@@ -66,6 +66,7 @@ import { effectiveName, isOn } from '../core/present.js';
 import type { ActionConfig } from '../core/actions.js';
 import type { MountEnv } from './mount.js';
 import './hc-page.js';
+import type { HcPage } from './hc-page.js';
 import './hc-overlay.js';
 import type { HcOverlay } from './hc-overlay.js';
 import '../widgets/hc-device-grid.js';
@@ -1165,6 +1166,15 @@ export class HcApp extends LitElement {
   @state() private held: { ids: readonly string[]; inside?: string } = { ids: [] };
 
   /**
+   * How far in the page being arranged is drawn, as the readout shows it.
+   *
+   * A mirror, for the same reason the selection is one: the number belongs to
+   * the surface that can zoom about a point, and two answers to "what is the
+   * zoom" is a readout that disagrees with the page beside it.
+   */
+  @state() private zoom = 1;
+
+  /**
    * Arranging the page, rather than using it (§14.2).
    *
    * Not persisted and not in the URL: a panel that came back from a power cut
@@ -2106,6 +2116,52 @@ export class HcApp extends LitElement {
       </button>`;
   }
 
+  /**
+   * How far in the page is being looked at, while it is being arranged.
+   *
+   * **Offered here and not to a viewer**, because what somebody *using* a page
+   * sees at a narrow width is the document's own `fit` (§5.7) and this is
+   * about reaching a hairline with a pointer. Three controls and a readout: a
+   * step each way, the number as the way back to full size, and Fit, which is
+   * the one a tablet wants — the household's pages are 1240 wide and a tablet
+   * is not.
+   *
+   * The page owns the number, because zooming about a point is a question
+   * about geometry only it has; this draws what the page reports and asks it
+   * for changes, the same shape as the selection (`hc-picked`).
+   */
+  private zoomControls() {
+    if (!this.editing || !this.free()) return nothing;
+    const page = (): HcPage | null => this.renderRoot.querySelector('hc-page');
+    const shown = Math.round(this.zoom * 100);
+    return html`<span class="zoom">
+      <button
+        title="Show less of the page, larger"
+        @click=${() => void page()?.zoomTo(this.zoom / 1.25)}
+      >
+        −
+      </button>
+      <button class="readout" title="Back to full size" @click=${() => void page()?.zoomTo(1)}>
+        ${shown}%
+      </button>
+      <button
+        title="Show more of the page, smaller"
+        @click=${() => void page()?.zoomTo(this.zoom * 1.25)}
+      >
+        +
+      </button>
+      <button
+        title="Fit the whole width of the page on screen"
+        @click=${() => {
+          const at = page();
+          if (at !== null) void at.zoomTo(at.fitZoom());
+        }}
+      >
+        Fit
+      </button>
+    </span>`;
+  }
+
   private pageControls() {
     if (!this.mayWriteDashboards()) return nothing;
     const id = this.current?.id;
@@ -2129,7 +2185,7 @@ export class HcApp extends LitElement {
       />`;
     }
 
-    return html`${this.palette()}${this.groupControls()}
+    return html`${this.palette()}${this.groupControls()}${this.zoomControls()}
       <button
         title="Undo the last change"
         ?disabled=${!this.undoStack.canUndo}
@@ -2229,6 +2285,9 @@ export class HcApp extends LitElement {
         @hc-open-room=${(e: CustomEvent<{ room: string; page?: string }>) => this.openRoom(e)}
         @hc-picked=${(e: CustomEvent<{ ids: string[]; inside?: string }>) => {
           this.held = e.detail;
+        }}
+        @hc-zoom=${(e: CustomEvent<{ zoom: number }>) => {
+          this.zoom = e.detail.zoom;
         }}
         .doc=${this.current}
         .store=${this.store}

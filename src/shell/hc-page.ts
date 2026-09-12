@@ -66,6 +66,17 @@ import { mountWidget, specFor, type MountEnv, type MountTarget } from './mount.j
 const NUDGE = 4;
 
 /**
+ * How far in and out the arranging zoom goes.
+ *
+ * Out until the widest page this household has drawn is on a tablet with room
+ * to spare, and in far enough to place something against a hairline. Further
+ * out than a quarter is a page nobody can read; further in than three is a
+ * card wider than the screen, which is the thing arranging is for undoing.
+ */
+const ZOOM_MIN = 0.25;
+const ZOOM_MAX = 3;
+
+/**
  * Nothing in hand, for the landing of something that is not a widget.
  *
  * A container's drop excludes itself by path rather than by member id, so the
@@ -239,13 +250,32 @@ export class HcPage extends LitElement {
       font-size: var(--hc-text-body-size, 13px);
       line-height: var(--hc-text-body-height, 1.4);
     }
+    /* The box the scroll bars measure. A transform changes what is *drawn*
+       and nothing about layout, so a page zoomed past the viewport would have
+       no scroll extent to reach it with — the stage is the scaled size stated
+       as a real box, and panning is then the ordinary scrolling every device
+       already does well (§14.2). */
+    .stage {
+      margin: 0 auto;
+      position: relative;
+    }
     .frame {
       position: relative;
-      margin: 0 auto;
       /* A composed page states its own size; the viewport scales to it rather
          than reflowing it, because reflowing a composition is not a smaller
          version of it. */
       transform-origin: top left;
+      /* **The chrome holds its size while the page changes size.** Handles,
+         guides and the marquee are screen furniture: a grip that halves with
+         the page is a grip nobody can hit at the zoom where they most need to
+         see the whole thing (§14.2 asks for a screen-space overlay, and this
+         is that property without a second coordinate system to keep in step).
+         Every metric on them is stated against these, and the zoom property
+         below is what the scene is drawn at. */
+      --hc-handle: calc(0.75rem / var(--hc-zoom, 1));
+      --hc-handle-half: calc(0.375rem / var(--hc-zoom, 1));
+      --hc-hairline: calc(1px / var(--hc-zoom, 1));
+      --hc-outline: calc(2px / var(--hc-zoom, 1));
     }
     .grid {
       display: grid;
@@ -383,21 +413,21 @@ export class HcPage extends LitElement {
     }
     .grab {
       inset: 0 auto auto 0;
-      width: 1.5rem;
-      height: 1.5rem;
+      width: calc(1.5rem / var(--hc-zoom, 1));
+      height: calc(1.5rem / var(--hc-zoom, 1));
       cursor: move;
       clip-path: polygon(0 0, 100% 0, 0 100%);
     }
     .grip {
       inset: auto 0 0 auto;
-      width: 1.25rem;
-      height: 1.25rem;
+      width: calc(1.25rem / var(--hc-zoom, 1));
+      height: calc(1.25rem / var(--hc-zoom, 1));
       cursor: nwse-resize;
       clip-path: polygon(100% 0, 100% 100%, 0 100%);
     }
     [data-dragging] {
-      outline: 2px dashed var(--hc-accent-active, #ffc978);
-      outline-offset: 2px;
+      outline: var(--hc-outline, 2px) dashed var(--hc-accent-active, #ffc978);
+      outline-offset: var(--hc-outline, 2px);
       opacity: 0.85;
     }
     /* Free mode's eight, and the turn above them (§14.1). Small squares on the
@@ -408,50 +438,59 @@ export class HcPage extends LitElement {
     .turn {
       position: absolute;
       z-index: 5;
-      width: 0.75rem;
-      height: 0.75rem;
+      width: var(--hc-handle, 0.75rem);
+      height: var(--hc-handle, 0.75rem);
       box-sizing: border-box;
-      border: 2px solid var(--hc-accent-active, #ffc978);
+      border: var(--hc-outline, 2px) solid var(--hc-accent-active, #ffc978);
       background: var(--hc-surface-base, #0b0e13);
       border-radius: 3px;
       touch-action: none;
     }
     .edge.top-left {
-      inset: -0.375rem auto auto -0.375rem;
+      inset: calc(var(--hc-handle-half, 0.375rem) * -1) auto auto
+        calc(var(--hc-handle-half, 0.375rem) * -1);
       cursor: nwse-resize;
     }
     .edge.top {
-      inset: -0.375rem auto auto calc(50% - 0.375rem);
+      inset: calc(var(--hc-handle-half, 0.375rem) * -1) auto auto
+        calc(50% - var(--hc-handle-half, 0.375rem));
       cursor: ns-resize;
     }
     .edge.top-right {
-      inset: -0.375rem -0.375rem auto auto;
+      inset: calc(var(--hc-handle-half, 0.375rem) * -1) calc(var(--hc-handle-half, 0.375rem) * -1)
+        auto auto;
       cursor: nesw-resize;
     }
     .edge.right {
-      inset: calc(50% - 0.375rem) -0.375rem auto auto;
+      inset: calc(50% - var(--hc-handle-half, 0.375rem)) calc(var(--hc-handle-half, 0.375rem) * -1)
+        auto auto;
       cursor: ew-resize;
     }
     .edge.bottom-right {
-      inset: auto -0.375rem -0.375rem auto;
+      inset: auto calc(var(--hc-handle-half, 0.375rem) * -1)
+        calc(var(--hc-handle-half, 0.375rem) * -1) auto;
       cursor: nwse-resize;
     }
     .edge.bottom {
-      inset: auto auto -0.375rem calc(50% - 0.375rem);
+      inset: auto auto calc(var(--hc-handle-half, 0.375rem) * -1)
+        calc(50% - var(--hc-handle-half, 0.375rem));
       cursor: ns-resize;
     }
     .edge.bottom-left {
-      inset: auto auto -0.375rem -0.375rem;
+      inset: auto auto calc(var(--hc-handle-half, 0.375rem) * -1)
+        calc(var(--hc-handle-half, 0.375rem) * -1);
       cursor: nesw-resize;
     }
     .edge.left {
-      inset: calc(50% - 0.375rem) auto auto -0.375rem;
+      inset: calc(50% - var(--hc-handle-half, 0.375rem)) auto auto
+        calc(var(--hc-handle-half, 0.375rem) * -1);
       cursor: ew-resize;
     }
     /* Above the card and clear of the corner handles, which is where every
        design application puts it and so where a hand goes looking. */
     .turn {
-      inset: -1.75rem auto auto calc(50% - 0.375rem);
+      inset: calc(-1.75rem / var(--hc-zoom, 1)) auto auto
+        calc(50% - var(--hc-handle-half, 0.375rem));
       border-radius: var(--hc-radius-pill, 999px);
       cursor: grab;
     }
@@ -466,7 +505,7 @@ export class HcPage extends LitElement {
        point of drag-to-create is seeing the size against what is already on
        the page, and a solid block hides the neighbours it is lining up with. */
     .drawing {
-      border: 2px dashed var(--hc-accent-active, #ffc978);
+      border: var(--hc-outline, 2px) dashed var(--hc-accent-active, #ffc978);
       border-radius: var(--hc-radius-md, 14px);
       background: color-mix(in srgb, var(--hc-accent-active, #ffc978) 12%, transparent);
       pointer-events: none;
@@ -544,7 +583,7 @@ export class HcPage extends LitElement {
     /* Where in a column it would land. Over the page, never in the flow. */
     .seam {
       position: absolute;
-      height: 2px;
+      height: var(--hc-outline, 2px);
       z-index: 3;
       background: var(--hc-accent, #4c8dff);
       border-radius: 2px;
@@ -567,7 +606,7 @@ export class HcPage extends LitElement {
       position: absolute;
       box-sizing: border-box;
       z-index: 4;
-      border: 1px dashed var(--hc-stroke-focus, #7cc4ff);
+      border: var(--hc-hairline, 1px) dashed var(--hc-stroke-focus, #7cc4ff);
       pointer-events: none;
     }
     .cluster > .turn {
@@ -882,13 +921,37 @@ export class HcPage extends LitElement {
     this.unsubscribe = this.store?.subscribeAll(() => {
       this.tick += 1;
     });
+    // Not declared in the template, because it has to be able to refuse the
+    // browser's own page zoom and lit binds listeners passively.
+    this.addEventListener('wheel', this.onWheel, { passive: false });
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.unsubscribe?.();
     this.unsubscribe = undefined;
+    this.removeEventListener('wheel', this.onWheel);
   }
+
+  /**
+   * The zoom gesture: the one every application already agrees on.
+   *
+   * Ctrl or Command with the wheel, which is also what a trackpad pinch sends,
+   * so the gesture a hand already knows is the gesture. A plain wheel is left
+   * alone deliberately — it scrolls the page, which is the pan.
+   *
+   * Only while arranging, and only on a composed page: a packed page is a grid
+   * that reflows to the width it is given and has nothing to zoom, and a
+   * viewer holding Ctrl means the browser's own zoom, which is not ours to
+   * take.
+   */
+  private readonly onWheel = (e: WheelEvent): void => {
+    if (this.mode !== 'edit' || !this.free || !(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    // A notch of the wheel is about 100, a trackpad pinch a few pixels at a
+    // time; both want the same proportional step rather than the same number.
+    void this.zoomTo(this.zoom * Math.exp(-e.deltaY / 400), { x: e.clientX, y: e.clientY });
+  };
 
   override willUpdate(changed: Map<string, unknown>): void {
     // A selection is about this surface, right now. Leaving edit mode ends the
@@ -897,6 +960,16 @@ export class HcPage extends LitElement {
     // stopped arranging some time ago.
     if (changed.has('mode') && this.mode !== 'edit' && this.picked.size > 0) {
       this.picked = new Set();
+    }
+
+    // **The zoom belongs to the arranging too.** It is offered while a page is
+    // being arranged and nowhere else — what a viewer sees at a narrow width
+    // is the document's own `fit`, which §5.7 decided on purpose — so a page
+    // left at a third on the way out would be a page drawn small with nothing
+    // on screen able to put it back.
+    if (changed.has('mode') && this.mode !== 'edit' && this.drawnAt !== 1) {
+      this.drawnAt = 1;
+      this.report();
     }
 
     // **A lamp in hand belongs to the room it is in.** The room page is one
@@ -998,6 +1071,40 @@ export class HcPage extends LitElement {
     return this.grown > 0 ? this.grown : height;
   }
 
+  /**
+   * How far in the page is being looked at, which is not a document edit.
+   *
+   * **One number, and the translate is the browser's.** §14.2 asks for one
+   * `{tx, ty, k}` behind every hit test and overlay position, and this is it —
+   * with the two halves kept where each is already right. The scale is here,
+   * on the transform the scene is drawn with; the translate is the ordinary
+   * scroll position of a page whose stage states the scaled size as a real
+   * box. Hand-rolling the translate would mean reimplementing scrollbars,
+   * two-finger pan and momentum on a tablet, and taking the page's own
+   * scrolling away to do it.
+   *
+   * Nothing derives from this by arithmetic: every measurement on this surface
+   * reads live rectangles and divides by `frameScale`, so it was already
+   * asking the transform rather than assuming one (`drawnBox`, `pointAt`,
+   * `stepOf`). That is why zoom is a small change rather than a second
+   * coordinate system.
+   *
+   * A view and not a preference: it lasts as long as the arranging does.
+   */
+  @state() private drawnAt = 1;
+
+  /**
+   * How far in the page is drawn, read-only.
+   *
+   * The shell keeps its own mirror from the event rather than reading this on
+   * every render — the same shape the selection uses, and for the same reason
+   * — but a host that wants to ask can, and a test that wants to check the
+   * clamp should not have to go through the DOM to do it.
+   */
+  get zoom(): number {
+    return this.drawnAt;
+  }
+
   /** Where each carried widget is going this frame. Derived, not state. */
   private moving: ReadonlyMap<string, Box> | undefined;
 
@@ -1060,30 +1167,37 @@ export class HcPage extends LitElement {
   ) {
     const fit = frame.fit ?? 'scroll';
     const room = this.fitWidth > 0 ? this.fitWidth : this.clientWidth;
-    const scale = fit === 'scroll' || room <= 0 ? 1 : room / frame.width;
+    // **Two scales multiplied, and they answer different questions.** `fit` is
+    // the document's own answer to a narrow screen (§5.7) and belongs to
+    // whoever authored the page; the zoom is this session's, and is somebody
+    // leaning in to arrange something. A zoom that replaced the fit would
+    // silently overrule a page that asked to be contained.
+    const scale = (fit === 'scroll' || room <= 0 ? 1 : room / frame.width) * this.zoom;
     // **The page grows to hold what grew.** A placement that fits its content
     // can end up taller than the canvas it was drawn on, and a frame that kept
     // its stated height would simply clip it again one level up.
     const tall = this.pageFoot(frame.height);
     return html`
-      <div
-        class="frame"
-        ?data-armed=${this.armed}
-        ?data-editing=${this.mode === 'edit'}
-        @pointerdown=${(e: PointerEvent) => this.onSurfacePress(e)}
-        style="width:${frame.width}px;height:${tall}px;transform:scale(${scale})"
-      >
-        ${this.frameBodies(items)} ${this.drawPreview()} ${this.groupFrame()}
-        ${this.containers(items, byId, undefined)} ${this.seam()}
-        ${items.map((item) => {
-          const w = byId.get(item.id);
-          if (w === undefined || item.rect == null) return nothing;
-          // A member of a container is drawn by that container, and must not
-          // also be drawn here at its stored coordinates — unless it is the
-          // one being carried, which has left.
-          if (this.stackedIn(w) !== undefined && !this.leaving(item.id)) return nothing;
-          return this.placement(item, w);
-        })}
+      <div class="stage" style="width:${frame.width * scale}px;height:${tall * scale}px">
+        <div
+          class="frame"
+          ?data-armed=${this.armed}
+          ?data-editing=${this.mode === 'edit'}
+          @pointerdown=${(e: PointerEvent) => this.onSurfacePress(e)}
+          style="width:${frame.width}px;height:${tall}px;transform:scale(${scale});--hc-zoom:${scale}"
+        >
+          ${this.frameBodies(items)} ${this.drawPreview()} ${this.groupFrame()}
+          ${this.containers(items, byId, undefined)} ${this.seam()}
+          ${items.map((item) => {
+            const w = byId.get(item.id);
+            if (w === undefined || item.rect == null) return nothing;
+            // A member of a container is drawn by that container, and must not
+            // also be drawn here at its stored coordinates — unless it is the
+            // one being carried, which has left.
+            if (this.stackedIn(w) !== undefined && !this.leaving(item.id)) return nothing;
+            return this.placement(item, w);
+          })}
+        </div>
       </div>
     `;
   }
@@ -2273,6 +2387,66 @@ export class HcPage extends LitElement {
    * selection: "never mind", one layer at a time.
    */
   @state() private inside: string | undefined;
+
+  /**
+   * Look closer, or further out, keeping the point under the pointer still.
+   *
+   * **Measured after the fact rather than modelled.** Where the scene lands
+   * after a zoom depends on the stage's new size, on a margin that centres it
+   * and on how far the page happens to be scrolled — three things the browser
+   * decides. So the page point under the pointer is noted, the zoom is
+   * written, and once the frame has been laid out again the scroll is nudged
+   * by however far that point actually moved. Exact, and it models none of it.
+   */
+  async zoomTo(next: number, at?: { x: number; y: number }): Promise<void> {
+    const want = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(next * 100) / 100));
+    if (want === this.zoom) return;
+
+    const frame = this.shadowRoot?.querySelector<HTMLElement>('.frame');
+    const was = frame?.getBoundingClientRect();
+    const held =
+      at === undefined || was === undefined
+        ? undefined
+        : {
+            page: {
+              x: (at.x - was.left) / this.frameScale(),
+              y: (at.y - was.top) / this.frameScale(),
+            },
+            at,
+          };
+
+    this.drawnAt = want;
+    this.report();
+    await this.updateComplete;
+    if (held === undefined) return;
+
+    const now = frame?.getBoundingClientRect();
+    if (now === undefined) return;
+    const k = this.frameScale();
+    const shown = { x: now.left + held.page.x * k, y: now.top + held.page.y * k };
+    // The document is what scrolls — nothing in this shell declares an
+    // overflow container — so this is the pan, and it is the one every device
+    // already knows how to do by itself.
+    window.scrollBy(shown.x - held.at.x, shown.y - held.at.y);
+  }
+
+  /** The zoom at which the whole width of the page is on screen. */
+  fitZoom(): number {
+    const layout =
+      this.doc === undefined ? undefined : layoutToDraw(this.doc, this.breakpoint)?.layout;
+    const width = layout?.frame?.width ?? 0;
+    const room = this.clientWidth;
+    if (width <= 0 || room <= 0) return 1;
+    // The gutter the stage's own margin would otherwise fight for.
+    return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(((room - 8) / width) * 100) / 100));
+  }
+
+  /** Say what the zoom is now, for the shell that draws the readout. */
+  private report(): void {
+    this.dispatchEvent(
+      new CustomEvent('hc-zoom', { bubbles: true, composed: true, detail: { zoom: this.zoom } }),
+    );
+  }
 
   /** Step out of one group, and say whether there was one to step out of. */
   stepOutOfGroup(): boolean {

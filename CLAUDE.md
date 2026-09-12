@@ -6,8 +6,8 @@
 
 **Status:** Phases 0–3 done, Phase 4 all but the last of §7.3's family.
 Phase 10 is in progress: both authoring modes, containers (§14.2b), and
-host-enforced edit mode are in, and a widget — or a whole container — can be
-dragged between containers.
+host-enforced edit mode are in, a widget — or a whole container — can be
+dragged between containers, and the shared surface has its transform.
 The boxes in §18.3 are kept ticked as work lands; an item naming something
 that was deliberately not built says so on the line rather than staying blank.
 **Supersedes:** the Flutter/wasm implementation of hc-web
@@ -2528,18 +2528,41 @@ not a failure of it.
 - [ ] Time scrubber over the history API
 
 **Phase 10 — Designer** *(two modes, §14.1)*
-- [ ] Shared surface: transformed DOM scene + screen-space overlay, one
-      `{ tx, ty, k }`, marquee, multi-select. **Marquee and multi-select are
-      in; the transform is not.** A rubber band sweeps up everything it
+- [x] Shared surface: transformed DOM scene + screen-space overlay, one
+      `{ tx, ty, k }`, marquee, multi-select. A rubber band sweeps up everything it
       *touches* — containment is unusable on cards that are most of a row wide
       — and a group moves by one delta, clamped once so the shape survives the
       page edge, written as one document so it is one step to undo. The band
       lives in the untransformed overlay §14.2 asks for, which on a composed
       page is load-bearing rather than decorative: `.frame` carries a
       `transform`, and a transformed ancestor becomes the containing block for
-      a `fixed` child. What is left is `{ tx, ty, k }` itself — pan and zoom,
-      which a width-fitted grid page has no use for and which belongs with the
-      free-mode designer below
+      a `fixed` child.
+      **`{ tx, ty, k }` is in, with its two halves kept where each is already
+      right.** The `k` is the scene's own transform; the translate is the
+      ordinary scroll position of a page whose *stage* states the scaled size
+      as a real box. A transform changes what is drawn and nothing about
+      layout, so without that box a page zoomed past the viewport has no
+      scroll extent to reach the rest of it with — and with it, panning is
+      what every device already does properly, instead of scrollbars,
+      two-finger pan and momentum reimplemented on top of a page whose own
+      scrolling had to be taken away first. Nothing else had to change for it:
+      every measurement on this surface already read live rectangles and
+      divided by `frameScale`, so it was asking the transform rather than
+      assuming one — measured on the house page, a drag of 192 screen pixels
+      at 100% and one of 384 at 200% both moved a card to the same place.
+      **The chrome holds its size while the page changes size**, which is the
+      property §14.2 wants a screen-space overlay for, got by stating every
+      handle metric against the zoom rather than by keeping a second
+      coordinate system in step: measured 24px and 12px on screen at 50%, 100%
+      and 200%. The gesture is Ctrl or Command with the wheel, which is what a
+      trackpad pinch sends; a plain wheel is left alone because that is the
+      pan. Offered **while arranging and nowhere else**: what somebody using a
+      page sees at a narrow width is the document's own `fit` (§5.7), decided
+      on purpose, and a page left drawn small on the way out of Arrange would
+      be a page with nothing on screen able to put it back — so it goes back
+      to full size on the way out. Two scales multiplied rather than one
+      replacing the other, for the same reason: a zoom that overruled `fit`
+      would silently overrule the author
 - [x] **Grid mode:** cell placement, the coarse magnet, one grip, no rotation.
       The magnet is not a separate rule here — a cell *is* the unit, so
       rounding the pixels to cells is the coarse magnet — and the single grip
