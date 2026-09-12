@@ -47,7 +47,7 @@ export class HcKeypad extends LitElement {
     }
     .card {
       display: grid;
-      gap: 0.625rem;
+      gap: 0.75rem;
       padding: var(--hc-density-card-padding, 14px);
       /* The same chrome hooks a shell widget reads (§5.8), so a set can take
          the box away from this one too. It does not extend the shell — it
@@ -103,7 +103,7 @@ export class HcKeypad extends LitElement {
     .lines {
       min-width: 0;
       display: grid;
-      gap: 0.1rem;
+      gap: 0.125rem;
       flex: 1 1 auto;
     }
     .name {
@@ -123,7 +123,7 @@ export class HcKeypad extends LitElement {
     .key {
       display: flex;
       align-items: center;
-      gap: 0.625rem;
+      gap: 0.75rem;
       min-height: var(--hc-density-min-tap, 44px);
       padding: 0 calc(var(--hc-space-unit, 8px) * 1.25);
       border: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);

@@ -236,7 +236,7 @@ export class HcMediaCard extends LitElement {
     .lines {
       min-width: 0;
       display: grid;
-      gap: 0.2rem;
+      gap: 0.25rem;
       flex: 1 1 auto;
     }
     /* The title is the biggest thing on the card, because it is what the card

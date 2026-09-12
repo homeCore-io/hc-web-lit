@@ -115,7 +115,7 @@ export function frameDocument(
 
   return `<!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="${escapeAttribute(csp)}">
-<style>html,body{margin:0;font:14px system-ui,sans-serif;color:#e9edf2}</style>
+<style>html,body{margin: 0;font:14px system-ui,sans-serif;color:#e9edf2}</style>
 </head><body><div id="hc-root"></div><script>
 (() => {
   const NONCE = ${JSON.stringify(nonce)};

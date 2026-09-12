@@ -63,7 +63,7 @@ export class HcControls extends LitElement {
       flex: 0 1 auto;
       min-width: 2.5rem;
       min-height: 1.65rem;
-      padding: 0 0.7rem;
+      padding: 0 0.75rem;
       font-size: var(--hc-text-body-small-size, 12.5px);
       border: none;
       border-radius: var(--hc-radius-pill, 999px);

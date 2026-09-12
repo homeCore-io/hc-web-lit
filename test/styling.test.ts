@@ -145,3 +145,52 @@ describe('how high a thing sits', () => {
     expect(offenders, 'use --hc-elevation-card / -overlay / -control').toEqual([]);
   });
 });
+
+describe('the spacing scale', () => {
+  /**
+   * The steps the product uses, in rem: 2, 4, 6, 8, 12, 16, 24, 32px, plus the
+   * zero and the two keywords a layout legitimately needs.
+   */
+  const STEPS = new Set([
+    '0',
+    '0px',
+    'auto',
+    'inherit',
+    '0.125rem',
+    '0.25rem',
+    '0.375rem',
+    '0.5rem',
+    '0.75rem',
+    '1rem',
+    '1.25rem',
+    '1.5rem',
+    '2rem',
+    '1px',
+    '2px',
+  ]);
+
+  it('sets gaps and padding on the scale, or from the space unit', () => {
+    // **123 raw spacing values against 31 using the token**, and fifteen of
+    // them on no grid at all: 0.1rem, 0.2, 0.35, 0.4, 0.625, 0.7, and a 9px
+    // and a 3px. Each was a judgement made once and never compared with its
+    // neighbours — which is how a page ends up almost aligned everywhere.
+    const off: string[] = [];
+    const prop = /(?:^|\n)\s*(gap|row-gap|column-gap|padding|margin)(-[a-z]+)?:\s*([^;]+);/g;
+    for (const file of files) {
+      for (const m of source(file).matchAll(prop)) {
+        const value = (m[3] as string).trim();
+        // A calc from the space unit, a custom property or a percentage is the
+        // system being used, not bypassed. Three more are exempt on purpose:
+        // `em`, because prose spaces itself against its own type size and
+        // `hc-markdown` is the one widget setting real prose; a negative
+        // value, which centres something rather than spacing it; and a
+        // template hole, which is a document's number and not a literal here.
+        if (/var\(|calc\(|%|em\b|-[0-9]|\$\{/.test(value)) continue;
+        for (const part of value.split(/\s+/)) {
+          if (!STEPS.has(part)) off.push(`${file}: ${m[1] as string}: ${value}`);
+        }
+      }
+    }
+    expect([...new Set(off)]).toEqual([]);
+  });
+});

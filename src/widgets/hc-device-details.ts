@@ -79,9 +79,9 @@ export class HcDeviceDetails extends LitElement {
        than a heading under an empty band. */
     .head {
       display: grid;
-      gap: 0.2rem;
+      gap: 0.25rem;
       /* Room for the close button, which floats in the corner. */
-      padding-right: 2.25rem;
+      padding-right: 2rem;
     }
     .name {
       font-size: var(--hc-text-subtitle-size, 16px);
@@ -103,7 +103,7 @@ export class HcDeviceDetails extends LitElement {
     .lead {
       display: flex;
       align-items: baseline;
-      gap: 0.45rem;
+      gap: 0.5rem;
       font-size: var(--hc-text-title-size, 20px);
       font-weight: 600;
       font-variant-numeric: tabular-nums;
@@ -130,9 +130,9 @@ export class HcDeviceDetails extends LitElement {
     section {
       display: grid;
       min-width: 0;
-      gap: 0.35rem;
-      padding-top: 0.7rem;
-      margin-top: 0.1rem;
+      gap: 0.375rem;
+      padding-top: 0.75rem;
+      margin-top: 0.125rem;
       border-top: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
     }
     h3 {
@@ -145,7 +145,7 @@ export class HcDeviceDetails extends LitElement {
     }
     .rows {
       display: grid;
-      gap: 0.1rem;
+      gap: 0.125rem;
     }
     .row {
       display: grid;
@@ -153,7 +153,7 @@ export class HcDeviceDetails extends LitElement {
       align-items: center;
       gap: 0.75rem;
       min-height: 26px;
-      padding: 0 0.4rem;
+      padding: 0 0.375rem;
       border-radius: var(--hc-radius-sm, 8px);
       font-size: var(--hc-text-body-small-size, 12.5px);
     }

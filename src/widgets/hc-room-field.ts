@@ -50,7 +50,7 @@ export class HcRoomField extends LitElement {
       background: var(--hc-surface-raised, #141922);
       color: var(--hc-ink, #e9edf2);
       font: inherit;
-      padding: 9px 10px;
+      padding: 0.5rem 0.75rem;
       overflow: hidden;
       cursor: pointer;
       display: flex;
@@ -91,7 +91,7 @@ export class HcRoomField extends LitElement {
       font-family: var(--hc-font-mono, ui-monospace, monospace);
       font-size: 10px;
       color: var(--hc-ink-muted, #8b95a4);
-      margin-top: 3px;
+      margin-top: 0.25rem;
       font-variant-numeric: tabular-nums;
     }
     .lit {
@@ -101,7 +101,7 @@ export class HcRoomField extends LitElement {
     /* A cell too small for a count keeps only its name; a truncated number is
        worse than no number. */
     button[data-tiny] {
-      padding: 6px 7px;
+      padding: 0.375rem 0.5rem;
     }
     button[data-tiny] .rn {
       font-size: 10px;

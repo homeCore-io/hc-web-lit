@@ -174,7 +174,7 @@ export class HcApp extends LitElement {
     }
     header button {
       min-height: var(--hc-density-min-tap, 44px);
-      padding: 0 0.625rem;
+      padding: 0 0.75rem;
       border: 1px solid var(--hc-stroke-hairline, #262d38);
       border-radius: var(--hc-radius-sm, 8px);
       background: var(--hc-surface-raised, #141922);
@@ -221,8 +221,8 @@ export class HcApp extends LitElement {
       bottom: 0.75rem;
       display: flex;
       align-items: center;
-      gap: 0.4rem;
-      padding: 0.35rem 0.7rem;
+      gap: 0.375rem;
+      padding: 0.375rem 0.75rem;
       border-radius: var(--hc-radius-pill, 999px);
       background: var(--hc-surface-overlay, #1b2230);
       color: var(--hc-ink-muted, #8b95a4);

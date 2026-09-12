@@ -44,7 +44,7 @@ export class HcModeChips extends LitElement {
     .chip {
       display: inline-flex;
       align-items: baseline;
-      gap: 0.4rem;
+      gap: 0.375rem;
       min-height: var(--hc-density-min-tap, 44px);
       padding: 0 calc(var(--hc-space-unit, 8px) * 1.25);
       border: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);

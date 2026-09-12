@@ -207,7 +207,7 @@ export class HcOverlay extends LitElement implements OverlayApi {
     }
     button.close {
       min-height: 32px;
-      padding: 0 0.6rem;
+      padding: 0 0.5rem;
       color: var(--hc-ink-muted, #8b95a4);
     }
     button:focus-visible {
@@ -227,7 +227,7 @@ export class HcOverlay extends LitElement implements OverlayApi {
     .toast {
       pointer-events: auto;
       max-width: min(30rem, calc(100vw - 2rem));
-      padding: 0.7rem 1rem;
+      padding: 0.75rem 1rem;
       border-radius: var(--hc-radius-sm, 8px);
       background: var(--hc-surface-overlay, #1b2230);
       color: var(--hc-ink, #e9edf2);

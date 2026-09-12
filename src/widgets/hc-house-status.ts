@@ -30,7 +30,7 @@ export class HcHouseStatus extends LitElement {
       display: flex;
       flex-direction: column;
       justify-content: center;
-      gap: 0.6rem;
+      gap: 0.5rem;
       height: 100%;
       box-sizing: border-box;
       padding: var(--hc-density-card-padding, 14px);
@@ -58,7 +58,7 @@ export class HcHouseStatus extends LitElement {
     .count {
       display: flex;
       align-items: baseline;
-      gap: 0.35rem;
+      gap: 0.375rem;
       font-size: var(--hc-text-caption-size, 11px);
       color: var(--hc-ink-muted, #8b95a4);
       text-transform: uppercase;

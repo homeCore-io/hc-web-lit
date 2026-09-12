@@ -61,7 +61,7 @@ export class HcRooms extends LitElement {
       gap: 0.125rem;
       justify-items: start;
       min-height: var(--hc-density-min-tap, 44px);
-      padding: 0.375rem 0.625rem;
+      padding: 0.375rem 0.75rem;
       border: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
       border-radius: var(--hc-radius-md, 12px);
       background: var(--hc-surface-raised, #141922);

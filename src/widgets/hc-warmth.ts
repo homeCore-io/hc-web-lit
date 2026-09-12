@@ -41,7 +41,7 @@ export class HcWarmth extends LitElement {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 6px;
+      gap: 0.375rem;
       min-width: 0;
     }
     .reading {

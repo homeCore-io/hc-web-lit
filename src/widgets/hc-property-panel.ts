@@ -120,7 +120,7 @@ export class HcPropertyPanel extends LitElement {
       border-bottom: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
     }
     .name {
-      padding-top: 0.6rem;
+      padding-top: 0.5rem;
       color: var(--hc-ink-muted, #8b95a4);
     }
     .name.required {
@@ -182,7 +182,7 @@ export class HcPropertyPanel extends LitElement {
       background: var(--hc-surface-sunken, #0d1116);
       color: var(--hc-ink, #e9edf2);
       font: inherit;
-      padding: 0 0.625rem;
+      padding: 0 0.75rem;
       cursor: pointer;
     }
     .problem {
@@ -230,7 +230,7 @@ export class HcPropertyPanel extends LitElement {
        multiple-select needs a modifier key nobody has on a tablet, and the
        state of one is invisible without opening it. */
     .chip {
-      padding: 0.2rem 0.5rem;
+      padding: 0.25rem 0.5rem;
       border: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
       border-radius: var(--hc-radius-pill, 999px);
       color: var(--hc-ink-muted, #8b95a4);
@@ -251,8 +251,8 @@ export class HcPropertyPanel extends LitElement {
        (§6.3). Quiet until it is on, because most fields are never expressions
        and a row of lit buttons would read as a row of warnings. */
     .fx {
-      margin-left: 0.4rem;
-      padding: 0 0.3rem;
+      margin-left: 0.375rem;
+      padding: 0 0.25rem;
       border: 1px solid var(--hc-stroke-hairline, #262d38);
       border-radius: var(--hc-radius-sm, 8px);
       background: none;

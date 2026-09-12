@@ -61,7 +61,7 @@ export class HcWorthKnowing extends LitElement {
     li {
       display: flex;
       align-items: center;
-      gap: 0.625rem;
+      gap: 0.75rem;
       min-width: 0;
       padding: calc(var(--hc-space-unit, 8px) * 0.375) 0;
       font-family: var(--hc-font-body, system-ui, sans-serif);

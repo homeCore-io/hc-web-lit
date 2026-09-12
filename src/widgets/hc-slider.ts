@@ -51,7 +51,7 @@ export class HcSlider extends LitElement {
       justify-content: space-between;
       font-size: var(--hc-text-body-small-size, 12.5px);
       color: var(--hc-ink-muted, #8b95a4);
-      margin-bottom: 6px;
+      margin-bottom: 0.375rem;
       letter-spacing: 0.01em;
     }
     .row b {
