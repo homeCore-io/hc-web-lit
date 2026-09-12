@@ -96,6 +96,28 @@ export function attachInspect(
   let fired = false;
   const tapOpens = options.tap !== false;
 
+  // **A row that opens on a tap has to open on a key.** Making the tap the way
+  // in left the sheet reachable by pointer only — worse than the hold it
+  // replaced, which was at least equally unreachable and did not look like an
+  // affordance. Here rather than in each widget, for the same reason the rest
+  // of this is.
+  //
+  // Focusable, and saying what the key does, but **not** `role="button"`: a
+  // row contains its own switch, and a button inside a button is not a thing.
+  // A focusable row that declares it opens a dialog is the honest description
+  // of what this is.
+  if (tapOpens) {
+    if (!el.hasAttribute('tabindex')) el.tabIndex = 0;
+    if (!el.hasAttribute('aria-haspopup')) el.setAttribute('aria-haspopup', 'dialog');
+    el.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      // A key pressed while the switch has focus belongs to the switch.
+      if (onAControl(e, el)) return;
+      e.preventDefault();
+      run();
+    });
+  }
+
   el.addEventListener('pointerdown', (e) => {
     // Only a primary press. A right-click is already the context menu.
     if (e.button !== 0 || onAControl(e, el)) return;

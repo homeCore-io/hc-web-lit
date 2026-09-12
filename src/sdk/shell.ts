@@ -218,6 +218,13 @@ export abstract class HcLayoutShell extends LitElement {
     :host([data-row]) .secondary {
       display: none;
     }
+    /* A row you can open is a row you can focus, so it says so when you do.
+       On the host, because the focus lands there rather than on the markup. */
+    :host(:focus-visible) {
+      outline: 2px solid var(--hc-stroke-focus, #7cc4ff);
+      outline-offset: -2px;
+      border-radius: var(--hc-shell-radius, var(--hc-radius-md, 14px));
+    }
     /* **A state worth noticing is coloured, wherever it is drawn.**
 
        Here rather than in each widget, for the reason the switch and the open

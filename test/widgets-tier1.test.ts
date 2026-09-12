@@ -374,6 +374,26 @@ describe('opening a device, and the controls that must not', () => {
     expect(opened).toEqual(['sheet']);
   });
 
+  it('is reachable by a key, not only a pointer', async () => {
+    // **Making the tap the way in left the sheet reachable by pointer only** —
+    // worse than the hold it replaced, which was at least equally unreachable
+    // and did not look like an affordance.
+    const { el, opened } = row();
+    expect(el.getAttribute('tabindex'), 'a row you can open is focusable').toBe('0');
+    expect(el.getAttribute('aria-haspopup'), 'and says what the key does').toBe('dialog');
+    el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(opened).toEqual(['sheet']);
+  });
+
+  it('leaves a key pressed on a control to that control', async () => {
+    // Enter on the switch flips the switch; it does not also open a sheet
+    // about the thing it just switched.
+    const { el, opened } = row();
+    const select = el.querySelector('select') as HTMLElement;
+    select.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(opened).toEqual([]);
+  });
+
   it('leaves a row whose tap already means something', async () => {
     // A light pill aims the colour wheel at whatever you touch, and the page
     // says so in words right above it.
