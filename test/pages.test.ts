@@ -19,6 +19,7 @@ import {
   placeWidget,
   removeWidget,
   renamed,
+  clipGroup,
   reparentGroup,
   reparentWidgets,
   type Box,
@@ -1193,5 +1194,85 @@ describe('dragging a container into another container', () => {
         box: { x: 0, y: 0, w: 10, h: 10 },
       }),
     ).toBeUndefined();
+  });
+});
+
+describe('holding a container to the size it was drawn', () => {
+  const doc = (clip?: boolean): DashboardDefinition => ({
+    id: 'd',
+    name: 'D',
+    icon: 'home',
+    owner_user_id: 'u',
+    widgets: [
+      { id: 'a', type: 'text', config: { group: 'Strip' } },
+      { id: 'b', type: 'text', config: { group: 'Tag' } },
+    ],
+    layouts: [
+      {
+        breakpoint: 'desktop',
+        columns: 12,
+        row_height: 100,
+        gap: 10,
+        flow: 'free',
+        frame: { width: 1240, height: 900 },
+        groups: [
+          {
+            path: 'Strip',
+            rect: { x: 40, y: 100, w: 700, h: 120 },
+            frame: true,
+            stack: true,
+            stack_gap: 10,
+            ...(clip === undefined ? {} : { clip }),
+          },
+        ],
+        placements: [
+          { widget_id: 'a', x: 0, y: 0, w: 1, h: 1, rect: { x: 0, y: 0, w: 300, h: 40 } },
+          { widget_id: 'b', x: 0, y: 0, w: 1, h: 1, rect: { x: 900, y: 0, w: 100, h: 40 } },
+        ],
+      },
+    ],
+  });
+
+  const box = (d: DashboardDefinition) => d.layouts?.[0]?.groups?.find((b) => b.path === 'Strip');
+
+  it('writes the one key and nothing else', async () => {
+    // Nothing inside it moves: a member's rectangle is stated in the box's
+    // space, so this writes the box and clipping is as reversible as the two
+    // bodies are.
+    const next = clipGroup(doc(), 'desktop', 'Strip', true)!;
+    expect(box(next)?.clip).toBe(true);
+    expect(box(next)?.rect).toEqual({ x: 40, y: 100, w: 700, h: 120 });
+    expect(next.layouts?.[0]?.placements).toEqual(doc().layouts?.[0]?.placements);
+    expect(next.widgets).toEqual(doc().widgets);
+  });
+
+  it('lets go of it again, and the document is byte-identical', async () => {
+    // The invariant every container edit here keeps: group then ungroup, stack
+    // then unstack, and now clip then unclip all leave the page exactly as it
+    // was. So letting go takes the key out rather than writing a `false` that
+    // reads the same to everything and diffs against nothing.
+    const held = clipGroup(doc(), 'desktop', 'Strip', true)!;
+    const freed = clipGroup(held, 'desktop', 'Strip', false)!;
+    expect(box(freed)?.clip).toBeUndefined();
+    expect(JSON.stringify(freed)).toBe(JSON.stringify(doc()));
+  });
+
+  it('is nothing to do when it is already that way', async () => {
+    expect(clipGroup(doc(true), 'desktop', 'Strip', true)).toBeUndefined();
+    expect(clipGroup(doc(false), 'desktop', 'Strip', false)).toBeUndefined();
+    expect(clipGroup(doc(), 'desktop', 'Strip', false)).toBeUndefined();
+  });
+
+  it('refuses a group that is only a tag, which has no size to hold to', async () => {
+    // A tag is several elements agreeing on a name and has no geometry at all
+    // (§14.2b) — there is nothing there to clip.
+    expect(clipGroup(doc(), 'desktop', 'Tag', true)).toBeUndefined();
+    expect(clipGroup(doc(), 'desktop', 'Nothing', true)).toBeUndefined();
+  });
+
+  it('declines on a packed page, which has no containers at all', async () => {
+    const packed = doc();
+    packed.layouts![0]!.flow = 'packed';
+    expect(clipGroup(packed, 'desktop', 'Strip', true)).toBeUndefined();
   });
 });

@@ -1486,3 +1486,93 @@ describe('dragging a whole container into another one', () => {
     ]);
   });
 });
+
+describe('a container held to the size it was drawn', () => {
+  // The other half of "a column is as tall as what is in it". Some boxes
+  // really are a size — a strip a photograph sits in, a row that must stay one
+  // row — and `clip` has been in the document and read by the renderer since
+  // containers landed, with nothing in the product able to say it.
+  const boxes = (clip: boolean): DashboardGroupBox[] => [
+    {
+      path: 'Column',
+      rect: { x: 0, y: 0, w: 400, h: 200 },
+      frame: true,
+      stack: true,
+      stack_gap: 8,
+      ...(clip ? { clip: true } : {}),
+    },
+    {
+      path: 'Band',
+      rect: { x: 600, y: 0, w: 400, h: 120 },
+      frame: true,
+      fit: 'content' as const,
+      ...(clip ? { clip: true } : {}),
+    },
+  ];
+
+  const mount = async (clip: boolean): Promise<HcPage> => {
+    const el = document.createElement('hc-page');
+    el.doc = {
+      id: 'd',
+      name: 'D',
+      icon: 'home',
+      owner_user_id: 'u',
+      layouts: [
+        {
+          breakpoint: 'desktop',
+          columns: 12,
+          row_height: 120,
+          gap: 12,
+          flow: 'free',
+          frame: { width: 1240, height: 800, fit: 'scroll' },
+          groups: boxes(clip),
+          placements: [
+            { widget_id: 'a', x: 0, y: 0, w: 1, h: 1, rect: { x: 0, y: 0, w: 300, h: 60 } },
+            { widget_id: 'b', x: 0, y: 0, w: 1, h: 1, rect: { x: 0, y: 0, w: 300, h: 60 } },
+          ],
+        },
+      ],
+      widgets: [
+        { id: 'a', type: 'text', config: { text: 'one', group: 'Column' } },
+        { id: 'b', type: 'text', config: { text: 'two', group: 'Band' } },
+      ],
+    };
+    el.store = new DeviceStore();
+    document.body.append(el);
+    await el.updateComplete;
+    return el;
+  };
+
+  const stack = (el: HcPage, path: string) =>
+    [...(el.shadowRoot?.querySelectorAll('.stack') ?? [])].find(
+      (e) => (e as HTMLElement).dataset['frame'] === path,
+    ) as HTMLElement;
+
+  it('keeps a column at the height its author drew, and hides the rest', async () => {
+    const el = await mount(true);
+    expect(stack(el, 'Column').style.height).toBe('200px');
+    expect(stack(el, 'Column').style.overflow).toBe('hidden');
+  });
+
+  it('lets a column grow when it is not clipped, which is the default', async () => {
+    // A scene row with no scenes in it left a 180px hole, and a media column
+    // in a busy room was cut off at the bottom of a number somebody typed
+    // once. Growing is what a household means by a page that is dynamic.
+    const el = await mount(false);
+    expect(stack(el, 'Column').style.height).toBe('');
+  });
+
+  it('stops measuring a band that asked for the size it was drawn', async () => {
+    // **One meaning, not two.** A column that does not grow and a band that is
+    // not measured are the same sentence about the box, and somebody pressing
+    // one button should not have to know which kind they are holding.
+    const el = await mount(true);
+    expect(stack(el, 'Band').style.height).toBe('120px');
+    expect(stack(el, 'Band').hasAttribute('data-fits'), 'still measured').toBe(false);
+  });
+
+  it('measures a band that did not ask', async () => {
+    const el = await mount(false);
+    expect(stack(el, 'Band').hasAttribute('data-fits')).toBe(true);
+  });
+});

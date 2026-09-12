@@ -1105,6 +1105,73 @@ export function reparentGroup(
 }
 
 /**
+ * A container held to the size its author drew it, or let go of it (§14.2b).
+ *
+ * **The one thing a container could say that nothing could say for it.** A
+ * column is as tall as what is in it, which is what a household means by a
+ * page that is not *not dynamic* — a scene row with no scenes in it left a
+ * 180px hole, and a media column in a busy room was cut off at the bottom of a
+ * number somebody typed once. But some boxes really are a size: a strip a
+ * photograph sits in, a panel drawn to reach a rule, a row that must stay one
+ * row however many things arrive in it. `clip` is how a box asks for that, and
+ * it has been in the document, read by the renderer and unreachable from the
+ * product since containers landed.
+ *
+ * **One key, one meaning, whichever kind of body it is**: clipped, the
+ * container is the rectangle its author drew and anything past it is hidden;
+ * unclipped, it is as tall as its contents — measured, for a band whose
+ * members are placed by coordinate, and grown, for a column whose members push
+ * each other down.
+ *
+ * Nothing inside it moves either way. A member's rectangle is stated in the
+ * box's space and this writes only the box, so clipping and unclipping leaves
+ * the document byte-identical apart from the one key — the property every
+ * container edit here keeps (§14.2b), and the reason a household can try it on
+ * a real page.
+ */
+export function clipGroup(
+  doc: DashboardDefinition,
+  breakpoint: DashboardBreakpoint,
+  path: string,
+  clip: boolean,
+): DashboardDefinition | undefined {
+  const drawn = layoutToDraw(doc, breakpoint);
+  if (drawn === undefined) return undefined;
+  const editing = drawn.borrowedFrom ?? breakpoint;
+  const layout = (doc.layouts ?? []).find((l) => l.breakpoint === editing);
+  if (layout === undefined || layout.flow !== 'free') return undefined;
+
+  const box = (layout.groups ?? []).find((b) => b.path === path);
+  // A box that is not a frame has no size of its own to hold to: it is a tag,
+  // and a tag has no geometry (§14.2b).
+  if (box === undefined || box.frame !== true || box.rect == null) return undefined;
+  if ((box.clip === true) === clip) return undefined;
+
+  return {
+    ...doc,
+    layouts: (doc.layouts ?? []).map((l) =>
+      l.breakpoint === editing
+        ? {
+            ...l,
+            groups: (l.groups ?? []).map((b) => {
+              if (b.path !== path) return b;
+              if (clip) return { ...b, clip: true };
+              // **Letting go takes the key out rather than writing `false`.**
+              // Absent and false mean the same thing to every reader of this
+              // document, and the invariant these edits keep is stronger than
+              // that: clip then unclip leaves the document byte-identical, the
+              // way group-then-ungroup and stack-then-unstack already do. A
+              // key nobody asked for is a diff for its own sake.
+              const { clip: _was, ...rest } = b;
+              return rest;
+            }),
+          }
+        : l,
+    ),
+  };
+}
+
+/**
  * A container resized, which is again one write to its box.
  *
  * Only meaningful where the page positions the container: a container in a

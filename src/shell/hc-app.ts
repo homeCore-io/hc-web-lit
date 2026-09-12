@@ -22,6 +22,7 @@ import {
   placeWidget,
   placeWidgets,
   reparentWidgets,
+  clipGroup,
   moveGroupBox,
   reparentGroup,
   regroupWidgets,
@@ -970,6 +971,32 @@ export class HcApp extends LitElement {
     if (next === undefined) return;
     this.writePages(this.replacing(next), doc.id);
   };
+
+  /**
+   * Hold a container to the size it was drawn, or let go of it (§14.2b).
+   *
+   * The other half of "a column is as tall as what is in it": some boxes
+   * really are a size, and `clip` has been in the document and read by the
+   * renderer since containers landed with no way to say it from the product.
+   * Nothing inside the box moves either way, so it is as reversible as Column
+   * and Band are.
+   */
+  private readonly clipHeld = (clip: boolean) => (): void => {
+    const doc = this.current;
+    const path = this.heldGroup();
+    if (doc === undefined || path === undefined) return;
+    const next = clipGroup(doc, this.breakpoint, path, clip);
+    if (next === undefined) return;
+    this.writePages(this.replacing(next), doc.id);
+  };
+
+  /** Whether the container in hand is held to the size it was drawn. */
+  private heldClip(): boolean {
+    const path = this.heldGroup();
+    const layout =
+      this.current === undefined ? undefined : layoutToDraw(this.current, this.breakpoint)?.layout;
+    return (layout?.groups ?? []).some((b) => b.path === path && b.clip === true);
+  }
 
   /**
    * Whether the page being shown is composed rather than packed.
@@ -2040,7 +2067,14 @@ export class HcApp extends LitElement {
    * Whichever it is not is offered as the switch, and changing between them
    * moves nothing at all.
    *
-   * At most two buttons at a time, and each word says what pressing it does.
+   * **Clip is the third, and only once there is a body to clip.** A container
+   * is as tall as what is in it — grown, for a column whose members push each
+   * other down; measured, for a band whose members are placed by coordinate —
+   * and some boxes really are a size: a strip a photograph sits in, a row that
+   * must stay one row however many things arrive in it. The switch offers
+   * whichever it is not, the way the two bodies do.
+   *
+   * At most three buttons at a time, and each word says what pressing it does.
    */
   private bodyControls(shared: string) {
     const body = this.heldBody();
@@ -2051,11 +2085,22 @@ export class HcApp extends LitElement {
       return html`${make('column', 'Column', `Lay "${shared}" out one under another`)}
       ${make('band', 'Band', `Give "${shared}" a body and leave it as drawn`)}`;
     }
+    const clipped = this.heldClip();
     return html`${
         body === 'column'
           ? make('band', 'Band', `Leave "${shared}" as drawn instead of in a column`)
           : make('column', 'Column', `Lay "${shared}" out one under another instead`)
       }
+      <button
+        title=${
+          clipped
+            ? `Let "${shared}" be as tall as what is in it`
+            : `Keep "${shared}" the height it was drawn, and hide what does not fit`
+        }
+        @click=${this.clipHeld(!clipped)}
+      >
+        ${clipped ? 'Grow' : 'Clip'}
+      </button>
       <button title=${`Take the body off "${shared}"`} @click=${this.frameHeld(undefined)}>
         Unframe
       </button>`;

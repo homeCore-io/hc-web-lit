@@ -1956,7 +1956,11 @@ placement reaches the foot of the page, which is what the ground a page is
 painted on and the hairline between its columns both want. A column is
 content-height always — its drawn height is what its author saw on the day, and
 keeping it as a floor is what a household calls *not dynamic*. `clip` is how a
-container asks for the size it was drawn.
+container asks for the size it was drawn, and it says one thing about the box
+rather than one per kind: a column stops growing and a band stops being
+measured, which are the same sentence. Anything past that rectangle is hidden,
+and a height grip means something again — a container that fits its content
+ignores the height its own resize writes.
 
 And the page itself: **as tall as what is on it**, in both directions. A canvas
 that could only grow left every room but the busiest ending in a screenful of

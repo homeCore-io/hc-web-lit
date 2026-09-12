@@ -1173,7 +1173,13 @@ export class HcPage extends LitElement {
     // A container that places its members by coordinate has no height of its
     // own — absolutely positioned children contribute none — so one that asks
     // to fit its content is measured after layout, like the page is.
-    const tall = box.fit === 'content' && !grows ? (this.fitted.get(box.path) ?? at.h) : at.h;
+    //
+    // **Unless it asked for the size it was drawn**, which is one meaning for
+    // `clip` rather than two: a column that does not grow and a band that is
+    // not measured are the same sentence about the box, and a household
+    // pressing one button should not have to know which kind it is holding.
+    const fits = box.fit === 'content' && !grows && box.clip !== true;
+    const tall = fits ? (this.fitted.get(box.path) ?? at.h) : at.h;
     // Carried, if this is the one in hand: the box follows the pointer and its
     // members hold still inside it, which is what moving a container is.
     // Being resized is the same idea, with the grips deciding the rectangle
@@ -1211,7 +1217,7 @@ export class HcPage extends LitElement {
       class=${inFlow ? 'stack inflow' : 'stack'}
       data-frame=${box.path}
       ?data-drop=${this.mode === 'edit' && this.landing?.path === box.path}
-      ?data-fits=${box.fit === 'content' && !grows}
+      ?data-fits=${fits}
       ?data-column=${stacks}
       style="${place}${size}padding:${pad}px;${stacks ? `gap:${gap}px` : ''}"
     >
