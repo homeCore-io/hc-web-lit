@@ -439,7 +439,13 @@ describe('a page being arranged rather than used', () => {
 class FakePointerEvent extends MouseEvent {
   readonly pointerId: number;
   constructor(type: string, init: MouseEventInit & { pointerId?: number } = {}) {
-    super(type, init);
+    // **Bubbling and composed unless told otherwise, because real pointer
+    // events are both.** The surface captures the pointer on its own host
+    // rather than on the handle that was pressed — a card carried out of a
+    // column is redrawn by the page instead of by the container, so the grip
+    // is destroyed on the first frame of the drag — and an event that stopped
+    // at the shadow root would model a browser that does not exist.
+    super(type, { bubbles: true, composed: true, ...init });
     this.pointerId = init.pointerId ?? 1;
   }
 }

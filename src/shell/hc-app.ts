@@ -21,6 +21,7 @@ import {
   newPage,
   placeWidget,
   placeWidgets,
+  reparentWidgets,
   moveGroupBox,
   regroupWidgets,
   frameGroup,
@@ -778,6 +779,38 @@ export class HcApp extends LitElement {
     if (doc === undefined) throw new Error('No page to place on.');
 
     const next = placeWidgets(doc, this.breakpoint, new Map(moves.map((m) => [m.id, m.box])));
+    if (next === undefined) throw new Error('This layout has none of those widgets.');
+
+    this.writePages(this.replacing(next), next.id);
+    return Promise.resolve();
+  };
+
+  /**
+   * Drop widgets into a container, or out of one (§14.2b).
+   *
+   * **Membership and position in one document, so it is one step to undo.**
+   * They are stored in different places — `group` in the widget's own config,
+   * the rectangle in the placement — and either written without the other
+   * draws the card somewhere nobody dropped it: in the new section at the old
+   * section's coordinates, or where it was let go and still a member of the
+   * section it left.
+   */
+  private readonly dropWidgetsOnPage = async (
+    drops: readonly { id: string; into: string | undefined; box: Box; at?: number }[],
+  ): Promise<void> => {
+    const doc = this.current;
+    if (doc === undefined) throw new Error('No page to drop on.');
+
+    const next = reparentWidgets(
+      doc,
+      this.breakpoint,
+      new Map(
+        drops.map((d) => [
+          d.id,
+          { path: d.into, box: d.box, ...(d.at === undefined ? {} : { at: d.at }) },
+        ]),
+      ),
+    );
     if (next === undefined) throw new Error('This layout has none of those widgets.');
 
     this.writePages(this.replacing(next), next.id);
@@ -2080,6 +2113,7 @@ export class HcApp extends LitElement {
         .onRemoveWidget=${this.mayWriteDashboards() ? this.removeWidgetFromPage : undefined}
         .onPlaceWidget=${this.mayWriteDashboards() ? this.placeWidgetOnPage : undefined}
         .onPlaceWidgets=${this.mayWriteDashboards() ? this.placeWidgetsOnPage : undefined}
+        .onDropWidgets=${this.mayWriteDashboards() ? this.dropWidgetsOnPage : undefined}
         .onPlaceGroup=${this.mayWriteDashboards() ? this.placeGroupOnPage : undefined}
         .onSizeGroup=${this.mayWriteDashboards() ? this.sizeGroupOnPage : undefined}
         .onTurnWidget=${this.mayWriteDashboards() ? this.turnWidgetOnPage : undefined}

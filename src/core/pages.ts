@@ -23,8 +23,8 @@ import type {
 import { layoutToDraw } from './dashboard.js';
 import type { DashboardRect } from './layout.js';
 import { cellsOf } from './geometry.js';
-import { groupOf, isUnder, withGroup } from './groups.js';
-import { framesByPath, toLocal } from './frames.js';
+import { groupOf, isUnder, join, relativeTo, withGroup } from './groups.js';
+import { containerOf, framesByPath, framesIn, flowFrames, toLocal } from './frames.js';
 
 /**
  * A page id from what somebody typed.
@@ -405,6 +405,220 @@ export function transformWidgets(
       l.breakpoint === editing ? { ...l, placements: placements.map(move) } : l,
     ),
   };
+}
+
+/**
+ * Where a widget has been dropped: which container, and where in it.
+ *
+ * `path` is the container it lands in, and `undefined` is the page itself —
+ * which is a destination like any other, because dragging a card out of a
+ * section on to bare ground is the same gesture as dragging it into the next
+ * section along.
+ */
+export interface Landing {
+  path: string | undefined;
+  /** Where the drag left it, in the page coordinates every gesture works in. */
+  box: Box;
+  /**
+   * Its place in the reading order, when the container it lands in is a column.
+   *
+   * Decided by the surface rather than here, because it is a question about
+   * what is *drawn*: a column lays its members out in flow, so what separates
+   * two rows on screen is their content, while their stored tops are an
+   * ordering. The two drift apart down a long column, and converting the
+   * drop's page y would put the card wherever the drift had got to.
+   */
+  at?: number;
+}
+
+/** One row of a column — a member widget, or a container nested in it. */
+interface Row {
+  rect: DashboardRect;
+  widget?: string;
+  box?: DashboardGroupBox;
+}
+
+/**
+ * Widgets moved from one container into another, and into place inside it.
+ *
+ * **The hole this fills.** Membership could only be changed by Group and
+ * Ungroup, so moving a card from one section to another meant dissolving the
+ * first section, re-selecting what was left, and grouping it again — on pages
+ * where the sections *are* the design. The drag already knew where it had let
+ * go; nothing read that as an answer to which container.
+ *
+ * **Two writes, one document.** Membership is `group` in the widget's own
+ * config (§14.1 — a property of the element, so a cluster held together on the
+ * wall is held together on the phone) and the rectangle is in the placement.
+ * They have to land together, or the card is in the new container at the old
+ * container's coordinates and draws somewhere nobody dropped it. One document
+ * is also one step to undo, which is what the gesture was.
+ *
+ * **The tag below the container is kept.** A card in `Room/Lights` dropped
+ * into `Footer` lands in `Footer/Lights`: a drag says which *container* holds
+ * a card, and the cluster somebody made inside that container is not something
+ * they just expressed an opinion about. Two things follow. Dropping that card
+ * on the page leaves it in a plain `Lights` — still clustered, no longer in a
+ * container. And if `Footer/Lights` already exists it joins that one, because
+ * with paths the name **is** the address (`core/groups.ts`) and there is no
+ * second `Lights` for it to be told apart from.
+ *
+ * **A column is renumbered; the container left behind is not.** Arriving in a
+ * column is taking a place in it rather than landing at a coordinate, so
+ * everything the column holds — the containers nested in it included, since
+ * those are rows of the same column (§14.2b) — is restated as a stack from its
+ * top. A stored top that is only an ordering loses nothing by being restated,
+ * and the numbers this writes are the ones an unstack would want. The column a
+ * card *leaves* keeps the gap where it was: the order of what remains is
+ * unchanged, and rewriting rows nobody touched to close a hole that does not
+ * draw would be a diff for its own sake.
+ *
+ * Composed pages only. Containers are offered nowhere else — a column of
+ * rectangles is not expressible in packed cells — so a packed layout has no
+ * frames to land in, and its engine would undo the attempt on the next render.
+ */
+export function reparentWidgets(
+  doc: DashboardDefinition,
+  breakpoint: DashboardBreakpoint,
+  moves: ReadonlyMap<string, Landing>,
+): DashboardDefinition | undefined {
+  const drawn = layoutToDraw(doc, breakpoint);
+  if (drawn === undefined) return undefined;
+  const editing = drawn.borrowedFrom ?? breakpoint;
+  const layout = (doc.layouts ?? []).find((l) => l.breakpoint === editing);
+  if (layout === undefined || layout.flow !== 'free') return undefined;
+
+  const widgets = doc.widgets ?? [];
+  const byId = new Map(widgets.map((w) => [w.id, w]));
+  const frames = framesByPath(layout.groups);
+  const flow = flowFrames(layout.groups);
+  const placements = layout.placements ?? [];
+
+  // Where each mover ends up, as a path. An id the drawn layout does not have
+  // is skipped rather than refused: a selection outlives the thing it points
+  // at, and losing the rest of a drop to one stale id is the wrong trade.
+  const paths = new Map<string, string | undefined>();
+  for (const [id, landing] of moves) {
+    const w = byId.get(id);
+    if (w === undefined || !placements.some((p) => p.widget_id === id)) continue;
+    const was = groupOf(w.config);
+    const from = containerOf(was, flow);
+    // What the element is tagged with *below* the container that held it.
+    const rest = was === undefined ? undefined : from === undefined ? was : relativeTo(was, from);
+    paths.set(id, rest === undefined ? landing.path : join(landing.path, rest));
+  }
+  if (paths.size === 0) return undefined;
+
+  // The page rectangle restated in the space it is now in — the same seam
+  // `placeWidget` writes through, with the new container deciding the origin
+  // rather than the old one. This is the half that keeps a card from leaping
+  // as it crosses a boundary.
+  const rects = new Map<string, DashboardRect>();
+  for (const [id, landing] of moves) {
+    if (!paths.has(id)) continue;
+    const p = placements.find((q) => q.widget_id === id);
+    if (p === undefined) continue;
+    rects.set(id, toLocal({ ...(p.rect ?? {}), ...landing.box }, paths.get(id), frames));
+  }
+
+  const tops = new Map<string, number>();
+  const boxTops = new Map<string, number>();
+  for (const into of new Set([...paths.keys()].map((id) => moves.get(id)?.path))) {
+    const column = into === undefined ? undefined : flow.get(into);
+    if (into === undefined || column?.stack !== true) continue;
+
+    const rows = columnRows(layout, flow, into, containersOf(widgets, flow), new Set(paths.keys()));
+    const coming = [...paths.keys()]
+      .filter((id) => moves.get(id)?.path === into)
+      .sort((a, b) => (moves.get(a)?.at ?? 0) - (moves.get(b)?.at ?? 0));
+    for (const id of coming) {
+      const rect = rects.get(id);
+      if (rect === undefined) continue;
+      const at = Math.max(0, Math.min(rows.length, moves.get(id)?.at ?? rows.length));
+      rows.splice(at, 0, { rect, widget: id });
+    }
+
+    const gap = column.stack_gap ?? 0;
+    let y = 0;
+    for (const row of rows) {
+      if (row.widget !== undefined) tops.set(row.widget, y);
+      else if (row.box !== undefined) boxTops.set(row.box.path, y);
+      y += row.rect.h + gap;
+    }
+  }
+
+  const placed = placements.map((p) => {
+    const rect = rects.get(p.widget_id) ?? p.rect;
+    const top = tops.get(p.widget_id);
+    if (rect == null || (rects.get(p.widget_id) === undefined && top === undefined)) return p;
+    const next = top === undefined ? rect : { ...rect, y: top };
+    const frame = layout.frame;
+    if (frame == null) return { ...p, rect: next };
+    // The cells follow the rectangle, the same safety property every other
+    // composed write keeps (§14.3): a client that has never heard of frames
+    // draws these and gets a page that is approximately right rather than one
+    // showing where the card used to be.
+    return {
+      ...p,
+      rect: next,
+      ...cellsOf(next, {
+        width: frame.width,
+        columns: layout.columns,
+        rowHeight: layout.row_height,
+        gap: layout.gap,
+      }),
+    };
+  });
+
+  const groups = (layout.groups ?? []).map((b) => {
+    const top = boxTops.get(b.path);
+    return top === undefined || b.rect == null ? b : { ...b, rect: { ...b.rect, y: top } };
+  });
+
+  return {
+    ...doc,
+    widgets: widgets.map((w) =>
+      paths.has(w.id) ? { ...w, config: withGroup(w.config, paths.get(w.id)) } : w,
+    ),
+    layouts: (doc.layouts ?? []).map((l) =>
+      l.breakpoint === editing ? { ...l, placements: placed, groups } : l,
+    ),
+  };
+}
+
+/** Which container lays each widget out, for the widgets that are in one. */
+function containersOf(
+  widgets: readonly DashboardWidget[],
+  flow: ReadonlyMap<string, DashboardGroupBox>,
+): Map<string, string | undefined> {
+  return new Map(widgets.map((w) => [w.id, containerOf(groupOf(w.config), flow)]));
+}
+
+/**
+ * What a column holds, in the order it reads, without the widgets leaving it.
+ *
+ * Widgets and nested containers interleave. The top their author gave them is
+ * the only thing the two kinds have in common and the only thing a column
+ * needs from them — the same list `hc-page`'s `inColumn` draws, built from the
+ * document rather than from the DOM.
+ */
+function columnRows(
+  layout: DashboardLayout,
+  flow: ReadonlyMap<string, DashboardGroupBox>,
+  path: string,
+  within: ReadonlyMap<string, string | undefined>,
+  leaving: ReadonlySet<string>,
+): Row[] {
+  const rows: Row[] = [];
+  for (const p of layout.placements ?? []) {
+    if (leaving.has(p.widget_id) || within.get(p.widget_id) !== path || p.rect == null) continue;
+    rows.push({ rect: p.rect, widget: p.widget_id });
+  }
+  for (const box of framesIn(path, flow)) {
+    if (box.rect == null) continue;
+    rows.push({ rect: box.rect, box });
+  }
+  return rows.sort((a, b) => a.rect.y - b.rect.y);
 }
 
 /**

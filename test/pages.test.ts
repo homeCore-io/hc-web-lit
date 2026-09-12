@@ -19,6 +19,7 @@ import {
   placeWidget,
   removeWidget,
   renamed,
+  reparentWidgets,
   type Box,
 } from '../src/core/pages.js';
 import { layoutToDraw } from '../src/core/dashboard.js';
@@ -684,5 +685,249 @@ describe('the other kind of body, and switching between them', () => {
   it('writes nothing when it is already the kind asked for', async () => {
     const made = frameGroup(doc(), 'desktop', 'Foot', 'band')!;
     expect(frameGroup(made, 'desktop', 'Foot', 'band')).toBeUndefined();
+  });
+});
+
+describe('dragging a widget into a container, and out of one', () => {
+  // The hole containers left: membership only ever changed through Group and
+  // Ungroup, so moving a card from one section to another meant dissolving the
+  // first section and rebuilding it — on pages where the sections are the
+  // design.
+  const doc = (): DashboardDefinition => ({
+    id: 'd',
+    name: 'D',
+    icon: 'home',
+    owner_user_id: 'u',
+    widgets: [
+      { id: 'head', type: 'text', config: { group: 'Left' } },
+      { id: 'list', type: 'device_list', config: { group: 'Left' } },
+      { id: 'chip', type: 'text', config: { group: 'Foot' } },
+      { id: 'loose', type: 'text', config: {} },
+    ],
+    layouts: [
+      {
+        breakpoint: 'desktop',
+        columns: 12,
+        row_height: 100,
+        gap: 10,
+        flow: 'free',
+        frame: { width: 1240, height: 900 },
+        groups: [
+          // A column at x 40, y 100, so its space is offset from the page's in
+          // both directions — an origin of zero would hide every conversion
+          // bug this is here to catch.
+          {
+            path: 'Left',
+            rect: { x: 40, y: 100, w: 700, h: 400 },
+            frame: true,
+            stack: true,
+            stack_gap: 10,
+          },
+          { path: 'Foot', rect: { x: 40, y: 600, w: 700, h: 80 }, frame: true, fit: 'content' },
+        ],
+        placements: [
+          { widget_id: 'head', x: 0, y: 0, w: 1, h: 1, rect: { x: 0, y: 0, w: 300, h: 20 } },
+          { widget_id: 'list', x: 0, y: 0, w: 1, h: 1, rect: { x: 0, y: 30, w: 700, h: 60 } },
+          { widget_id: 'chip', x: 0, y: 0, w: 1, h: 1, rect: { x: 10, y: 10, w: 120, h: 40 } },
+          { widget_id: 'loose', x: 0, y: 0, w: 1, h: 1, rect: { x: 900, y: 0, w: 100, h: 40 } },
+        ],
+      },
+    ],
+  });
+
+  const rect = (d: DashboardDefinition, id: string) =>
+    d.layouts?.[0]?.placements?.find((p) => p.widget_id === id)?.rect;
+  const group = (d: DashboardDefinition, id: string) =>
+    d.widgets?.find((w) => w.id === id)?.config?.['group'];
+  const box = (d: DashboardDefinition, path: string) =>
+    d.layouts?.[0]?.groups?.find((b) => b.path === path);
+  const order = (d: DashboardDefinition, path: string) =>
+    (d.widgets ?? [])
+      .filter((w) => w.config?.['group'] === path)
+      .map((w) => ({ id: w.id, y: rect(d, w.id)?.y ?? 0 }))
+      .sort((a, b) => a.y - b.y)
+      .map((r) => r.id);
+
+  it('writes the membership and the rectangle together', async () => {
+    // Either on its own draws the card somewhere nobody dropped it: in the new
+    // container at the old container's coordinates, or at the right place on
+    // screen and still a member of the section it left.
+    const moved = reparentWidgets(
+      doc(),
+      'desktop',
+      new Map([['loose', { path: 'Foot', box: { x: 940, y: 640, w: 100, h: 40 } }]]),
+    );
+    expect(moved, 'nothing written').not.toBeUndefined();
+    expect(group(moved!, 'loose')).toBe('Foot');
+    // The page rectangle restated in Foot's space, which begins at 40, 600.
+    expect(rect(moved!, 'loose')).toEqual({ x: 900, y: 40, w: 100, h: 40 });
+  });
+
+  it('takes a card out of a container on to the page', async () => {
+    // Out is a destination like any other: the page is where you land when
+    // nothing above you is a frame.
+    const moved = reparentWidgets(
+      doc(),
+      'desktop',
+      new Map([['chip', { path: undefined, box: { x: 200, y: 800, w: 120, h: 40 } }]]),
+    );
+    expect(group(moved!, 'chip')).toBeUndefined();
+    expect(rect(moved!, 'chip')).toEqual({ x: 200, y: 800, w: 120, h: 40 });
+  });
+
+  it('keeps the cluster somebody made below the container', async () => {
+    // A drag says which container holds a card. The cluster inside it is not
+    // something the gesture expressed any opinion about.
+    const tagged = doc();
+    tagged.widgets![2]!.config = { group: 'Foot/Modes' };
+    const moved = reparentWidgets(
+      tagged,
+      'desktop',
+      new Map([['chip', { path: 'Left', box: { x: 40, y: 100, w: 120, h: 40 }, at: 0 }]]),
+    );
+    expect(group(moved!, 'chip')).toBe('Left/Modes');
+  });
+
+  it('leaves it clustered and out of every container, dropped on the page', async () => {
+    const tagged = doc();
+    tagged.widgets![2]!.config = { group: 'Foot/Modes' };
+    const moved = reparentWidgets(
+      tagged,
+      'desktop',
+      new Map([['chip', { path: undefined, box: { x: 0, y: 0, w: 120, h: 40 } }]]),
+    );
+    expect(group(moved!, 'chip')).toBe('Modes');
+  });
+
+  it('lands where in the column it was dropped, not where its page y converts to', async () => {
+    // A column's stored tops are an ordering; what separates two rows on
+    // screen is their content. The index is the surface's answer and this is
+    // what it is for.
+    const moved = reparentWidgets(
+      doc(),
+      'desktop',
+      new Map([['loose', { path: 'Left', box: { x: 40, y: 100, w: 100, h: 40 }, at: 1 }]]),
+    );
+    expect(order(moved!, 'Left')).toEqual(['head', 'loose', 'list']);
+  });
+
+  it('restates the column as a stack from its top', async () => {
+    // A stored top that is only an ordering loses nothing by being restated,
+    // and these are the numbers an unstack would want: each row under the last
+    // one, a gap apart.
+    const moved = reparentWidgets(
+      doc(),
+      'desktop',
+      new Map([['loose', { path: 'Left', box: { x: 40, y: 100, w: 100, h: 40 }, at: 1 }]]),
+    );
+    expect(rect(moved!, 'head')).toMatchObject({ y: 0, h: 20 });
+    expect(rect(moved!, 'loose')).toMatchObject({ y: 30, h: 40 });
+    expect(rect(moved!, 'list')).toMatchObject({ y: 80, h: 60 });
+  });
+
+  it('reorders a column without anything leaving it', async () => {
+    // The same write with the same container at both ends, which is what
+    // dragging a row up its own column is.
+    const moved = reparentWidgets(
+      doc(),
+      'desktop',
+      new Map([['list', { path: 'Left', box: { x: 40, y: 100, w: 700, h: 60 }, at: 0 }]]),
+    );
+    expect(order(moved!, 'Left')).toEqual(['list', 'head']);
+  });
+
+  it('orders a container nested in the column along with the widgets', async () => {
+    // A container in a column is a row of that column, so a card dropped above
+    // it has to land above it — which only works if the renumbering moves the
+    // box too (§14.2b).
+    const nested = doc();
+    nested.layouts![0]!.groups!.push({
+      path: 'Left/Band',
+      rect: { x: 0, y: 100, w: 700, h: 50 },
+      frame: true,
+      fit: 'content',
+    });
+    const moved = reparentWidgets(
+      nested,
+      'desktop',
+      new Map([['loose', { path: 'Left', box: { x: 40, y: 100, w: 100, h: 40 }, at: 2 }]]),
+    );
+    expect(rect(moved!, 'head')).toMatchObject({ y: 0 });
+    expect(rect(moved!, 'list')).toMatchObject({ y: 30 });
+    expect(rect(moved!, 'loose')).toMatchObject({ y: 100 });
+    expect(box(moved!, 'Left/Band')?.rect).toMatchObject({ y: 150 });
+  });
+
+  it('leaves the container it came from alone', async () => {
+    // The order of what remains is unchanged, so rewriting those rows to close
+    // a hole that does not draw would be a diff for its own sake.
+    const moved = reparentWidgets(
+      doc(),
+      'desktop',
+      new Map([['head', { path: 'Foot', box: { x: 40, y: 600, w: 300, h: 20 } }]]),
+    );
+    expect(rect(moved!, 'list')).toEqual({ x: 0, y: 30, w: 700, h: 60 });
+    expect(box(moved!, 'Left')?.rect).toEqual({ x: 40, y: 100, w: 700, h: 400 });
+  });
+
+  it('drops several into one column in the order they are given', async () => {
+    const moved = reparentWidgets(
+      doc(),
+      'desktop',
+      new Map([
+        ['chip', { path: 'Left', box: { x: 40, y: 100, w: 120, h: 40 }, at: 0 }],
+        ['loose', { path: 'Left', box: { x: 40, y: 100, w: 100, h: 40 }, at: 1 }],
+      ]),
+    );
+    expect(order(moved!, 'Left')).toEqual(['chip', 'loose', 'head', 'list']);
+  });
+
+  it('keeps the cells in step with the rectangle', async () => {
+    // A client that has never heard of frames draws the cells, and one left
+    // behind says where the card used to be (§14.3).
+    const before = doc();
+    const moved = reparentWidgets(
+      before,
+      'desktop',
+      new Map([['loose', { path: 'Foot', box: { x: 940, y: 640, w: 100, h: 40 } }]]),
+    );
+    const was = before.layouts?.[0]?.placements?.find((p) => p.widget_id === 'loose');
+    const now = moved!.layouts?.[0]?.placements?.find((p) => p.widget_id === 'loose');
+    expect({ x: now?.x, y: now?.y }).not.toEqual({ x: was?.x, y: was?.y });
+  });
+
+  it('skips an id the page does not have rather than losing the drop', async () => {
+    const moved = reparentWidgets(
+      doc(),
+      'desktop',
+      new Map([
+        ['gone', { path: 'Foot', box: { x: 0, y: 0, w: 10, h: 10 } }],
+        ['loose', { path: 'Foot', box: { x: 940, y: 640, w: 100, h: 40 } }],
+      ]),
+    );
+    expect(group(moved!, 'loose')).toBe('Foot');
+  });
+
+  it('writes nothing when there is nothing it could write', async () => {
+    expect(reparentWidgets(doc(), 'desktop', new Map())).toBeUndefined();
+    expect(
+      reparentWidgets(
+        doc(),
+        'desktop',
+        new Map([['gone', { path: 'Foot', box: { x: 0, y: 0, w: 1, h: 1 } }]]),
+      ),
+    ).toBeUndefined();
+  });
+
+  it('declines on a packed page, which has no containers to land in', async () => {
+    const packed = doc();
+    packed.layouts![0]!.flow = 'packed';
+    expect(
+      reparentWidgets(
+        packed,
+        'desktop',
+        new Map([['loose', { path: 'Foot', box: { x: 0, y: 0, w: 1, h: 1 } }]]),
+      ),
+    ).toBeUndefined();
   });
 });

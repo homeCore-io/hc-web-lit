@@ -6,7 +6,7 @@
  * stated on the page are different numbers for the same place, and mixing them
  * up moves somebody's arrangement.
  */
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { DashboardGroupBox } from '../src/core/dashboard.js';
 import { gridItems } from '../src/core/dashboard.js';
 import {
@@ -975,5 +975,293 @@ describe('the grips a container gets', () => {
     // The section is the only container holding exactly these, once standing
     // inside the column — and it is laid out by the column.
     expect(frame?.dataset['frame']).not.toBe('Left/doors');
+  });
+});
+
+describe('dragging a widget into a container, and out of one', () => {
+  /**
+   * A page with geometry, because this gesture is decided by what is *drawn*.
+   *
+   * jsdom lays nothing out, so every rectangle here is stated rather than
+   * measured — and stated deliberately at odds with the document: the column's
+   * rows are drawn at page 100 and 130 while their stored tops are 0 and 40,
+   * which is the drift between a column's ordering and its flow that made
+   * measuring necessary in the first place.
+   */
+  const drawn = new Map<string, { x: number; y: number; w: number; h: number }>([
+    ['frame', { x: 0, y: 0, w: 1240, h: 900 }],
+    ['box:Left', { x: 40, y: 100, w: 700, h: 400 }],
+    ['w:head', { x: 40, y: 100, w: 700, h: 20 }],
+    ['w:list', { x: 40, y: 130, w: 700, h: 60 }],
+    ['w:loose', { x: 900, y: 0, w: 100, h: 40 }],
+  ]);
+
+  const keyOf = (el: Element): string | undefined => {
+    const at = el as HTMLElement;
+    if (at.dataset?.['frame'] !== undefined) return `box:${at.dataset['frame']}`;
+    if (at.dataset?.['widget'] !== undefined) return `w:${at.dataset['widget']}`;
+    return el.classList?.contains('frame') === true ? 'frame' : undefined;
+  };
+
+  /** jsdom has no PointerEvent; a real one bubbles and is composed. */
+  class Pointer extends MouseEvent {
+    readonly pointerId: number;
+    constructor(type: string, init: MouseEventInit & { pointerId?: number } = {}) {
+      super(type, { bubbles: true, composed: true, ...init });
+      this.pointerId = init.pointerId ?? 1;
+    }
+  }
+
+  const real = Element.prototype.getBoundingClientRect;
+  beforeAll(() => {
+    Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
+      const at = drawn.get(keyOf(this) ?? '');
+      if (at === undefined) return real.call(this);
+      return {
+        x: at.x,
+        y: at.y,
+        left: at.x,
+        top: at.y,
+        width: at.w,
+        height: at.h,
+        right: at.x + at.w,
+        bottom: at.y + at.h,
+        toJSON: () => ({}),
+      } as DOMRect;
+    };
+  });
+  afterAll(() => {
+    Element.prototype.getBoundingClientRect = real;
+  });
+
+  const layout = {
+    breakpoint: 'desktop' as const,
+    columns: 12,
+    row_height: 120,
+    gap: 12,
+    flow: 'free' as const,
+    frame: { width: 1240, height: 900, fit: 'scroll' as const },
+    groups: [
+      {
+        path: 'Left',
+        rect: { x: 40, y: 100, w: 700, h: 400 },
+        frame: true,
+        stack: true,
+        stack_gap: 10,
+      },
+    ],
+    placements: [
+      { widget_id: 'head', x: 0, y: 0, w: 1, h: 1, rect: { x: 0, y: 0, w: 700, h: 20 } },
+      { widget_id: 'list', x: 0, y: 0, w: 1, h: 1, rect: { x: 0, y: 40, w: 700, h: 60 } },
+      { widget_id: 'loose', x: 0, y: 0, w: 1, h: 1, rect: { x: 900, y: 0, w: 100, h: 40 } },
+    ],
+  };
+
+  const mount = async () => {
+    const el = document.createElement('hc-page');
+    const drops: unknown[] = [];
+    const placed: unknown[] = [];
+    el.doc = {
+      id: 'd',
+      name: 'D',
+      icon: 'home',
+      owner_user_id: 'u',
+      layouts: [layout],
+      widgets: [
+        { id: 'head', type: 'text', config: { text: 'DOORS', group: 'Left' } },
+        { id: 'list', type: 'text', config: { text: 'rows', group: 'Left' } },
+        { id: 'loose', type: 'text', config: { text: 'elsewhere' } },
+      ],
+    };
+    el.store = new DeviceStore();
+    el.mode = 'edit';
+    el.onDropWidgets = async (d) => {
+      drops.push(...d);
+    };
+    el.onPlaceWidgets = async (m) => {
+      placed.push(...m);
+    };
+    el.onPlaceWidget = async (id, box) => {
+      placed.push({ id, box });
+    };
+    document.body.append(el);
+    await el.updateComplete;
+    return { el, drops, placed };
+  };
+
+  /** A drag that ends with the carried cards at these page rectangles. */
+  const drop = async (
+    el: HcPage,
+    ids: string[],
+    to: Record<string, { x: number; y: number; w: number; h: number }>,
+  ) => {
+    const inner = el as unknown as {
+      dragging: unknown;
+      droppedInto: (d: unknown, m: Map<string, unknown>) => unknown;
+      commit: (m: Map<string, unknown>, d?: unknown) => Promise<void>;
+    };
+    const first = ids[0] as string;
+    const drag = {
+      id: first,
+      grip: 'move' as const,
+      from: to[first],
+      dx: 1,
+      dy: 1,
+      with: new Set(ids),
+      angle: 0,
+    };
+    inner.dragging = drag;
+    await el.updateComplete;
+    const moves = new Map(ids.map((id) => [id, to[id]]));
+    const drops = inner.droppedInto(drag, moves);
+    inner.dragging = undefined;
+    await el.updateComplete;
+    await inner.commit(moves, drops);
+  };
+
+  it('lands a card in the column it was dropped over, at the row it was dropped at', async () => {
+    // Between the two rows on screen, which is the only place the answer is:
+    // converting the drop's page y against the column's stored tops would put
+    // it wherever the drift between the two had got to.
+    const { el, drops, placed } = await mount();
+    await drop(el, ['loose'], { loose: { x: 300, y: 115, w: 100, h: 40 } });
+    expect(drops).toEqual([
+      { id: 'loose', into: 'Left', box: { x: 300, y: 115, w: 100, h: 40 }, at: 1 },
+    ]);
+    expect(placed, 'a drop is not also a move').toEqual([]);
+  });
+
+  it('takes a card out of a container on to the page', async () => {
+    const { el, drops } = await mount();
+    await drop(el, ['head'], { head: { x: 900, y: 700, w: 700, h: 20 } });
+    expect(drops).toEqual([
+      { id: 'head', into: undefined, box: { x: 900, y: 700, w: 700, h: 20 } },
+    ]);
+  });
+
+  it('is an ordinary move where nothing crossed a boundary', async () => {
+    // A card dragged about the page has landed nowhere in particular, and the
+    // door it goes through is the one it always went through.
+    const { el, drops, placed } = await mount();
+    await drop(el, ['loose'], { loose: { x: 920, y: 200, w: 100, h: 40 } });
+    expect(drops).toEqual([]);
+    expect(placed).toHaveLength(1);
+  });
+
+  it('carries the card out of the flow while it is in hand', async () => {
+    // A member of a column is positioned by the column, so a drag on one shows
+    // nothing at all until it has left: the preview moves it nowhere and the
+    // gesture reads as broken.
+    const { el } = await mount();
+    const inner = el as unknown as { dragging: unknown };
+    const column = () => el.shadowRoot?.querySelector('.stack[data-frame="Left"]');
+    expect(column()?.querySelector('[data-widget="head"]'), 'in the column').not.toBeNull();
+
+    inner.dragging = {
+      id: 'head',
+      grip: 'move',
+      from: { x: 40, y: 100, w: 700, h: 20 },
+      dx: 1,
+      dy: 1,
+      with: new Set(['head']),
+      angle: 0,
+    };
+    await el.updateComplete;
+    expect(column()?.querySelector('[data-widget="head"]'), 'left it').toBeNull();
+    expect(el.shadowRoot?.querySelector('.frame > [data-widget="head"]')).not.toBeNull();
+
+    inner.dragging = undefined;
+    await el.updateComplete;
+    expect(column()?.querySelector('[data-widget="head"]'), 'back in it').not.toBeNull();
+  });
+
+  it('shows which container it would land in, and where in it', async () => {
+    const { el } = await mount();
+    const inner = el as unknown as { dragging: unknown };
+    inner.dragging = {
+      id: 'loose',
+      grip: 'move',
+      from: { x: 300, y: 115, w: 100, h: 40 },
+      dx: 1,
+      dy: 1,
+      with: new Set(['loose']),
+      angle: 0,
+    };
+    // Twice, because the landing is measured after the frame it is shown on:
+    // the card has to have left the column before the rows can be asked where
+    // they ended up.
+    await el.updateComplete;
+    await el.updateComplete;
+    expect(el.shadowRoot?.querySelector('.stack[data-frame="Left"][data-drop]')).not.toBeNull();
+    expect(el.shadowRoot?.querySelector('.seam')).not.toBeNull();
+
+    // Twice again on the way out. A real drag clears the landing in the same
+    // breath as the drag, so it goes with the gesture; dropping `dragging` on
+    // its own leaves the measurement one frame behind, which is what this is.
+    inner.dragging = undefined;
+    await el.updateComplete;
+    await el.updateComplete;
+    expect(el.shadowRoot?.querySelector('.seam'), 'gone with the gesture').toBeNull();
+  });
+
+  it('survives the handle being rebuilt underneath the gesture', async () => {
+    // **The bug this gesture introduced into itself.** A card carried out of a
+    // column is drawn by the page rather than by the container, which is a
+    // different place in the template — so the grip somebody is holding is
+    // destroyed and rebuilt on the first frame of the drag. Captured on the
+    // handle, the drag died the instant it started working, and silently: the
+    // card had already left the column, so it read as a drag that stopped.
+    const { el, drops } = await mount();
+    const capture = Element.prototype.setPointerCapture;
+    Element.prototype.setPointerCapture = () => undefined;
+    try {
+      const grab = () =>
+        [...(el.shadowRoot?.querySelectorAll('.placed[data-widget]') ?? [])]
+          .find((e) => (e as HTMLElement).dataset['widget'] === 'head')
+          ?.querySelector('.grab');
+
+      // Picked the way the surface picks — a press on the page, hit-tested
+      // against where the card is, rather than by reaching into the selection.
+      const frame = el.shadowRoot?.querySelector('.frame') as HTMLElement;
+      frame.dispatchEvent(new Pointer('pointerdown', { clientX: 100, clientY: 110 }));
+      frame.dispatchEvent(new Pointer('pointerup', { clientX: 100, clientY: 110 }));
+      await el.updateComplete;
+
+      const held = grab();
+      expect(held, 'the card is picked, so it has a grip').not.toBeNull();
+      held?.dispatchEvent(
+        new Pointer('pointerdown', { bubbles: true, composed: true, clientX: 0, clientY: 0 }),
+      );
+      await el.updateComplete;
+      expect(held?.isConnected, 'the grip was rebuilt elsewhere').toBe(false);
+
+      // On the host, which is where a browser sends them once the pointer is
+      // captured there, and where they would bubble to in any case.
+      el.dispatchEvent(
+        new Pointer('pointermove', { bubbles: true, composed: true, clientX: 0, clientY: 40 }),
+      );
+      await el.updateComplete;
+      el.dispatchEvent(
+        new Pointer('pointerup', { bubbles: true, composed: true, clientX: 0, clientY: 40 }),
+      );
+      await el.updateComplete;
+    } finally {
+      Element.prototype.setPointerCapture = capture;
+    }
+    expect(drops).toEqual([
+      { id: 'head', into: 'Left', box: { x: 40, y: 140, w: 700, h: 20 }, at: 0 },
+    ]);
+  });
+
+  it('keeps a selection together, in the order it had', async () => {
+    const { el, drops } = await mount();
+    await drop(el, ['loose', 'head'], {
+      loose: { x: 300, y: 160, w: 100, h: 40 },
+      head: { x: 300, y: 115, w: 700, h: 20 },
+    });
+    expect(drops).toEqual([
+      { id: 'head', into: 'Left', box: { x: 300, y: 115, w: 700, h: 20 }, at: 1 },
+      { id: 'loose', into: 'Left', box: { x: 300, y: 160, w: 100, h: 40 }, at: 2 },
+    ]);
   });
 });

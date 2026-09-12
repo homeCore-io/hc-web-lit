@@ -6,7 +6,8 @@
 
 **Status:** Phases 0–3 done, Phase 4 all but the last of §7.3's family.
 Phase 10 is in progress: both authoring modes, containers (§14.2b), and
-host-enforced edit mode are in.
+host-enforced edit mode are in, and a widget can be dragged between
+containers.
 The boxes in §18.3 are kept ticked as work lands; an item naming something
 that was deliberately not built says so on the line rather than staying blank.
 **Supersedes:** the Flutter/wasm implementation of hc-web
@@ -1971,6 +1972,18 @@ hidden. That second half is what leaves a band of three labels alone.
 every layout resolves to precisely the numbers it did before. There is no
 migration because there is nothing to migrate.
 
+**A drop is a question about what is drawn, not about what is stored.** A
+container's members are laid out in flow, so their stored tops are an ordering
+and what separates two rows on screen is their content. The two drift apart
+down a long column — on this household's Room page the last section of the left
+column is drawn 516px above where its rectangle says it is — so a gesture that
+converted a drop's page coordinate into the column's space would land a card
+wherever the drift had got to. A column is therefore given a *place in its
+order*, measured off the page, and restated as a stack from its top afterwards:
+a top that is only an ordering loses nothing by being restated, and the numbers
+it writes are the ones an unstack would want. A positioned container has no
+order to take a place in and simply takes the rectangle, converted.
+
 ### 14.3 The document
 
 **Dashboard document format — already exists.** It is
@@ -2449,6 +2462,44 @@ not a failure of it.
       the size the catalogue would have given it, where the pointer is: a tool
       that is held and does nothing reads as broken rather than as strict. The
       property panel's catalogue is untouched and still appends at the bottom
+- [x] **Drag a widget into a container, or out of one** (§14.2b). Membership
+      could only be changed by Group and Ungroup, so moving a card from one
+      section to another meant dissolving the first section, re-selecting what
+      was left, and grouping it again — on pages where the sections *are* the
+      design. The drag already knew where it had let go; nothing read that as
+      an answer to which container. **Membership and rectangle are one write**
+      (`reparentWidgets`), because either without the other draws the card
+      somewhere nobody dropped it: in the new section at the old section's
+      coordinates, or where it was let go and still a member of the section it
+      left. One document is also one step to undo, which is what the gesture
+      was. **The card's own centre decides where it landed**, not the pointer —
+      a card is moved by a grip in its corner, so the pointer is at a corner of
+      the thing being dropped and the answer would otherwise depend on which
+      corner was grabbed. **And the answer is read off the drawn page, never
+      off the document**: on the household's Room page the last section of the
+      left column draws 516px above where its stored top says, because a
+      column's tops are an ordering and what separates two rows on screen is
+      their content. Converting a drop's page y into that space would put a
+      card dropped on the keypads section past the bottom of the column. So a
+      column is given an *index* and renumbered as a stack from its top; a
+      positioned container takes the rectangle as it is. The container a card
+      *leaves* keeps the gap where it was — the order of what remains is
+      unchanged, and rewriting rows nobody touched would be a diff for its own
+      sake. **The tag below the container survives**: a card in `Room/Lights`
+      dropped into `Footer` lands in `Footer/Lights`, because a drag says which
+      container holds a card and not what cluster somebody made inside it.
+      **A carried card leaves the flow for the length of the drag**, or the
+      gesture shows nothing at all: a member of a column is positioned by the
+      column, so the preview moves it nowhere and the drag reads as broken
+      until the pointer is released. That is also what closes the column up
+      behind it, which is the other half of what somebody needs to see — and
+      it is why the surface captures the pointer on **its own host** rather
+      than on the handle. Redrawing the card as the page's child instead of the
+      container's destroys and rebuilds the grip on the first frame of the
+      drag, taking the capture and both listeners with it; the gesture died the
+      instant it started working, and silently, because the card had already
+      left. Not done here: moving a whole *container* into another one, which
+      is a rename of its path rather than a write to a widget's config
 - [ ] Decorative elements: image, icon, text — no device binding, action optional
 - [x] Host-enforced `mode: "edit"`: pointer capture, `ctx.action` refuses to
       dispatch (§14.2). **Both halves, and it was not theoretical**: the move
@@ -2461,7 +2512,15 @@ not a failure of it.
       a widget gets an event anyway: an extension's control, something the
       surface cannot cover, a keyboard. It says why, because a control that
       silently does nothing is the worst kind
-- [ ] Undo/redo stack
+- [x] Undo/redo stack. Whole documents rather than inverse operations
+      (`core/undo.ts`): an inverse that is *nearly* right leaves a household
+      with a page subtly different from the one they had, and snapshots cannot
+      be nearly right. Forty steps, over the whole list of pages so a page
+      deleted is a page undo brings back, and not persisted — a history that
+      survived a reload would let somebody undo, tomorrow, a change they made
+      today on a page they have edited since. The stack, the buttons and the
+      tests have been in since the container work; this box was simply never
+      ticked
 - [x] **Give a group a body** (§14.2b). Group writes a *tag* — several
       elements agreeing on a name, which holds them together for a gesture and
       has no geometry at all — and nothing in the product could turn one into a

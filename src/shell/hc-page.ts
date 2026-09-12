@@ -488,6 +488,32 @@ export class HcPage extends LitElement {
       width: auto;
       flex: none;
     }
+    /* The container a drop would land in. An outline rather than a background,
+       because a container paints nothing (§14.2b) and a page with a second
+       ground on it is the thing the household already told us reads as the
+       widgets blending together. */
+    .stack[data-drop] {
+      outline: 2px solid var(--hc-accent, #4c8dff);
+      outline-offset: 2px;
+      border-radius: var(--hc-radius-md, 14px);
+    }
+    /* **A card in hand is over everything.** A container is a stacking context
+       of its own, so a card carried out of one and drawn by the page went
+       *under* every section below it — visible over the ground and hidden the
+       moment it crossed a row. What is being carried is the one thing on the
+       page that has to be seen. */
+    .frame > .placed[data-dragging] {
+      z-index: 2;
+    }
+    /* Where in a column it would land. Over the page, never in the flow. */
+    .seam {
+      position: absolute;
+      height: 2px;
+      z-index: 3;
+      background: var(--hc-accent, #4c8dff);
+      border-radius: 2px;
+      pointer-events: none;
+    }
     .framebody {
       position: absolute;
       z-index: 0;
@@ -652,6 +678,22 @@ export class HcPage extends LitElement {
 
   @property({ attribute: false }) onPlaceWidgets:
     ((moves: readonly { id: string; box: Box }[]) => Promise<void>) | undefined;
+
+  /**
+   * Drop widgets into a container, or out of one (§14.2b).
+   *
+   * Its own door rather than a field on `onPlaceWidgets`, because it carries
+   * something no placement can hold: membership is `group` in the widget's own
+   * config, and the rectangle landing with it is stated in the space of
+   * whatever it landed in. A host that has not opened this one still gets
+   * every move it got before — a card simply stays in the section it started
+   * in, which is where this surface was until now.
+   */
+  @property({ attribute: false }) onDropWidgets:
+    | ((
+        drops: readonly { id: string; into: string | undefined; box: Box; at?: number }[],
+      ) => Promise<void>)
+    | undefined;
 
   /**
    * Turn one, on a composed page (§14.1).
@@ -937,13 +979,14 @@ export class HcPage extends LitElement {
         style="width:${frame.width}px;height:${tall}px;transform:scale(${scale})"
       >
         ${this.frameBodies(items)} ${this.drawPreview()} ${this.groupFrame()}
-        ${this.containers(items, byId, undefined)}
+        ${this.containers(items, byId, undefined)} ${this.seam()}
         ${items.map((item) => {
           const w = byId.get(item.id);
           if (w === undefined || item.rect == null) return nothing;
           // A member of a container is drawn by that container, and must not
-          // also be drawn here at its stored coordinates.
-          if (this.stackedIn(w) !== undefined) return nothing;
+          // also be drawn here at its stored coordinates — unless it is the
+          // one being carried, which has left.
+          if (this.stackedIn(w) !== undefined && !this.leaving(item.id)) return nothing;
           return this.placement(item, w);
         })}
       </div>
@@ -1008,7 +1051,7 @@ export class HcPage extends LitElement {
 
     const mine = items.filter((i) => {
       const w = byId.get(i.id);
-      return w !== undefined && this.stackedIn(w) === box.path;
+      return w !== undefined && this.stackedIn(w) === box.path && !this.leaving(i.id);
     });
     // **A container with nothing in it takes no room.** The room page's SETS
     // band is a colour wheel, a warmth axis and two sliders, every one of them
@@ -1063,6 +1106,7 @@ export class HcPage extends LitElement {
     return html`<div
       class=${inFlow ? 'stack inflow' : 'stack'}
       data-frame=${box.path}
+      ?data-drop=${this.mode === 'edit' && this.landing?.path === box.path}
       ?data-fits=${box.fit === 'content' && !grows}
       ?data-column=${stacks}
       style="${place}${size}padding:${pad}px;${stacks ? `gap:${gap}px` : ''}"
@@ -1259,8 +1303,21 @@ export class HcPage extends LitElement {
     // is the press that is about to move all of it.
     if (!this.picked.has(id)) this.pick(id, e.shiftKey);
     const carrying = grip === 'move' ? new Set(this.picked) : new Set([id]);
+    // From where it is drawn, when a container is deciding that: a row of a
+    // column grabbed at its stored top would jump the drift between the two
+    // the moment the pointer moved.
+    const from = (this.laidOut(id) ? this.drawnPlacement(id) : undefined) ?? box;
 
-    const target = e.currentTarget as HTMLElement;
+    // **The surface holds the pointer, not the handle it was pressed on.**
+    // A card carried out of a column is drawn by the page instead of by the
+    // container for the length of the drag, which is a different place in the
+    // template — so the grip somebody is holding is destroyed and rebuilt on
+    // the first frame of the drag, taking the capture and both listeners with
+    // it. The gesture died the instant it started working, and silently: the
+    // card had already left the column, so it looked like a drag that had
+    // simply stopped. The host element is in the DOM for as long as the page
+    // is, which is longer than any gesture.
+    const target = this as HTMLElement;
     try {
       target.setPointerCapture(e.pointerId);
     } catch {
@@ -1280,7 +1337,7 @@ export class HcPage extends LitElement {
     this.dragging = {
       id,
       grip,
-      from: box,
+      from,
       dx: 0,
       dy: 0,
       with: carrying,
@@ -1321,6 +1378,8 @@ export class HcPage extends LitElement {
       }
 
       const moves = this.movesFrom(drag);
+      const drops = this.droppedInto(drag, moves);
+      this.landing = undefined;
       const from = this.boxesOf(drag.with);
       // A press that moved nothing is a press, not a drag, and writing the
       // numbers it already had would be a save nobody asked for. For a group
@@ -1330,7 +1389,7 @@ export class HcPage extends LitElement {
         const was = id === drag.id ? drag.from : from.get(id);
         if (was === undefined) continue;
         if (to.x !== was.x || to.y !== was.y || to.w !== was.w || to.h !== was.h) {
-          void this.commit(moves);
+          void this.commit(moves, drops);
           return;
         }
       }
@@ -1748,6 +1807,51 @@ export class HcPage extends LitElement {
    * layout changes when the handles appear — a page that reflowed on entering
    * edit mode would be a page you arrange in a shape it does not have.
    */
+  /**
+   * A drawn element's rectangle, in the page coordinates gestures work in.
+   *
+   * **Measured, because a container's members are not drawn where the document
+   * says they are.** A column lays its members out in flow: their stored tops
+   * are an ordering, and what separates two rows on screen is their content.
+   * `toPage` answers where a rectangle is *stated*, which for a placement on
+   * the page is also where it is, and for a row of a column is not — the two
+   * drift further apart the further down the column you go.
+   */
+  private drawnBox(el: Element): Box | undefined {
+    const frame = this.shadowRoot?.querySelector('.frame');
+    if (frame === null || frame === undefined) return undefined;
+    const base = frame.getBoundingClientRect();
+    const at = el.getBoundingClientRect();
+    // **A box with no size has not been laid out**, and is not an answer: a
+    // hidden container, an element asked about between a render and the layout
+    // that follows it, or a test environment that does no layout at all. Using
+    // the zero would move a card to the page origin, which is the worst
+    // possible reading of "I do not know".
+    if (at.width === 0 && at.height === 0) return undefined;
+    const scale = this.frameScale();
+    const k = scale === 0 ? 1 : scale;
+    return {
+      x: Math.round((at.left - base.left) / k),
+      y: Math.round((at.top - base.top) / k),
+      w: Math.round(at.width / k),
+      h: Math.round(at.height / k),
+    };
+  }
+
+  /** Where one widget is drawn, for the gestures that must start from that. */
+  private drawnPlacement(id: string): Box | undefined {
+    for (const el of this.shadowRoot?.querySelectorAll('.placed[data-widget]') ?? []) {
+      if ((el as HTMLElement).dataset['widget'] === id) return this.drawnBox(el);
+    }
+    return undefined;
+  }
+
+  /** Whether a container is deciding where this widget goes, rather than the page. */
+  private laidOut(id: string): boolean {
+    const w = (this.doc?.widgets ?? []).find((x) => x.id === id);
+    return w !== undefined && this.stackedIn(w) !== undefined;
+  }
+
   private handles(id: string, box: Box, angle = 0) {
     if (this.mode !== 'edit' || this.onPlaceWidget === undefined) return nothing;
     // **Handles belong to the selection, not to the page.** Thirty-six widgets
@@ -1820,6 +1924,7 @@ export class HcPage extends LitElement {
    */
   override updated(changed: Map<string, unknown>): void {
     this.measureGrowth();
+    this.measureLanding();
 
     // The shell renders the Group and Ungroup buttons and does the writing, so
     // it has to know what is in hand. An event rather than a callback because
@@ -1833,6 +1938,33 @@ export class HcPage extends LitElement {
         detail: { ids: [...this.picked], inside: this.inside },
       }),
     );
+  }
+
+  /**
+   * Where the drag in hand would land, measured after the frame it is shown on.
+   *
+   * After layout rather than during the drag's own handler, for the reason
+   * every other measurement on this surface is: the card being carried has
+   * left the column it was in, the column has closed up behind it, and where
+   * the remaining rows are is a question only the browser has answered. Held
+   * as state so the answer feeds the next frame, and written only when it
+   * moved, or the render it triggers would measure again and never settle.
+   */
+  private measureLanding(): void {
+    const drag = this.dragging;
+    const moves = this.moving;
+    const held = drag === undefined ? undefined : moves?.get(drag.id);
+    if (drag === undefined || drag.grip !== 'move' || held === undefined) {
+      if (this.landing !== undefined) this.landing = undefined;
+      return;
+    }
+    const next = this.landingAt({ x: held.x + held.w / 2, y: held.y + held.h / 2 }, drag.with);
+    const now = this.landing;
+    const same =
+      now?.path === next.path &&
+      now?.at === next.at &&
+      Math.abs((now?.seam ?? 0) - (next.seam ?? 0)) <= 1;
+    if (!same) this.landing = next;
   }
 
   /**
@@ -2053,11 +2185,16 @@ export class HcPage extends LitElement {
     for (const item of now.items) {
       if (!ids.has(item.id)) continue;
       const r = now.layout.flow === 'free' ? item.rect : undefined;
+      // A member of a container is drawn where the flow put it, which is not
+      // where its rectangle says it is. Measuring is the only way to move one
+      // from where somebody can see it (`drawnBox`).
+      const drawn = this.laidOut(item.id) ? this.drawnPlacement(item.id) : undefined;
       found.set(
         item.id,
-        r != null
-          ? { x: r.x, y: r.y, w: r.w, h: r.h }
-          : { x: item.x, y: item.y, w: item.w, h: item.h },
+        drawn ??
+          (r != null
+            ? { x: r.x, y: r.y, w: r.w, h: r.h }
+            : { x: item.x, y: item.y, w: item.w, h: item.h }),
       );
     }
     return found;
@@ -2076,7 +2213,10 @@ export class HcPage extends LitElement {
   }
 
   /** Write a set of moves, by whichever door the host has opened. */
-  private async commit(moves: ReadonlyMap<string, Box>): Promise<void> {
+  private async commit(
+    moves: ReadonlyMap<string, Box>,
+    drops?: readonly { id: string; into: string | undefined; box: Box; at?: number }[],
+  ): Promise<void> {
     if (moves.size === 0) return;
 
     // **The whole of a container in hand is a move of the container.** One
@@ -2087,6 +2227,14 @@ export class HcPage extends LitElement {
     if (held !== undefined && this.onPlaceGroup !== undefined) {
       const by = this.deltaOf(moves);
       if (by !== undefined) await this.onPlaceGroup(held, by);
+      return;
+    }
+
+    // **A drop that crossed into a container, or took a place in a column.**
+    // Before the container move above it, because a whole section in hand is a
+    // move of that section whatever it is over; after it for the same reason.
+    if (drops !== undefined && drops.length > 0 && this.onDropWidgets !== undefined) {
+      await this.onDropWidgets(drops);
       return;
     }
 
@@ -2219,6 +2367,150 @@ export class HcPage extends LitElement {
     target.addEventListener('pointerup', end);
     target.addEventListener('pointercancel', end);
   }
+
+  /**
+   * Which container a drop lands in, where in it, and where that reads.
+   *
+   * **The card's own centre decides it, not the pointer.** A card is moved by
+   * a grip in its corner, so the pointer is at a corner of the thing being
+   * dropped and the answer would depend on which corner was grabbed. What
+   * somebody is aiming at a section is the card.
+   *
+   * **Read off the drawn page rather than the document**, for the reason
+   * `drawnBox` exists: a column is as tall as its content and its rows are
+   * where the flow put them, so the rectangles in the document are the wrong
+   * page to be asking.
+   *
+   * The deepest container wins, because a section inside a column is inside
+   * the column too and the one somebody is pointing at is the smaller.
+   */
+  private landingAt(
+    centre: { x: number; y: number },
+    carrying: ReadonlySet<string>,
+  ): { path: string | undefined; at?: number; seam?: number } {
+    const frame = this.shadowRoot?.querySelector('.frame');
+    if (frame === null || frame === undefined) return { path: undefined };
+
+    let deepest: { path: string; el: Element; depth: number } | undefined;
+    for (const el of frame.querySelectorAll('.stack[data-frame]')) {
+      const path = (el as HTMLElement).dataset['frame'];
+      if (path === undefined) continue;
+      const at = this.drawnBox(el);
+      if (at === undefined) continue;
+      const inside =
+        centre.x >= at.x && centre.x <= at.x + at.w && centre.y >= at.y && centre.y <= at.y + at.h;
+      if (!inside) continue;
+      const depth = segmentsOf(path).length;
+      if (deepest === undefined || depth > deepest.depth) deepest = { path, el, depth };
+    }
+    if (deepest === undefined) return { path: undefined };
+    // A container that places its members by coordinate takes the rectangle as
+    // it is; only a column has a reading order for a drop to have a place in.
+    if (!this.stacksAt(deepest.path)) return { path: deepest.path };
+
+    const rows: Box[] = [];
+    for (const child of deepest.el.children) {
+      const id = (child as HTMLElement).dataset['widget'];
+      if (id !== undefined && carrying.has(id)) continue;
+      const at = this.drawnBox(child);
+      if (at !== undefined) rows.push(at);
+    }
+    // How many rows the card has got past: the classic list-reorder rule, and
+    // the one that leaves a card that has not travelled where it already was.
+    const above = rows.filter((r) => r.y + r.h / 2 < centre.y).length;
+    const before = rows[above];
+    const after = rows[above - 1];
+    const box = this.drawnBox(deepest.el) ?? { x: 0, y: 0, w: 0, h: 0 };
+    const seam =
+      before !== undefined && after !== undefined
+        ? (after.y + after.h + before.y) / 2
+        : before !== undefined
+          ? before.y - 1
+          : after !== undefined
+            ? after.y + after.h + 1
+            : box.y + box.h / 2;
+    return { path: deepest.path, at: above, seam };
+  }
+
+  /**
+   * Where a drag has dropped what it was carrying — one entry per card.
+   *
+   * **One container for the whole selection**, decided by the card that was
+   * actually grabbed. Asking each card's own centre would let one drag put
+   * three cards into three different sections, which is not a thing anybody
+   * means by dragging three cards.
+   *
+   * `undefined` when nothing crossed a boundary and the destination is not a
+   * column, which is an ordinary move and has an ordinary door to go through.
+   */
+  private droppedInto(
+    drag: Drag,
+    moves: ReadonlyMap<string, Box>,
+  ): { id: string; into: string | undefined; box: Box; at?: number }[] | undefined {
+    if (drag.grip !== 'move' || this.onDropWidgets === undefined) return undefined;
+    const held = moves.get(drag.id);
+    if (held === undefined) return undefined;
+
+    const landing = this.landingAt({ x: held.x + held.w / 2, y: held.y + held.h / 2 }, drag.with);
+    const ordering = landing.path !== undefined && this.stacksAt(landing.path);
+    const widgets = this.doc?.widgets ?? [];
+    const crossed = [...moves.keys()].some((id) => {
+      const w = widgets.find((x) => x.id === id);
+      return w === undefined || this.stackedIn(w) !== landing.path;
+    });
+    if (!crossed && !ordering) return undefined;
+
+    // Down the page, so several cards arriving in one column keep the order
+    // they had when they get there.
+    return [...moves.entries()]
+      .sort((a, b) => a[1].y - b[1].y)
+      .map(([id, box], i) => ({
+        id,
+        into: landing.path,
+        box,
+        ...(landing.at === undefined ? {} : { at: landing.at + i }),
+      }));
+  }
+
+  /**
+   * Whether this card has left the container it is in, because it is in hand.
+   *
+   * **A row of a column that is being dragged out of one shows nothing at
+   * all** without this: a member in flow is positioned by the column, so the
+   * preview `movesFrom` works out every frame moves it nowhere, and the
+   * gesture reads as broken until the pointer is released. So a carried card
+   * leaves its container for the length of the drag and is drawn on the page
+   * at the rectangle the drag has it at — and the column closes up behind it,
+   * which is the other half of what somebody needs to see.
+   */
+  private leaving(id: string): boolean {
+    const drag = this.dragging;
+    return drag !== undefined && drag.grip === 'move' && drag.with.has(id);
+  }
+
+  /**
+   * The line a drop would land on, drawn where the rows made room for it.
+   *
+   * Absolutely positioned over the page rather than spliced into the column,
+   * deliberately: a marker in the flow pushes the rows below it down, which
+   * moves the boundary that decided where the marker goes, which moves the
+   * marker. It cost nothing to draw it over the top and it cannot oscillate.
+   */
+  private seam() {
+    const at = this.landing;
+    if (this.mode !== 'edit' || at?.path === undefined || at.seam === undefined) return nothing;
+    const box = (() => {
+      for (const el of this.shadowRoot?.querySelectorAll('.stack[data-frame]') ?? []) {
+        if ((el as HTMLElement).dataset['frame'] === at.path) return this.drawnBox(el);
+      }
+      return undefined;
+    })();
+    if (box === undefined) return nothing;
+    return html`<div class="seam" style="left:${box.x}px;top:${at.seam}px;width:${box.w}px"></div>`;
+  }
+
+  /** Where the drag in hand would put things, for the page to show it. */
+  @state() private landing: { path: string | undefined; at?: number; seam?: number } | undefined;
 
   /**
    * The container whose entire contents are in hand, if that is what this is.
