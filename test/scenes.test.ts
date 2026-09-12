@@ -129,6 +129,36 @@ describe('the scenes that drive one device', () => {
     expect(got.map((d) => d.name)).not.toContain('Movie');
   });
 
+  it('leaves out a scene from another integration in the same room', () => {
+    // **A room holds whatever the household put in it.** This office has Hue
+    // bulbs, a Lutron dimmer and a Z-Wave plug, and matching on the area alone
+    // offered all twelve of the room's *Hue* scenes as the scenes for the
+    // Lutron overhead — twelve buttons that would each have driven some other
+    // light. A scene is a command to the bridge that owns it.
+    const overhead = scene({
+      device_id: 'overhead',
+      device_type: 'light',
+      plugin_id: 'plugin.lutron',
+      attributes: { on: true, brightness_pct: 25 },
+      schema: {},
+    });
+    const got = scenesInScope({ scope: 'device', device_id: 'overhead' }, [...house, overhead]);
+    expect(got.map((d) => d.name)).toEqual([]);
+  });
+
+  it('keeps a scene whose integration nobody declared', () => {
+    // A plugin that stays quiet is not evidence of a mismatch, and excluding
+    // on missing data would empty the row for every integration that does.
+    const quiet = scene({
+      device_id: 's9',
+      name: 'Unsigned',
+      area: 'office',
+      attributes: { group_rid: 'g-office', group_kind: 'room' },
+    });
+    const got = scenesInScope({ scope: 'device', device_id: 'lamp' }, [...house, quiet]);
+    expect(got.map((d) => d.name)).toContain('Unsigned');
+  });
+
   it('believes a plugin that does declare a parent', () => {
     // A plugin that says so means it exactly and should not be second-guessed.
     const owned = scene({

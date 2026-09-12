@@ -113,12 +113,30 @@ export function scenesInScope(
         chosen = declared;
         break;
       }
+      //
+      // **And the same integration, not just the same room.** A room holds
+      // whatever the household put in it: this office has Hue bulbs, a Lutron
+      // dimmer and a Z-Wave plug. Matching on the area alone offered all
+      // twelve of the room's *Hue* scenes as the scenes for the Lutron
+      // overhead — twelve buttons that would each have driven some other
+      // light. A scene is a command to the bridge that owns it; it cannot
+      // reach a device that bridge has never heard of.
+      //
+      // Only where both say. A plugin that does not report `plugin_id` is not
+      // evidence of a mismatch, and excluding on missing data would empty the
+      // row for every integration that stays quiet.
       const device = devices.find((d) => d.device_id === id);
       const area = device === undefined ? '' : normalizeAreaName(effectiveArea(device));
+      const plugin = device?.plugin_id;
       chosen =
         area === ''
           ? []
-          : scenes.filter((d) => isLightScene(d) && normalizeAreaName(effectiveArea(d)) === area);
+          : scenes.filter(
+              (d) =>
+                isLightScene(d) &&
+                normalizeAreaName(effectiveArea(d)) === area &&
+                (plugin === undefined || d.plugin_id === undefined || d.plugin_id === plugin),
+            );
       break;
     }
     default:

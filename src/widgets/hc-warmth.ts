@@ -46,7 +46,7 @@ export class HcWarmth extends LitElement {
     }
     .reading {
       font-size: var(--hc-text-caption-size, 11px);
-      color: var(--hc-ink-dim, #93a0b4);
+      color: var(--hc-ink-muted, #8b95a4);
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
       line-height: 1;
@@ -68,9 +68,12 @@ export class HcWarmth extends LitElement {
       cursor: pointer;
       touch-action: none;
     }
+    /* Between the stops, like the horizontal one: at either end a knob placed
+       at a plain percentage hangs half its height off the strip. */
     .knob {
       position: absolute;
       left: 50%;
+      top: calc(var(--hc-warmth-at, 0) * (100% - 18px) + 9px);
       /* A ring across the column rather than a dot in the middle of it: on a
          44px strip a 14px dot reads as a bead somebody dropped in. */
       width: calc(100% + 6px);
@@ -132,7 +135,11 @@ export class HcWarmth extends LitElement {
         @pointerdown=${(e: PointerEvent) => this.scrub(e, min, max)}
         @keydown=${(e: KeyboardEvent) => this.key(e, k ?? (min + max) / 2, min, max)}
       >
-        <span class="knob" part="knob" style="top:${Math.min(100, Math.max(0, pos))}%"></span>
+        <span
+          class="knob"
+          part="knob"
+          style="--hc-warmth-at:${Math.min(100, Math.max(0, pos)) / 100}"
+        ></span>
       </div>
     </div>`;
   }

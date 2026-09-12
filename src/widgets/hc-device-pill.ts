@@ -10,9 +10,10 @@
  * sliders beside it at whichever light you touched — so the pill reports the
  * pick rather than commanding anything.
  */
-import { css, nothing } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
+import { css, html, nothing } from 'lit';
+import { customElement, property, state } from 'lit/decorators.js';
 import type { DeviceState } from '../core/device.js';
+import type { CommandRequest } from '../core/widget.js';
 import { effectiveName, isOn, levelOf } from '../core/present.js';
 import { HcLayoutShell } from '../sdk/shell.js';
 import { attachInspect } from './hold.js';
@@ -33,16 +34,17 @@ export class HcDevicePill extends HcLayoutShell {
          difference, which is the shell earning its place — a different
          silhouette rather than a different structure. */
       .shell {
-        /* Safe here, and only here: a pill is laid out in a grid of explicit
-           columns, so its width comes from its container rather than from its
-           content, and containment costs it nothing (see the shell). */
-        container-type: inline-size;
-        /* Its own radius by default, and the set's when it is in one: two
-           rounded boxes side by side read as two objects with a gap between
-           the curves, which is the pill style the household asked to be rid
-           of. Flat, they are segments of one strip. */
-        border-radius: var(--hc-shell-radius, var(--hc-radius-md, 14px));
-        padding: 0 calc(var(--hc-space-unit, 8px));
+        /* **A capsule, and no containment.** Both used to be the other way
+           round: the pills were laid out as equal columns of one strip, so the
+           width came from the container and an inline-size container query
+           could hide the level when it got tight. Side by side as objects, the
+           width comes from the content — and inline-size containment removes
+           the content-based intrinsic width, which collapses the chip to its
+           padding (the shell says so at length). The level never has to be
+           hidden now, because nothing is being squeezed into a quarter of a
+           row. */
+        border-radius: var(--hc-radius-pill, 999px);
+        padding: 0 calc(var(--hc-space-unit, 8px) * 1.5) 0 calc(var(--hc-space-unit, 8px) * 0.75);
         gap: 0.5rem;
         cursor: pointer;
         background: color-mix(
@@ -57,11 +59,20 @@ export class HcDevicePill extends HcLayoutShell {
       .shell:hover {
         border-color: color-mix(in srgb, var(--hc-shell-colour) 40%, transparent);
       }
-      /* Picked is what the sliders below are aimed at, so it is a stronger
-         statement than lit — a ring rather than a wash. */
+      /* **Picked is not lit, so it is not the same colour.** Both were accent,
+         which asked one amber to mean "this light is on" and "this is the one
+         the sliders are aimed at" in the same row — and where one light is on
+         and a different one is picked, the two readings are in conflict.
+
+         Ink, not another accent. The obvious answer was the primary or the
+         focus colour, and in this household's skin all three of active,
+         primary and focus resolve to the same #FFB661 — which is most of why
+         a room page reads as amber everywhere. A selection is not a state of
+         the house; a bright ring says "this one" without spending the colour
+         that means a device is on. */
       :host([data-picked]) .shell {
-        border-color: var(--hc-accent-active, #ffb661);
-        box-shadow: 0 0 0 1px var(--hc-accent-active, #ffb661);
+        border-color: var(--hc-ink, #e9edf2);
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--hc-ink, #e9edf2) 45%, transparent);
       }
       :host(:focus-visible) {
         outline: 2px solid var(--hc-stroke-focus, #7cc4ff);
@@ -70,7 +81,8 @@ export class HcDevicePill extends HcLayoutShell {
       .tile {
         width: 1.5rem;
         height: 1.5rem;
-        border-radius: var(--hc-radius-xs, 6px);
+        border-radius: var(--hc-radius-pill, 999px);
+        background: var(--hc-surface-sunken, #0d1116);
       }
       .tile svg {
         width: 1rem;
@@ -86,25 +98,52 @@ export class HcDevicePill extends HcLayoutShell {
       }
       .badge {
         margin-left: 0.375rem;
-      }
-      .badge {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
         font-size: var(--hc-text-caption-size, 11px);
       }
-      :host([data-lit]) .badge {
+      .state {
+        color: var(--hc-ink-muted, #8b95a4);
+        white-space: nowrap;
+      }
+      /* Smaller than a row's, because a pill is a chip and its switch should
+         not be the largest thing on it. */
+      .switch {
+        width: 2.1rem;
+        height: 1.25rem;
+      }
+      .thumb {
+        width: 0.9rem;
+        height: 0.9rem;
+      }
+      .switch[aria-pressed='true'] .thumb {
+        transform: translate(0.82rem, -50%);
+      }
+      :host([data-lit]) .state {
         color: var(--hc-ink, #e9edf2);
       }
-      /* Four lights share one 44px row, so a narrow chip spends its width on
-         the name. The level is not lost — the chip's own tint carries it. */
-      @container (max-width: 11rem) {
-        .badge {
-          display: none;
-        }
+      .primary {
+        white-space: nowrap;
       }
     `,
   ];
 
   @property({ attribute: false }) device: DeviceState | undefined;
   @property({ type: Boolean }) picked = false;
+  /**
+   * Switching the light, which is separate from aiming at it.
+   *
+   * **A list of switches you cannot switch is a list of labels.** The pill
+   * reported the pick and nothing else, so the only way to turn the desk lamp
+   * on from the room page was to find it again further down the page — while
+   * the same device drawn as a row in any set below had a switch on it. The
+   * body still picks; the switch is its own target and stops there.
+   */
+  @property({ attribute: false }) onCommand: ((r: CommandRequest) => void) | undefined;
+
+  /** Held until the house confirms, like every other control here. */
+  @state() private pending: boolean | undefined;
   @property({ attribute: false }) onPick: ((deviceId: string) => void) | undefined;
   /** Hold to inspect, without acting on it (§5.10). */
   @property({ attribute: false }) onDetails: ((deviceId: string) => void) | undefined;
@@ -132,9 +171,11 @@ export class HcDevicePill extends HcLayoutShell {
     });
   }
 
-  override willUpdate(): void {
+  override willUpdate(changed: Map<string, unknown>): void {
     // Always a row: a chip is one line by definition.
     this.row = true;
+    // The switch is held until the house answers, like every other control.
+    if (changed.has('device')) this.pending = undefined;
   }
 
   override updated(): void {
@@ -167,11 +208,40 @@ export class HcDevicePill extends HcLayoutShell {
     return d === undefined ? '' : withoutRoom(effectiveName(d), this.room);
   }
 
+  /**
+   * The level when it is on, the word "off" when it is not, and the switch.
+   *
+   * **Off used to say nothing at all.** A pill for a lamp that is off was a
+   * name in a box, indistinguishable at a glance from a label — and with the
+   * switch beside it now, the word is what tells you the switch is off rather
+   * than the pill being inert.
+   */
   protected override renderBadge(): unknown {
     const d = this.device;
-    if (d === undefined || isOn(d) !== true) return nothing;
+    if (d === undefined) return nothing;
+    const on = this.pending ?? isOn(d);
     const level = levelOf(d);
-    return level === undefined ? nothing : `${Math.round(level)}%`;
+    const word = on === true ? (level === undefined ? nothing : `${Math.round(level)}%`) : 'off';
+    const next = !(on ?? false);
+
+    return html`<span class="state">${word}</span>
+      <button
+        class="switch"
+        part="toggle"
+        role="switch"
+        aria-pressed=${String(on ?? false)}
+        aria-label=${`${effectiveName(d)} power`}
+        ?disabled=${this.onCommand === undefined}
+        @click=${(e: Event) => {
+          // The pill is tapped to pick and held to inspect; the switch is its
+          // own target and must do neither as well.
+          e.stopPropagation();
+          this.pending = next;
+          this.onCommand?.({ deviceId: d.device_id, patch: { on: next } });
+        }}
+      >
+        <span class="thumb"></span>
+      </button>`;
   }
 }
 

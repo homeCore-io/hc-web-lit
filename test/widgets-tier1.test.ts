@@ -211,11 +211,13 @@ describe('a set is the object, and a row in it is not', () => {
     expect(shell).toMatch(/border:\s*var\(--hc-shell-edge\)/);
   });
 
-  it('takes it off every row it holds', () => {
+  it('takes it off every row of a list', () => {
     // Thirteen bordered boxes stacked in a column read as thirteen things when
-    // the point is one list.
-    expect(css).toMatch(/\.list > \*,\s*\n?\s*\.pills > \*\s*\{[^}]*--hc-shell-edge:\s*0/);
-    expect(css).toMatch(/\.list > \*,\s*\n?\s*\.pills > \*\s*\{[^}]*--hc-shell-radius:\s*0/);
+    // the point is one list. A pill keeps its own chrome: four lights you
+    // choose between are four objects, and that is the whole difference
+    // between the two sets.
+    expect(css).toMatch(/\.list > \*\s*\{[^}]*--hc-shell-edge:\s*0/);
+    expect(css).toMatch(/\.list > \*\s*\{[^}]*--hc-shell-radius:\s*0/);
   });
 
   it('draws a list in one column, because that is what a list is', () => {
@@ -238,7 +240,7 @@ describe('a set is the object, and a row in it is not', () => {
     // beside the only leak sensor in the house. A shadow costs no layout and
     // overlaps its neighbour's, which leaves one line between every pair and
     // one at the outside with no first-or-last rule anywhere.
-    expect(css).toMatch(/\.list > \*,\s*\n?\s*\.pills > \*\s*\{[^}]*box-shadow:[^;]*hairline/);
+    expect(css).toMatch(/\.list > \*\s*\{[^}]*box-shadow:[^;]*hairline/);
     expect(css).not.toMatch(/\.list\s*\{[^}]*background:/);
   });
 });

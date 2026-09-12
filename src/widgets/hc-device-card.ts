@@ -38,48 +38,8 @@ export class HcDeviceCard extends HcLayoutShell {
   static override styles = [
     HcLayoutShell.styles,
     css`
-      /* The row's own control, for the reason the working client has one: a
-         list of switches you cannot switch is a list of labels. Only the
-         primary one — a light's power, not its colour — because a row is a row
-         and the rest of the schema belongs in the sheet behind a hold (§7.2). */
-      .switch {
-        position: relative;
-        width: 2.75rem;
-        height: 1.6rem;
-        padding: 0;
-        border: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
-        border-radius: var(--hc-radius-pill, 999px);
-        background: var(--hc-surface-sunken, #0d1116);
-        cursor: pointer;
-        transition: background var(--hc-motion-fast, 140ms) var(--hc-motion-curve, ease-out);
-      }
-      .switch[aria-pressed='true'] {
-        background: var(--hc-accent-active, #ffb661);
-        border-color: transparent;
-      }
-      .switch:disabled {
-        cursor: default;
-        opacity: 0.5;
-      }
-      .switch:focus-visible {
-        outline: 2px solid var(--hc-stroke-focus, #7cc4ff);
-        outline-offset: 2px;
-      }
-      .thumb {
-        position: absolute;
-        top: 50%;
-        left: 0.18rem;
-        width: 1.15rem;
-        height: 1.15rem;
-        border-radius: 50%;
-        background: var(--hc-ink-muted, #8b95a4);
-        transform: translate(0, -50%);
-        transition: transform var(--hc-motion-fast, 140ms) var(--hc-motion-curve, ease-out);
-      }
-      .switch[aria-pressed='true'] .thumb {
-        background: var(--hc-accent-on-primary, #06131f);
-        transform: translate(1.05rem, -50%);
-      }
+      /* The switch itself is the shell's (§7.2), so the card and the pill draw
+         the same one. */
       .none {
         color: var(--hc-ink-muted, #8b95a4);
         font-size: var(--hc-text-caption-size, 11px);

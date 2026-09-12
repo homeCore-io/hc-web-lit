@@ -15,7 +15,7 @@
  * something else elsewhere; the device says which, and `min`/`max` in the
  * document are the override for a narrower range than the hardware allows.
  */
-import { LitElement, css, html } from 'lit';
+import { LitElement, css, html, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { DeviceState } from '../core/device.js';
 import type { CommandRequest } from '../core/widget.js';
@@ -50,7 +50,7 @@ export class HcSlider extends LitElement {
       align-items: baseline;
       justify-content: space-between;
       font-size: var(--hc-text-label-size, 12px);
-      color: var(--hc-ink-dim, #93a0b4);
+      color: var(--hc-ink-muted, #8b95a4);
       margin-bottom: 6px;
       letter-spacing: 0.01em;
     }
@@ -101,9 +101,16 @@ export class HcSlider extends LitElement {
         var(--hc-accent-primary, #7cc4ff)
       );
     }
+    /* **It travels between the stops, not past them.** Positioned at a plain
+       percentage the knob hangs half its width off each end — at zero it sat
+       outside the track, clipped by whatever was drawn beside it, which is
+       what a household reading "Warmth 0" with half a knob saw. The centre
+       runs from one radius in to one radius short of the end, so the control
+       is whole at both extremes and the fill still reaches them. */
     .knob {
       position: absolute;
       top: 50%;
+      left: calc(var(--hc-slider-at, 0) * (100% - 20px) + 10px);
       width: 20px;
       height: 20px;
       margin: -10px 0 0 -10px;
@@ -160,7 +167,22 @@ export class HcSlider extends LitElement {
     const attribute = this.attribute;
     if (d === undefined || attribute === '') return html`<div class="idle">Nothing picked.</div>`;
 
+    // **A control for something this device does not have is not a control.**
+    // The room page gives the warmth and brightness sliders one shared
+    // `hide_unless` — brightness_pct, color_temp or color_xy, any of the three
+    // — so a dimmer that reports only brightness kept the *warmth* slider too:
+    // a colour-temperature control on a light with no colour temperature,
+    // reading "Warmth 0" with its knob against the stop. Dragging it would
+    // have sent `color_temp` to a device that has never heard of it.
+    //
+    // Asked of the attribute this slider actually drives rather than of a list
+    // beside it, because the widget is the only thing that knows which one
+    // that is — and a declaration kept in two places is one that eventually
+    // disagrees with itself. Declared *or* reported, the same order every
+    // other reader here uses (§ visibility.ts): a bulb that can take a colour
+    // temperature and has not published one yet still gets the control.
     const declared = d.schema?.attributes?.[attribute];
+    if (declared === undefined && !(attribute in d.attributes)) return nothing;
     const min = numberOr(this.config['min'], declared?.min ?? 0);
     const max = numberOr(this.config['max'], declared?.max ?? 100);
     const live = d.attributes[attribute];
@@ -187,7 +209,7 @@ export class HcSlider extends LitElement {
         >
           <span class="bar"></span>
           <span class="fill" part="fill" ?data-cool=${this.cool} style="width:${pct}%"></span>
-          <span class="knob" part="knob" style="left:${pct}%"></span>
+          <span class="knob" part="knob" style="--hc-slider-at:${pct / 100}"></span>
         </div>
       </div>
     `;

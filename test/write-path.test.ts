@@ -5,6 +5,7 @@ import type { DeviceState } from '../src/core/device.js';
 import '../src/widgets/hc-controls.js';
 import '../src/widgets/hc-device-card.js';
 import '../src/widgets/hc-keypad.js';
+import '../src/widgets/hc-slider.js';
 import '../src/shell/hc-app.js';
 import type { HcControls } from '../src/widgets/hc-controls.js';
 
@@ -387,5 +388,64 @@ describe('what may actuate while a page is being arranged', () => {
       patch: { on: false },
     });
     expect(sent).toEqual([{ id: 'plug', patch: { on: false } }]);
+  });
+});
+
+describe('a control for something the device does not have', () => {
+  const mountSlider = async (
+    device: DeviceState,
+    attribute: string,
+  ): Promise<HTMLElement & { shadowRoot: ShadowRoot | null; updateComplete: Promise<unknown> }> => {
+    const el = document.createElement('hc-slider') as HTMLElement & {
+      config: Record<string, unknown>;
+      device: DeviceState;
+      updateComplete: Promise<unknown>;
+    };
+    el.config = { attribute, label: attribute };
+    el.device = device;
+    document.body.append(el);
+    await el.updateComplete;
+    return el as never;
+  };
+
+  it('draws nothing where the device has no such attribute', async () => {
+    // **The room page gives warmth and brightness one shared `hide_unless`** —
+    // brightness_pct, color_temp or color_xy, any of the three — so a dimmer
+    // that reports only brightness kept the *warmth* slider: a colour
+    // temperature control on a light that has none, reading "Warmth 0" with
+    // its knob against the stop. Dragging it would have sent `color_temp` to a
+    // device that has never heard of it.
+    const dimmer: DeviceState = {
+      device_id: 'lutron_63',
+      name: 'Overhead',
+      plugin_id: 'lutron',
+      available: true,
+      attributes: { on: true, brightness_pct: 25 },
+      last_seen: '2026-09-12T00:00:00Z',
+      schema: { attributes: { on: { kind: 'bool', writable: true } } } as never,
+    } as never;
+
+    const warmth = await mountSlider(dimmer, 'color_temp');
+    expect(warmth.shadowRoot?.querySelector('.track'), 'no warmth on a dimmer').toBeNull();
+
+    const bright = await mountSlider(dimmer, 'brightness_pct');
+    expect(bright.shadowRoot?.querySelector('.track'), 'brightness it does have').not.toBeNull();
+  });
+
+  it('keeps a control the schema declares but the device has not reported yet', async () => {
+    // Declared or reported, the same order every other reader uses: a bulb
+    // that can take a colour temperature and has not published one still gets
+    // the control.
+    const quiet: DeviceState = {
+      device_id: 'hue_9',
+      name: 'Bulb',
+      plugin_id: 'hue',
+      available: true,
+      attributes: { on: true },
+      last_seen: '2026-09-12T00:00:00Z',
+      schema: { attributes: { color_temp: { kind: 'number', min: 2000, max: 6500 } } } as never,
+    } as never;
+    const warmth = await mountSlider(quiet, 'color_temp');
+    expect(warmth.shadowRoot?.querySelector('.track')).not.toBeNull();
   });
 });

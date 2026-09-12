@@ -259,7 +259,7 @@ export class HcMediaCard extends LitElement {
     .sub,
     .where {
       font-size: var(--hc-text-body-small-size, 12.5px);
-      color: var(--hc-ink-dim, #93a0b4);
+      color: var(--hc-ink-muted, #8b95a4);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -365,7 +365,7 @@ export class HcMediaCard extends LitElement {
     button:not([data-primary]) {
       border-color: transparent;
       background: transparent;
-      color: var(--hc-ink-dim, #93a0b4);
+      color: var(--hc-ink-muted, #8b95a4);
     }
     button:not([data-primary]):hover {
       background: var(--hc-surface-sunken, #0d1116);

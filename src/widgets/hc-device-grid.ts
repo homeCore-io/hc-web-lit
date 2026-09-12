@@ -79,23 +79,34 @@ export class HcDeviceGrid extends LitElement {
     .list.flowing {
       grid-template-columns: repeat(auto-fit, minmax(var(--hc-set-column, 17rem), 1fr));
     }
-    /* One row, filling the height it was given. The room page asks for these
-       in a 44px placement, which is a pill and not a card — and a row of
-       chips with a gap between each is the same "several objects" reading the
-       list had, so they are segments of one strip instead. */
+    /* **Pills, side by side, each the width of what is in it.**
+
+       These were segments of one strip: equal columns, square corners, butted
+       together, filling the row. The reasoning was that a row of chips with a
+       gap between each reads as several objects — which is true, and here it
+       is the point. A list of sensors is one set you read down; four lights
+       you choose between are four things, and the one you have chosen has to
+       be pickable out of them at a glance. The strip made them a segmented
+       control, which is a different thing to mean.
+
+       Content-width rather than equal quarters, so a name gets the room it
+       needs and nothing is padded out to match its neighbour. They wrap when
+       the row runs out, because a light that fell off the end would be a light
+       nobody could aim at. */
     .pills {
-      display: grid;
-      grid-auto-flow: column;
-      grid-auto-columns: minmax(0, 1fr);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: calc(var(--hc-space-unit, 8px));
       height: 100%;
-      border-radius: var(--hc-radius-md, 14px);
-      overflow: hidden;
     }
     /* The chrome the rows hand over. Set on the children rather than on the
        container, because these inherit and a row's own descendants — the
-       tile, a nested control — must keep theirs. */
-    .list > *,
-    .pills > * {
+       tile, a nested control — must keep theirs.
+
+       A pill keeps its own: it is an object, and that is the whole difference
+       between the two sets. */
+    .list > * {
       --hc-shell-surface: var(--hc-surface-raised, #141922);
       --hc-shell-edge: 0;
       --hc-shell-radius: 0;
@@ -195,6 +206,7 @@ export class HcDeviceGrid extends LitElement {
                 .device=${d}
                 .picked=${this.context.picked === d.device_id}
                 .onPick=${this.onPick}
+                .onCommand=${this.onCommand}
                 .onDetails=${this.onDetails}
                 .room=${this.context.room}
               ></hc-device-pill>`,
