@@ -34,7 +34,7 @@ export class HcControls extends LitElement {
     }
     .control {
       display: grid;
-      grid-template-columns: minmax(0, 7rem) 1fr;
+      grid-template-columns: minmax(0, 6rem) minmax(0, 1fr);
       align-items: center;
       gap: calc(var(--hc-space-unit, 8px));
       min-height: var(--hc-density-control-height, 44px);
@@ -45,6 +45,12 @@ export class HcControls extends LitElement {
        reads as several questions. */
     .choices {
       display: inline-flex;
+      /* **As wide as the answers, not as wide as the panel.** A grid item
+         stretches to its track unless it is told not to, so an inline flex
+         box still came out full width — an Off/On pair at the left of a bar
+         running the whole sheet, most of it empty and none of it meaning
+         anything. A control is the size of what it offers. */
+      justify-self: start;
       padding: 2px;
       gap: 2px;
       border-radius: var(--hc-radius-pill, 999px);
@@ -55,9 +61,10 @@ export class HcControls extends LitElement {
     }
     .choices button {
       flex: 0 1 auto;
-      min-width: 3.5rem;
-      min-height: calc(var(--hc-density-control-height, 44px) - 10px);
-      padding: 0 calc(var(--hc-space-unit, 8px) * 1.25);
+      min-width: 2.5rem;
+      min-height: 1.65rem;
+      padding: 0 0.7rem;
+      font-size: var(--hc-text-body-small-size, 12.5px);
       border: none;
       border-radius: var(--hc-radius-pill, 999px);
       background: transparent;

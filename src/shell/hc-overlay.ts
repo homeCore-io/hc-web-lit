@@ -18,8 +18,9 @@
  * hand-built. What is left to do here is what the platform does not do: the
  * scroll lock, the back button, and the stack itself.
  */
-import { LitElement, css, html, nothing, type TemplateResult } from 'lit';
+import { LitElement, css, html, nothing, unsafeCSS, type TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
+import { deriveDensity } from '../design/tokens.js';
 import { tagFor } from '../core/registry.js';
 import { mountWidget, type MountEnv, type MountTarget, type WidgetSpec } from './mount.js';
 
@@ -71,10 +72,29 @@ interface Toast {
 /** Marks a history entry as ours, so popstate can tell whose back this was. */
 const BACK_MARK = 'hc-overlay';
 
+/**
+ * The step a panel is drawn at.
+ *
+ * **A dialog is a desk surface, not a wall.** The overlay lives beside the
+ * page rather than inside it, so it never saw the density `hc-page` picks for
+ * a composed layout and quietly took the skin's own — the comfortable step,
+ * whose 44px control rows are right for a tablet on a wall and much too big
+ * for a sheet somebody opened with a mouse. Every panel in the product came
+ * out a third larger than the page behind it.
+ *
+ * Taken from `deriveDensity` rather than written out, so there is one place
+ * these numbers live — the same reason `hc-page` imports it.
+ */
+const COMPACT = deriveDensity('compact');
+
 @customElement('hc-overlay')
 export class HcOverlay extends LitElement implements OverlayApi {
   static override styles = css`
     dialog {
+      --hc-density-row-height: ${unsafeCSS(COMPACT.rowHeight)}px;
+      --hc-density-control-height: ${unsafeCSS(COMPACT.controlHeight)}px;
+      --hc-density-min-tap: ${unsafeCSS(COMPACT.minTapTarget)}px;
+      --hc-density-card-padding: ${unsafeCSS(COMPACT.cardPadding)}px;
       border: none;
       padding: 0;
       color: var(--hc-ink, #e9edf2);
@@ -134,9 +154,10 @@ export class HcOverlay extends LitElement implements OverlayApi {
     header[data-bare] button.close {
       border-radius: var(--hc-radius-pill, 999px);
       background: var(--hc-surface-sunken, #0d1116);
-      width: 2rem;
-      min-height: 2rem;
+      width: 1.75rem;
+      min-height: 1.75rem;
       padding: 0;
+      font-size: 11px;
     }
     h2 {
       margin: 0;
@@ -146,7 +167,7 @@ export class HcOverlay extends LitElement implements OverlayApi {
     }
     .body {
       overflow: auto;
-      padding: calc(var(--hc-density-card-padding, 14px) * 1.3);
+      padding: calc(var(--hc-density-card-padding, 14px) * 1.1);
       display: grid;
       gap: calc(var(--hc-space-unit, 8px));
     }

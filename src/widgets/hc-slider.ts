@@ -106,14 +106,19 @@ export class HcSlider extends LitElement {
        outside the track, clipped by whatever was drawn beside it, which is
        what a household reading "Warmth 0" with half a knob saw. The centre
        runs from one radius in to one radius short of the end, so the control
-       is whole at both extremes and the fill still reaches them. */
+       is whole at both extremes and the fill still reaches them.
+
+       16px, not 20: twice the track's height is a slider, two and a half times
+       it is a bead on a string — and in a device panel it came out the largest
+       object on the sheet. What a finger has to hit is the whole placement,
+       not this. */
     .knob {
       position: absolute;
       top: 50%;
-      left: calc(var(--hc-slider-at, 0) * (100% - 20px) + 10px);
-      width: 20px;
-      height: 20px;
-      margin: -10px 0 0 -10px;
+      left: calc(var(--hc-slider-at, 0) * (100% - 16px) + 8px);
+      width: 16px;
+      height: 16px;
+      margin: -8px 0 0 -8px;
       border-radius: var(--hc-radius-pill, 999px);
       background: #fff;
       box-shadow:

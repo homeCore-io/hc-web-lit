@@ -81,12 +81,11 @@ export class HcDeviceDetails extends LitElement {
       display: grid;
       gap: 0.2rem;
       /* Room for the close button, which floats in the corner. */
-      padding-right: 2.5rem;
+      padding-right: 2.25rem;
     }
     .name {
-      font-size: var(--hc-text-title-size, 20px);
-      font-weight: 650;
-      letter-spacing: -0.01em;
+      font-size: var(--hc-text-subtitle-size, 15px);
+      font-weight: 600;
       line-height: 1.2;
     }
     .where {
@@ -97,15 +96,19 @@ export class HcDeviceDetails extends LitElement {
     }
     /* The headline: what this device is doing, in the largest type here, with
        the name of the reading beside it rather than under it. */
+    /* **The headline, not a poster.** This was display size — 34px of "Off"
+       over a panel 500px wide — which is the scale a room page uses for the
+       one number somebody reads from across the room, not the scale of a
+       sheet somebody has already opened and is standing in front of. */
     .lead {
       display: flex;
       align-items: baseline;
-      gap: 0.6rem;
-      font-size: var(--hc-text-display-size, 34px);
+      gap: 0.45rem;
+      font-size: var(--hc-text-title-size, 20px);
       font-weight: 600;
       font-variant-numeric: tabular-nums;
-      line-height: 1.05;
-      letter-spacing: -0.02em;
+      line-height: 1.15;
+      letter-spacing: -0.01em;
     }
     .lead .of {
       font-size: var(--hc-text-caption-size, 11px);
@@ -127,9 +130,9 @@ export class HcDeviceDetails extends LitElement {
     section {
       display: grid;
       min-width: 0;
-      gap: 0.6rem;
-      padding-top: 1.1rem;
-      margin-top: 0.3rem;
+      gap: 0.35rem;
+      padding-top: 0.7rem;
+      margin-top: 0.1rem;
       border-top: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
     }
     h3 {
@@ -149,10 +152,10 @@ export class HcDeviceDetails extends LitElement {
       grid-template-columns: 1fr auto;
       align-items: center;
       gap: 0.75rem;
-      min-height: 34px;
-      padding: 0 0.5rem;
+      min-height: 26px;
+      padding: 0 0.4rem;
       border-radius: var(--hc-radius-sm, 8px);
-      font-size: var(--hc-text-body-size, 13px);
+      font-size: var(--hc-text-body-small-size, 12.5px);
     }
     .row.pickable {
       cursor: pointer;
@@ -200,34 +203,38 @@ export class HcDeviceDetails extends LitElement {
        the same label column, the same field height, the same box. They were a
        flex row each, so the select and the input started at different xs and
        the input was 44px tall against a 30px menu beside it. */
+    /* **A field is as wide as what goes in it.** "Office" in a box the width
+       of the sheet is a text input pretending to be a form. */
     .hint {
       display: grid;
       /* Both tracks floored at zero. A bare 1fr is still floored at the
          content's min-content width, so a select with a long option in it
          pushed the panel wider than itself and put a scrollbar under the
          whole sheet. */
-      grid-template-columns: minmax(0, 5rem) minmax(0, 1fr);
+      grid-template-columns: minmax(0, 4.5rem) minmax(0, max-content);
       align-items: center;
       gap: 0.75rem;
-      min-height: 2.25rem;
+      min-height: 1.9rem;
       font-size: var(--hc-text-caption-size, 11px);
       color: var(--hc-ink-muted, #8b95a4);
     }
     .hint input,
     .hint select {
-      width: 100%;
+      width: auto;
+      min-width: 10rem;
+      max-width: 100%;
       /* Border-box, or the 100% is 100% *plus* the padding and the border —
          which came to 21px of a field hanging out of the panel and a scrollbar
          under the whole sheet. */
       box-sizing: border-box;
-      min-height: 2.25rem;
+      min-height: 1.9rem;
       background: var(--hc-surface-sunken, #0d1116);
       color: var(--hc-ink, #e9edf2);
       border: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
       border-radius: var(--hc-radius-sm, 8px);
-      padding: 0 0.6rem;
+      padding: 0 0.5rem;
       font: inherit;
-      font-size: var(--hc-text-body-size, 13px);
+      font-size: var(--hc-text-body-small-size, 12.5px);
     }
     .hint input:focus-visible,
     .hint select:focus-visible {
