@@ -64,7 +64,20 @@ describe('the stylesheets themselves', () => {
     // A template ends at its first backtick, by definition. So the test is
     // whether that backtick is where a template *should* end: followed by a
     // separator. Anything else means it closed inside the CSS.
-    const all = [...files.map((f) => join(dir, f)), join(dir, '..', 'sdk', 'shell.ts')];
+    // **Every file with a stylesheet in it, and the shell was not on the list.**
+    // Twice in one sitting the parse error came back — in `hc-page` and in
+    // `hc-app`, both outside the glob this checked — which is the test missing
+    // exactly where the mistake lives. The comment above says the fix is to
+    // stop writing them rather than to keep spotting them; a check that spots
+    // them only in the widgets folder is how a habit survives.
+    const shell = join(dir, '..', 'shell');
+    const all = [
+      ...files.map((f) => join(dir, f)),
+      join(dir, '..', 'sdk', 'shell.ts'),
+      ...readdirSync(shell)
+        .filter((f) => f.endsWith('.ts'))
+        .map((f) => join(shell, f)),
+    ];
     for (const path of all) {
       const text = readFileSync(path, 'utf8');
       for (const start of [...text.matchAll(/css`/g)].map((m) => m.index! + 4)) {

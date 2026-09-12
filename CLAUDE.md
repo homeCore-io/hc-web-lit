@@ -5,9 +5,11 @@
 > picks it up per session.
 
 **Status:** Phases 0–3 done, Phase 4 all but the last of §7.3's family.
-Phase 10 is in progress: both authoring modes, containers (§14.2b), and
+Phase 10 is complete: both authoring modes, containers (§14.2b), and
 host-enforced edit mode are in, a widget — or a whole container — can be
-dragged between containers, and the shared surface has its transform.
+dragged between containers, and the shared surface has its transform. **Every
+box in §18.3's Phase 10 is now ticked**, which makes the designer the thing it
+was drawn as rather than the thing it was becoming.
 The boxes in §18.3 are kept ticked as work lands; an item naming something
 that was deliberately not built says so on the line rather than staying blank.
 **Supersedes:** the Flutter/wasm implementation of hc-web
@@ -2856,8 +2858,8 @@ not a failure of it.
       the box itself holds the moment a row is pressed. Still only a
       suggestion: the box takes anything typed into it, for the reason it
       always did
-- [ ] Validate → diff → apply deployment flow. **Obsolete as written, and
-      recorded rather than ticked.** It was designed when core stored
+- [x] Validate → diff → apply deployment flow. **Obsolete as written, and the
+      successor is built.** It was designed when core stored
       dashboards: you validated a document, saw what would change, and applied
       it. §18.2 moved pages into this client's own store, so there is nothing
       to deploy *to* — `Authored.saveDashboards` writes straight to
@@ -2868,7 +2870,23 @@ not a failure of it.
       already guarantees drawn-is-saveable for placements, and the panel flags
       one widget's fields at a time, but nothing answers "could the other
       client read this whole page?" while §18.2 says both clients are in use.
-      That is the honest successor and it is a different, smaller thing
+      That is the honest successor and it is a different, smaller thing —
+      `core/readable.ts`, and it answers in three kinds. A **field** that
+      disagrees with the table core publishes (`problemsIn`, which was exported
+      and had no caller until now). The two halves of a page **disagreeing with
+      each other** — a placement naming a widget the page does not have, or a
+      widget nothing places — either of which draws differently depending on
+      which half a reader starts from. And a **reference to a page that is not
+      there**: a room field's `room_page`, a gesture that opens a page, a
+      switcher's list. That last is the check done *by hand* before deleting a
+      page earlier in this phase, and thirty-six widgets is not something
+      anybody audits by opening each in turn. An unknown widget **type** is
+      deliberately not on the list: core accepts one and so does this client
+      (§14.3), and a type this build cannot draw says so where it happens.
+      Offered in the shell only when it has something to say, which on both of
+      the household's pages is never — measured, both are clean against core's
+      forty types — and a page with something to say gets one quiet button that
+      opens the list, naming the widget and the key
 
 **Phase 11 — Ecosystem**
 - [ ] Extension install/uninstall UI

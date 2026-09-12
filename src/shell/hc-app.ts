@@ -58,6 +58,7 @@ import type { IconRule } from '../design/icons.js';
 import { pagesToShow, LastKnown, ageOf } from '../core/last-known.js';
 import type { CommandEvent } from '../core/plugins.js';
 import type { Vocabulary } from '../core/vocabulary.js';
+import { unreadableIn, type Unreadable } from '../core/readable.js';
 import { since, type Preferences } from '../core/i18n.js';
 import { AssetSource, type StoredAsset } from '../core/assets.js';
 import { ExtensionSource, type InstalledExtensions } from '../ext/install.js';
@@ -234,6 +235,13 @@ export class HcApp extends LitElement {
     header button.danger {
       border-color: color-mix(in srgb, var(--hc-accent-danger, #ff7b72) 55%, transparent);
       color: var(--hc-accent-danger, #ff7b72);
+    }
+    /* Something to look at rather than something wrong: the page works, and
+       another reader would have to guess. Warn and not danger, for the same
+       reason the severity check keeps those two apart (§15.0). */
+    header button.warn {
+      border-color: color-mix(in srgb, var(--hc-accent-warn, #ffb661) 55%, transparent);
+      color: var(--hc-accent-warn, #ffb661);
     }
     /* Fixed rather than in the flow: a panel's layout should not move when the
        network drops, or every reconnect reflows the page somebody is reading. */
@@ -2162,6 +2170,60 @@ export class HcApp extends LitElement {
     </span>`;
   }
 
+  /**
+   * Whether another client could read this page (§18.2, §18.3).
+   *
+   * **Offered only when there is something to say**, which is the rule every
+   * control in this row follows: a button that is always there and usually
+   * inert is a button people stop reading. Both of the household's pages are
+   * clean, so on those this draws nothing at all.
+   *
+   * The successor to "validate → diff → apply", which was designed when core
+   * stored dashboards and has had nothing to apply to since §18.2 moved pages
+   * into this client's own store. The question it was really asking still
+   * stands, because both clients are still in use: a page here is a page
+   * somebody may open there.
+   */
+  private readability() {
+    const found = unreadableIn(this.current, this.vocabulary, this.authored.dashboards());
+    if (found.length === 0) return nothing;
+    const word = found.length === 1 ? '1 thing' : `${found.length} things`;
+    return html`<button
+      class="warn"
+      title="Things another client would have to guess about on this page"
+      @click=${() => this.showReadability(found)}
+    >
+      ${word} to look at
+    </button>`;
+  }
+
+  /** What it found, listed, because a count on its own is not actionable. */
+  private showReadability(found: readonly Unreadable[]): void {
+    const lines = found.map((f) => {
+      const where =
+        f.widget === undefined
+          ? 'This page'
+          : `${f.widget}${f.field === undefined ? '' : ` · ${f.field}`}`;
+      return `${where} — ${f.why}`;
+    });
+    this.overlay?.sheet({
+      widget: {
+        type: 'markdown',
+        config: {
+          markdown: [
+            '## Another client would have to guess',
+            '',
+            'Nothing here stops this page working. These are the places where a',
+            'reader that is not this build — the other client, an older one —',
+            'would have to make something up (§18.2).',
+            '',
+            ...lines.map((l) => `- ${l}`),
+          ].join('\n'),
+        },
+      },
+    });
+  }
+
   private pageControls() {
     if (!this.mayWriteDashboards()) return nothing;
     const id = this.current?.id;
@@ -2222,7 +2284,9 @@ export class HcApp extends LitElement {
       >
         Rename
       </button>
-      <button title="Make a page" @click=${this.addPage}>+ Page</button> ${
+      <button title="Make a page" @click=${this.addPage}>+ Page</button>
+      ${this.readability()}
+      ${
         id === undefined
           ? nothing
           : this.confirmingDelete === id
