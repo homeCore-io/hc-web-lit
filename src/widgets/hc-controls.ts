@@ -39,6 +39,52 @@ export class HcControls extends LitElement {
       gap: calc(var(--hc-space-unit, 8px));
       min-height: var(--hc-density-control-height, 44px);
     }
+    /* **Every choice on show, with the one in force marked.** One segment per
+       state, joined into a single control rather than spaced as separate
+       buttons — they are one question with several answers, and a row of gaps
+       reads as several questions. */
+    .choices {
+      display: inline-flex;
+      padding: 2px;
+      gap: 2px;
+      border-radius: var(--hc-radius-pill, 999px);
+      background: var(--hc-surface-sunken, #0d1116);
+      box-shadow: inset 0 0 0 1px var(--hc-stroke-hairline, #262d38);
+      max-width: 100%;
+      overflow: auto;
+    }
+    .choices button {
+      flex: 0 1 auto;
+      min-width: 3.5rem;
+      min-height: calc(var(--hc-density-control-height, 44px) - 10px);
+      padding: 0 calc(var(--hc-space-unit, 8px) * 1.25);
+      border: none;
+      border-radius: var(--hc-radius-pill, 999px);
+      background: transparent;
+      color: var(--hc-ink-muted, #8b95a4);
+      font: inherit;
+      white-space: nowrap;
+      cursor: pointer;
+      transition:
+        background var(--hc-motion-fast, 140ms) var(--hc-motion-curve, ease-out),
+        color var(--hc-motion-fast, 140ms) var(--hc-motion-curve, ease-out);
+    }
+    .choices button:hover:not([aria-pressed='true']) {
+      color: var(--hc-ink, #e9edf2);
+    }
+    .choices button[aria-pressed='true'] {
+      background: var(--hc-accent-active, #ffb661);
+      color: var(--hc-accent-on-primary, #06131f);
+      font-weight: 600;
+    }
+    .choices button:disabled {
+      cursor: default;
+      opacity: 0.5;
+    }
+    .choices button:focus-visible {
+      outline: 2px solid var(--hc-stroke-focus, #7cc4ff);
+      outline-offset: -2px;
+    }
     label {
       color: var(--hc-ink-muted, #8b95a4);
       font-size: var(--hc-text-caption-size, 11px);
@@ -122,6 +168,22 @@ export class HcControls extends LitElement {
   @property({ attribute: false }) onCommand: ((r: CommandRequest) => void) | undefined;
 
   /**
+   * How much room there is to say what a control can do.
+   *
+   * **A row and a panel want different things from the same control.** A row
+   * has one line and a menu is the right shape for a quick change — the
+   * household said so of the fan's speed. A panel is the surface somebody
+   * opened to see the device *whole*, and there a menu hides every choice
+   * behind a click and shows one word with no indication of whether it is the
+   * state or the button: the switch panel read "CONTROLS — POWER — Off", which
+   * could as easily have meant "press to turn off".
+   *
+   * So a panel lays the choices out and marks the one in force. Nothing about
+   * what a device is, only about how much space there is to answer in.
+   */
+  @property({ type: String }) layout: 'row' | 'panel' = 'row';
+
+  /**
    * Values the user has moved but the house has not confirmed yet.
    *
    * A command is accepted (202), not applied — the real value arrives on the
@@ -163,6 +225,29 @@ export class HcControls extends LitElement {
     switch (c.form) {
       case 'toggle': {
         const on = this.current(c.key, c.value) === true;
+        const off = capitalise(c.offLabel ?? 'Off');
+        const onWord = capitalise(c.onLabel ?? 'On');
+        if (this.layout === 'panel') {
+          return html`<div class="control">
+            <label>${c.label}</label>
+            <div class="choices" part="choices" role="group" aria-label=${c.label}>
+              ${[
+                { value: false, label: off },
+                { value: true, label: onWord },
+              ].map(
+                (o) =>
+                  html`<button
+                    part="choice"
+                    aria-pressed=${o.value === on ? 'true' : 'false'}
+                    ?disabled=${readOnly}
+                    @click=${() => this.write(c.key, o.value)}
+                  >
+                    ${o.label}
+                  </button>`,
+              )}
+            </div>
+          </div>`;
+        }
         return html`<div class="control">
           <label>${c.label}</label>
           <div>
@@ -207,6 +292,27 @@ export class HcControls extends LitElement {
         </div>`;
 
       case 'select':
+        // Laid out where there is room and the list is short enough to read at
+        // once; a menu beyond that, because sixteen segments is not a control.
+        if (this.layout === 'panel' && c.options.length <= 6) {
+          const now = this.current(c.key, c.value);
+          return html`<div class="control">
+            <label>${c.label}</label>
+            <div class="choices" part="choices" role="group" aria-label=${c.label}>
+              ${c.options.map(
+                (o) =>
+                  html`<button
+                    part="choice"
+                    aria-pressed=${o.value === now ? 'true' : 'false'}
+                    ?disabled=${readOnly}
+                    @click=${() => this.write(c.key, o.value)}
+                  >
+                    ${optionLabel(o)}
+                  </button>`,
+              )}
+            </div>
+          </div>`;
+        }
         return html`<div class="control">
           <label>${c.label}</label>
           <select

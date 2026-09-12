@@ -33,6 +33,29 @@ import './hc-controls.js';
 import './hc-history-chart.js';
 import { humanise } from '../core/text.js';
 
+/**
+ * Rows whose labels collide, told apart by the key underneath them.
+ *
+ * **Two attributes can carry one name, and the plugin is where it comes
+ * from.** The office fan publishes `speed` and `speed_pct` and *declares*
+ * `display_name: "Speed"` for both — so this is not an artifact of inferring a
+ * label, it is the plugin's own answer, twice. The sheet listed "Speed — off"
+ * above "Speed — 0%" and left a person to guess which was which, or whether
+ * the device was contradicting itself.
+ *
+ * The declaration is still honoured; the key is added only where honouring it
+ * leaves two rows indistinguishable. Putting a raw key beside every reading
+ * would be noise for the sake of the rare pair, and second-guessing a plugin
+ * that named its attributes clearly would be worse.
+ */
+function named(rows: Row[]): Row[] {
+  const seen = new Map<string, number>();
+  for (const r of rows) seen.set(r.label, (seen.get(r.label) ?? 0) + 1);
+  return rows.map((r) =>
+    (seen.get(r.label) ?? 0) > 1 ? { ...r, label: `${r.label} (${r.key})` } : r,
+  );
+}
+
 /** One attribute as the sheet lists it. */
 interface Row {
   key: string;
@@ -47,37 +70,48 @@ export class HcDeviceDetails extends LitElement {
   static override styles = css`
     :host {
       display: block;
+      min-width: 0;
       color: var(--hc-ink, #e9edf2);
       font-family: var(--hc-font-body, system-ui, sans-serif);
     }
+    /* **The device's own header, and the only one.** The panel it opens in
+       draws no title bar of its own, so this is the top of the sheet rather
+       than a heading under an empty band. */
     .head {
       display: grid;
-      gap: 0.15rem;
-      margin-bottom: 0.75rem;
+      gap: 0.2rem;
+      /* Room for the close button, which floats in the corner. */
+      padding-right: 2.5rem;
     }
     .name {
-      font-size: var(--hc-text-title-size, 18px);
-      font-weight: 600;
+      font-size: var(--hc-text-title-size, 20px);
+      font-weight: 650;
+      letter-spacing: -0.01em;
+      line-height: 1.2;
     }
     .where {
       color: var(--hc-ink-muted, #8b95a4);
       font-size: var(--hc-text-caption-size, 11px);
       text-transform: uppercase;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.06em;
     }
+    /* The headline: what this device is doing, in the largest type here, with
+       the name of the reading beside it rather than under it. */
     .lead {
       display: flex;
       align-items: baseline;
-      gap: 0.5rem;
-      font-size: var(--hc-text-display-size, 30px);
+      gap: 0.6rem;
+      font-size: var(--hc-text-display-size, 34px);
+      font-weight: 600;
       font-variant-numeric: tabular-nums;
-      line-height: 1.1;
+      line-height: 1.05;
+      letter-spacing: -0.02em;
     }
     .lead .of {
       font-size: var(--hc-text-caption-size, 11px);
       color: var(--hc-ink-muted, #8b95a4);
       text-transform: uppercase;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.06em;
     }
     .note,
     .offline {
@@ -87,10 +121,15 @@ export class HcDeviceDetails extends LitElement {
     .offline {
       color: var(--hc-status-warn, #ffc861);
     }
+    /* Sections are separated by air first and a line second. They were
+       0.75rem apart with a rule between each, which at this density is a
+       stack of boxes rather than a document. */
     section {
       display: grid;
-      gap: 0.4rem;
-      padding-top: 0.75rem;
+      min-width: 0;
+      gap: 0.6rem;
+      padding-top: 1.1rem;
+      margin-top: 0.3rem;
       border-top: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
     }
     h3 {
@@ -98,7 +137,7 @@ export class HcDeviceDetails extends LitElement {
       font-size: var(--hc-text-caption-size, 11px);
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.08em;
       color: var(--hc-ink-muted, #8b95a4);
     }
     .rows {
@@ -110,8 +149,8 @@ export class HcDeviceDetails extends LitElement {
       grid-template-columns: 1fr auto;
       align-items: center;
       gap: 0.75rem;
-      min-height: 30px;
-      padding: 0 0.25rem;
+      min-height: 34px;
+      padding: 0 0.5rem;
       border-radius: var(--hc-radius-sm, 8px);
       font-size: var(--hc-text-body-size, 13px);
     }
@@ -130,6 +169,7 @@ export class HcDeviceDetails extends LitElement {
     }
     .row .v {
       font-variant-numeric: tabular-nums;
+      font-weight: 500;
     }
     details summary {
       cursor: pointer;
@@ -156,25 +196,41 @@ export class HcDeviceDetails extends LitElement {
     [hidden] {
       display: none !important;
     }
+    /* The two fields are one pair of questions, so they line up as one pair:
+       the same label column, the same field height, the same box. They were a
+       flex row each, so the select and the input started at different xs and
+       the input was 44px tall against a 30px menu beside it. */
     .hint {
-      display: flex;
+      display: grid;
+      /* Both tracks floored at zero. A bare 1fr is still floored at the
+         content's min-content width, so a select with a long option in it
+         pushed the panel wider than itself and put a scrollbar under the
+         whole sheet. */
+      grid-template-columns: minmax(0, 5rem) minmax(0, 1fr);
       align-items: center;
-      gap: 0.5rem;
-      padding: 0.5rem 0;
+      gap: 0.75rem;
+      min-height: 2.25rem;
       font-size: var(--hc-text-caption-size, 11px);
       color: var(--hc-ink-muted, #8b95a4);
     }
-    .hint input {
-      min-height: var(--hc-density-min-tap, 44px);
+    .hint input,
+    .hint select {
+      width: 100%;
+      /* Border-box, or the 100% is 100% *plus* the padding and the border —
+         which came to 21px of a field hanging out of the panel and a scrollbar
+         under the whole sheet. */
+      box-sizing: border-box;
+      min-height: 2.25rem;
       background: var(--hc-surface-sunken, #0d1116);
       color: var(--hc-ink, #e9edf2);
       border: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
       border-radius: var(--hc-radius-sm, 8px);
-      padding: 0 0.5rem;
+      padding: 0 0.6rem;
       font: inherit;
-      min-width: 9rem;
+      font-size: var(--hc-text-body-size, 13px);
     }
-    .hint input:focus-visible {
+    .hint input:focus-visible,
+    .hint select:focus-visible {
       outline: 2px solid var(--hc-stroke-focus, #7cc4ff);
       outline-offset: 2px;
     }
@@ -367,6 +423,8 @@ export class HcDeviceDetails extends LitElement {
     // What to chart, unasked: the lead reading when a chart can draw it, and
     // otherwise the first one that can be. A lamp leads with `on`, which is not
     // a series — but its brightness over the day is worth seeing.
+    // Everything it reports except the one already in the headline.
+    const reported = rows.readings.filter((r) => r.key !== lead?.key);
     const charted =
       this.charted ??
       (lead !== undefined && isNumber(lead.value)
@@ -395,7 +453,12 @@ export class HcDeviceDetails extends LitElement {
         reason === undefined ? nothing : html`<div class="note">${reason}</div>`
       }
       ${
-        power === undefined || lead?.key === 'on'
+        // **Once.** The lead already says it in the largest type on the sheet,
+        // and a switch was reading "Off" as its headline, "Off" again as a
+        // note, and "Power — Off" a third time under Reports. A device panel
+        // that repeats itself three times reads as three different facts that
+        // happen to agree.
+        power === undefined || lead !== undefined
           ? nothing
           : html`<div class="note">${power ? 'On' : 'Off'}</div>`
       }
@@ -406,6 +469,7 @@ export class HcDeviceDetails extends LitElement {
           : html`<section part="section">
               <h3 part="heading">Controls</h3>
               <hc-controls
+                layout="panel"
                 .device=${d}
                 .controls=${controls}
                 .onCommand=${this.onCommand}
@@ -428,20 +492,33 @@ export class HcDeviceDetails extends LitElement {
               </div>
             </section>`
       }
-
-      <section part="section">
-        <h3 part="heading">Reports</h3>
-        <div class="rows">${rows.readings.map((r) => this.row(r, charted))}</div>
-        ${
-          rows.housekeeping.length === 0
-            ? nothing
-            : html`<details>
-                <summary>${rows.housekeeping.length} more the plugin called housekeeping</summary>
-                <div class="rows">${rows.housekeeping.map((r) => this.row(r, charted))}</div>
-              </details>`
-        }
-      </section>
-
+      ${
+        // **A heading over nothing is worse than the repetition it replaced.**
+        // Taking the lead reading out of this list empties it for any device
+        // whose whole vocabulary is the one thing it leads with — a switch —
+        // and the sheet drew "REPORTS" and a rule over empty space. A section
+        // with nothing in it is not a section.
+        reported.length === 0 && rows.housekeeping.length === 0
+          ? nothing
+          : html`<section part="section">
+              <h3 part="heading">Reports</h3>
+              ${
+                reported.length === 0
+                  ? nothing
+                  : html`<div class="rows">${reported.map((r) => this.row(r, charted))}</div>`
+              }
+              ${
+                rows.housekeeping.length === 0
+                  ? nothing
+                  : html`<details>
+                      <summary>
+                        ${rows.housekeeping.length} more the plugin called housekeeping
+                      </summary>
+                      <div class="rows">${rows.housekeeping.map((r) => this.row(r, charted))}</div>
+                    </details>`
+              }
+            </section>`
+      }
       ${
         // **Last, because these are settings and everything above is state.**
         // They sat under the header first, which pushed the reading and the
@@ -501,7 +578,10 @@ export class HcDeviceDetails extends LitElement {
     }
 
     const byLabel = (a: Row, b: Row): number => a.label.localeCompare(b.label);
-    return { readings: readings.sort(byLabel), housekeeping: housekeeping.sort(byLabel) };
+    return {
+      readings: named(readings).sort(byLabel),
+      housekeeping: named(housekeeping).sort(byLabel),
+    };
   }
 }
 

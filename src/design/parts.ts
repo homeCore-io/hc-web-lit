@@ -66,6 +66,14 @@ export const OWN_PARTS = [
   'toggle',
   'slider',
   'select',
+  /**
+   * A control laid out as one segment per state, and one of those segments.
+   *
+   * A panel has room to show every choice with the one in force marked, where
+   * a row has space for a menu — same control, two shapes (`hc-controls`).
+   */
+  'choices',
+  'choice',
   'colour',
   'track',
   'fill',

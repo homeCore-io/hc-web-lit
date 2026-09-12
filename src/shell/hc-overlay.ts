@@ -115,6 +115,29 @@ export class HcOverlay extends LitElement implements OverlayApi {
       padding: calc(var(--hc-space-unit, 8px) * 1.5) var(--hc-density-card-padding, 14px);
       border-bottom: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
     }
+    /* **A panel whose content names itself gets no bar to name it in.** The
+       header is a title and a way out; with no title it was a 60px empty band
+       above every device sheet, with an ✕ adrift at the end of it, and the
+       device's own name began below a rule that separated it from nothing.
+       The way out stays — it just floats in the corner of what it closes. */
+    header[data-bare] {
+      position: absolute;
+      top: 0;
+      right: 0;
+      padding: calc(var(--hc-space-unit, 8px) * 0.75);
+      border-bottom: none;
+      z-index: 1;
+    }
+    dialog {
+      position: relative;
+    }
+    header[data-bare] button.close {
+      border-radius: var(--hc-radius-pill, 999px);
+      background: var(--hc-surface-sunken, #0d1116);
+      width: 2rem;
+      min-height: 2rem;
+      padding: 0;
+    }
     h2 {
       margin: 0;
       margin-right: auto;
@@ -123,9 +146,14 @@ export class HcOverlay extends LitElement implements OverlayApi {
     }
     .body {
       overflow: auto;
-      padding: var(--hc-density-card-padding, 14px);
+      padding: calc(var(--hc-density-card-padding, 14px) * 1.3);
       display: grid;
       gap: calc(var(--hc-space-unit, 8px));
+    }
+    /* A grid item's minimum is its content unless it is told otherwise, so one
+       wide field inside a panel widened the panel rather than fitting it. */
+    .body > * {
+      min-width: 0;
     }
     .confirm p {
       margin: 0 0 1rem;
@@ -325,7 +353,7 @@ export class HcOverlay extends LitElement implements OverlayApi {
           >
             <!-- Always a way out, even when the content names itself. A title
                here plus a name in the content is the same thing said twice. -->
-            <header>
+            <header ?data-bare=${e.opts.title === undefined}>
               ${e.opts.title === undefined ? nothing : html`<h2>${e.opts.title}</h2>`}
               <button class="close" aria-label="Close" @click=${() => this.drop(e.id, true)}>
                 ✕

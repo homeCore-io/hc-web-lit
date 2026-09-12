@@ -175,3 +175,73 @@ describe('which room a device is in', () => {
     expect(el.shadowRoot?.querySelector('datalist')).toBeNull();
   });
 });
+
+describe('what the panel says once', () => {
+  it('leads with the reading and does not list it again', async () => {
+    // A switch read "On" as its headline, "On" again as a note, and
+    // "Power — On" a third time under Reports. A panel that repeats itself
+    // three times reads as three facts that happen to agree.
+    const el = await sheet();
+    expect(el.shadowRoot?.querySelector('.lead')?.textContent).toContain('On');
+    const labels = [...(el.shadowRoot?.querySelectorAll('.row .k') ?? [])].map((k) =>
+      k.textContent?.trim(),
+    );
+    expect(labels, 'the headline is not also a row').not.toContain('On');
+  });
+
+  it('draws no Reports heading over an empty list', async () => {
+    // Taking the lead out empties the list for any device whose whole
+    // vocabulary is the one thing it leads with. A section with nothing in it
+    // is not a section.
+    const el = await sheet();
+    expect(el.shadowRoot?.textContent).not.toContain('Reports');
+  });
+
+  it('still reports everything that is not the headline', async () => {
+    const el = await sheet({
+      device: { ...outlet, attributes: { on: true, rssi: -61 } },
+    });
+    expect(el.shadowRoot?.textContent).toContain('Reports');
+  });
+
+  it('tells two readings apart when the plugin gave them one name', async () => {
+    // The office fan publishes `speed` and `speed_pct` and *declares*
+    // `display_name: "Speed"` for both — the plugin's own answer, twice. The
+    // sheet listed "Speed off" above "Speed 0%" and left a person to guess
+    // which was which, or whether the device was contradicting itself.
+    const el = await sheet({
+      device: {
+        ...outlet,
+        attributes: { on: true, speed: 'off', speed_pct: 0 },
+        schema: {
+          attributes: {
+            speed: { kind: 'string', display_name: 'Speed' },
+            speed_pct: { kind: 'number', display_name: 'Speed' },
+          },
+          actions: [],
+        },
+      },
+    });
+    const labels = [...(el.shadowRoot?.querySelectorAll('.row .k') ?? [])].map((k) =>
+      k.textContent?.trim(),
+    );
+    expect(labels).toContain('Speed (speed)');
+    expect(labels).toContain('Speed (speed_pct)');
+  });
+
+  it('lays every state out in a panel, with the one in force marked', async () => {
+    // A menu hides every choice behind a click and shows one word with no
+    // indication of whether it is the state or the button: "CONTROLS — POWER
+    // — Off" could as easily have meant "press to turn off".
+    const el = await sheet();
+    const controls = el.shadowRoot?.querySelector('hc-controls') as HTMLElement & {
+      updateComplete: Promise<unknown>;
+      shadowRoot: ShadowRoot | null;
+    };
+    await controls.updateComplete;
+    const choices = [...(controls.shadowRoot?.querySelectorAll('.choices button') ?? [])].map(
+      (b) => `${b.textContent?.trim()}:${b.getAttribute('aria-pressed')}`,
+    );
+    expect(choices).toEqual(['Off:false', 'On:true']);
+  });
+});
