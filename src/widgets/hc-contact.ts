@@ -32,6 +32,7 @@ import { css, html, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import type { DeviceState } from '../core/device.js';
 import { effectiveName, isOn } from '../core/present.js';
+import { severityOf } from '../core/attention.js';
 import { registerForDevice, registerWidget } from '../core/registry.js';
 import { icon, iconFor } from '../design/icons.js';
 import { HcLayoutShell } from '../sdk/shell.js';
@@ -89,6 +90,14 @@ export class HcContact extends HcLayoutShell {
   override updated(): void {
     super.updated();
     const open = this.open;
+    // **The word says it too, not only the mark.** `worth_knowing` lists this
+    // device as wanting attention and the row beside it said so in its icon
+    // and nowhere else — the state read in the same ink as "Closed" on the
+    // sensor next to it. `severityOf` is the one definition of what is worth
+    // noticing (§15.0), so the row and the panel above it cannot disagree.
+    const severity = this.device === undefined ? undefined : severityOf(this.device);
+    if (severity === undefined) this.removeAttribute('data-severity');
+    else this.setAttribute('data-severity', severity);
     // Open is the state worth noticing, so open is the state that lights.
     this.style.setProperty(
       '--hc-shell-colour',

@@ -22,6 +22,7 @@ import { customElement, property } from 'lit/decorators.js';
 import type { DeviceState } from '../core/device.js';
 import type { CommandRequest } from '../core/widget.js';
 import { effectiveName } from '../core/present.js';
+import { severityOf } from '../core/attention.js';
 import { registerForCapability, registerForDevice, registerWidget } from '../core/registry.js';
 import { isLockable } from '../core/capability.js';
 import { humanise } from '../core/text.js';
@@ -82,7 +83,15 @@ export class HcLock extends HcLayoutShell {
     // Locked is the quiet state and unlocked is the one worth noticing, which
     // is the opposite of a lamp: the colour marks what needs attention rather
     // than what is on.
+    // **The word says it too, not only the mark.** `worth_knowing` lists this
+    // device as wanting attention and the row beside it said so in its icon
+    // and nowhere else — the state read in the same ink as "Closed" on the
+    // sensor next to it. `severityOf` is the one definition of what is worth
+    // noticing (§15.0), so the row and the panel above it cannot disagree.
     const open = this.locked === false;
+    const severity = d === undefined ? undefined : severityOf(d);
+    if (severity === undefined) this.removeAttribute('data-severity');
+    else this.setAttribute('data-severity', severity);
     this.style.setProperty(
       '--hc-shell-colour',
       open ? 'var(--hc-accent-warn, #ffc978)' : 'var(--hc-ink-muted, #8b95a4)',
