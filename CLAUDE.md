@@ -2030,6 +2030,56 @@ config.
 
 ## 15. Design tokens
 
+### 15.0 Icons — Phosphor, inlined
+
+The marks were hand-drawn here first: 32 stroke paths on a 24×24 grid, added by
+whoever needed one. The household's verdict on them was that the icons suck,
+and that is not a fixable kind of wrong — drawing a legible 24px glyph is a
+craft, and a client hand-rolling its own icon family is doing badly, by hand, a
+job a professional family has already done.
+
+**Phosphor**, which is the family hc-web-flutter uses, so these are shapes the
+household already recognises. Three decisions around it:
+
+- **A generator, not a pasted table.** `tool/icons.mjs` holds the map from this
+  client's mark vocabulary to Phosphor's names and writes `design/marks.ts`. A
+  family that can only be changed by editing a 300-line literal is one nobody
+  changes.
+- **Inlined SVG, not the font hc-web-flutter loads.** No download, no flash of
+  nothing, and a glyph that can be two colours. `@phosphor-icons/core` is a
+  devDependency and contributes nothing at runtime; the MIT licence is vendored
+  beside the marks.
+- **The paint belongs to the mark, not the caller.** Every call site used to
+  carry `fill: none; stroke: currentColor; stroke-width: 1.6`, which was right
+  for strokes on a 24 grid and wrong for filled paths on a 256 one. `icon()`
+  states it once. The caller still owns the size and what `currentColor`
+  resolves to. `sdk/shell.ts` keeps its stroke rule deliberately — it styles
+  `::slotted(*)` too, so it is the contract an extension's own SVG is drawn
+  under (§8), and that is not ours to change.
+
+**A device that is on is drawn filled.** Phosphor ships each shape in a filled
+weight, and an outlet that is on and one that is off used to draw the identical
+grey glyph — the only difference on the row was the toggle at the far end, so a
+column of five plugs took five separate looks to read. Only where being on
+means something: a thermometer is not on, and those marks have no filled twin.
+
+The resolution order is untouched (§11.2): a household's own rule, then
+`ui_hint`, then `device_type`, then the generic device mark. What changed is the
+drawing.
+
+**Scene colour is not a token** (`design/scene-palette.ts`). A Hue scene arrives
+with a name, an area, whether it is active and three resource ids — checked
+against all 58 in the reference house, not one carries a palette — so the name
+is the only evidence there is, and the table is what the names mean. These are
+the colours of light in a room: like the warmth strip and the colour wheel, they
+mean the same thing on every skin, and a skin tints the chip around them rather
+than the light inside. Two departures from the Flutter table they came from: a
+name that is not in the table gets a hue derived from the name rather than no
+colour at all, because one dotless chip beside eleven reads as broken rather
+than as unknown; and the match is on whole words, because a substring test makes
+`off` match *Office*.
+
+
 Core stores **skin seeds**; this client derives the tokens. That split already
 exists — `hc_types::skin::SkinSeeds` holds ~26 chosen values and core refuses
 to judge them, because *"whether `active` is legible on a card is a contrast
@@ -2500,6 +2550,21 @@ not a failure of it.
       instant it started working, and silently, because the card had already
       left. Not done here: moving a whole *container* into another one, which
       is a rename of its path rather than a write to a widget's config
+- [x] **The widgets are the size their placements say.** The household's
+      verdict on this client against the one it replaces was that the widgets
+      are a downgrade, and most of that turned out not to be taste. The room
+      page draws the colour wheel at 132×132, the warmth column at 52×132 and
+      the media card at 429×400; they rendered a fixed 46×46, a fixed 18px
+      strip, and about 190px of card. The design was already in the document
+      and nothing was reading it — §14.1's own rule, broken by three widgets at
+      once. Fixing that is most of the gap; the rest is the wheel's hues at
+      every 30° rather than 60° (six stops interpolate through the middle of
+      sRGB and arrive muddy), a thumb that is the colour it points at, the
+      warmth column carrying its own reading, album art at a size somebody
+      recognises a record by, artist and album on separate lines instead of
+      one truncated one, time remaining instead of an unchanging duration, and
+      a round filled Play instead of a square 0.25rem larger than its
+      neighbours
 - [ ] Decorative elements: image, icon, text — no device binding, action optional
 - [x] Host-enforced `mode: "edit"`: pointer capture, `ctx.action` refuses to
       dispatch (§14.2). **Both halves, and it was not theoretical**: the move
