@@ -19,6 +19,7 @@ import {
   placeWidget,
   removeWidget,
   renamed,
+  reparentGroup,
   reparentWidgets,
   type Box,
 } from '../src/core/pages.js';
@@ -908,6 +909,17 @@ describe('dragging a widget into a container, and out of one', () => {
     expect(group(moved!, 'loose')).toBe('Foot');
   });
 
+  it('lets a column decide the left edge as well as the top', async () => {
+    // The same rule a section's drop follows: a column sets its members' left
+    // edge, so the x the pointer happened to be at is a number nothing draws.
+    const moved = reparentWidgets(
+      doc(),
+      'desktop',
+      new Map([['loose', { path: 'Left', box: { x: 300, y: 115, w: 100, h: 40 }, at: 0 }]]),
+    );
+    expect(rect(moved!, 'loose')?.x).toBe(0);
+  });
+
   it('writes nothing when there is nothing it could write', async () => {
     expect(reparentWidgets(doc(), 'desktop', new Map())).toBeUndefined();
     expect(
@@ -928,6 +940,258 @@ describe('dragging a widget into a container, and out of one', () => {
         'desktop',
         new Map([['loose', { path: 'Foot', box: { x: 0, y: 0, w: 1, h: 1 } }]]),
       ),
+    ).toBeUndefined();
+  });
+});
+
+describe('dragging a container into another container', () => {
+  // The half of the drop that containers left open: a widget changes container
+  // by a write to its own config, and a container cannot — its membership *is*
+  // its path, so moving one is a rename of that path and of everything under
+  // it. Until this, a section dragged into a column moved its own box and
+  // stayed a member of the column it came from, which draws it somewhere
+  // nobody dropped it.
+  const doc = (): DashboardDefinition => ({
+    id: 'd',
+    name: 'D',
+    icon: 'home',
+    owner_user_id: 'u',
+    widgets: [
+      { id: 'm1', type: 'text', config: { group: 'Left/Motion' } },
+      { id: 'd1', type: 'text', config: { group: 'Left/Doors' } },
+      { id: 'd2', type: 'text', config: { group: 'Left/Doors/Locks' } },
+      { id: 'r1', type: 'text', config: { group: 'Right' } },
+      { id: 'f1', type: 'text', config: { group: 'Foot' } },
+    ],
+    layouts: [
+      {
+        breakpoint: 'desktop',
+        columns: 12,
+        row_height: 100,
+        gap: 10,
+        flow: 'free',
+        frame: { width: 1240, height: 900 },
+        // Both columns sit away from the page origin, in both directions: an
+        // origin of zero would hide every conversion this is here to catch.
+        groups: [
+          {
+            path: 'Left',
+            rect: { x: 40, y: 100, w: 700, h: 400 },
+            frame: true,
+            stack: true,
+            stack_gap: 10,
+          },
+          {
+            path: 'Left/Motion',
+            rect: { x: 0, y: 0, w: 700, h: 120 },
+            frame: true,
+            fit: 'content',
+          },
+          {
+            path: 'Left/Doors',
+            rect: { x: 0, y: 130, w: 700, h: 100 },
+            frame: true,
+            fit: 'content',
+          },
+          {
+            path: 'Right',
+            rect: { x: 800, y: 100, w: 400, h: 400 },
+            frame: true,
+            stack: true,
+            stack_gap: 10,
+          },
+          { path: 'Foot', rect: { x: 40, y: 600, w: 700, h: 80 }, frame: true, fit: 'content' },
+        ],
+        placements: [
+          { widget_id: 'm1', x: 0, y: 0, w: 1, h: 1, rect: { x: 0, y: 0, w: 700, h: 120 } },
+          { widget_id: 'd1', x: 0, y: 0, w: 1, h: 1, rect: { x: 10, y: 10, w: 300, h: 40 } },
+          { widget_id: 'd2', x: 0, y: 0, w: 1, h: 1, rect: { x: 320, y: 10, w: 300, h: 40 } },
+          { widget_id: 'r1', x: 0, y: 0, w: 1, h: 1, rect: { x: 0, y: 0, w: 400, h: 60 } },
+          { widget_id: 'f1', x: 0, y: 0, w: 1, h: 1, rect: { x: 10, y: 10, w: 120, h: 40 } },
+        ],
+      },
+    ],
+  });
+
+  const box = (d: DashboardDefinition, path: string) =>
+    d.layouts?.[0]?.groups?.find((b) => b.path === path);
+  const rect = (d: DashboardDefinition, id: string) =>
+    d.layouts?.[0]?.placements?.find((p) => p.widget_id === id)?.rect;
+  const group = (d: DashboardDefinition, id: string) =>
+    d.widgets?.find((w) => w.id === id)?.config?.['group'];
+
+  it('renames the box, and everything underneath it, as one document', async () => {
+    const moved = reparentGroup(doc(), 'desktop', 'Left/Doors', {
+      path: 'Right',
+      box: { x: 820, y: 150, w: 700, h: 100 },
+      at: 0,
+    });
+    expect(moved, 'nothing written').not.toBeUndefined();
+    expect(box(moved!, 'Left/Doors'), 'left behind').toBeUndefined();
+    expect(box(moved!, 'Right/Doors')).not.toBeUndefined();
+    expect(group(moved!, 'd1')).toBe('Right/Doors');
+    // The tag somebody made inside the section rides along: the gesture said
+    // which container holds it, not what cluster is in it.
+    expect(group(moved!, 'd2')).toBe('Right/Doors/Locks');
+  });
+
+  it('writes nothing at all to the things inside it', async () => {
+    // A member's rectangle is stated in the box's space, and that space
+    // travelled with the box — rewriting them is the bug, not the work.
+    const moved = reparentGroup(doc(), 'desktop', 'Left/Doors', {
+      path: 'Right',
+      box: { x: 820, y: 150, w: 700, h: 100 },
+      at: 0,
+    })!;
+    expect(rect(moved, 'd1')).toEqual({ x: 10, y: 10, w: 300, h: 40 });
+    expect(rect(moved, 'd2')).toEqual({ x: 320, y: 10, w: 300, h: 40 });
+  });
+
+  it('takes a place in the column it lands in, and restates it as a stack', async () => {
+    const moved = reparentGroup(doc(), 'desktop', 'Left/Doors', {
+      path: 'Right',
+      box: { x: 820, y: 150, w: 700, h: 100 },
+      at: 0,
+    })!;
+    // First in the column, so the row that was there is pushed below it by the
+    // section's own height and the column's gap.
+    expect(box(moved, 'Right/Doors')?.rect?.y).toBe(0);
+    expect(rect(moved, 'r1')?.y).toBe(110);
+  });
+
+  it('keeps the size its author drew, not the height it was measured at', async () => {
+    // A column is as tall as its content and a band is measured after layout,
+    // so the height a drag hands back is what the browser made of the box. A
+    // move has an opinion about the corner and none about the size.
+    const moved = reparentGroup(doc(), 'desktop', 'Left/Doors', {
+      path: 'Right',
+      box: { x: 820, y: 150, w: 999, h: 999 },
+      at: 1,
+    })!;
+    expect(box(moved, 'Right/Doors')?.rect).toEqual({ x: 0, y: 70, w: 700, h: 100 });
+  });
+
+  it('lets a column decide the left edge as well as the top', async () => {
+    // A member's left edge is the column's, so the x a drop happened to let go
+    // at draws nothing and reads wrong — it is where the section would leap
+    // the moment anybody unstacked the column. Measured on the household's
+    // room page, a section let go over the right column stored an x of -128.
+    const moved = reparentGroup(doc(), 'desktop', 'Left/Doors', {
+      path: 'Right',
+      box: { x: 700, y: 150, w: 700, h: 100 },
+      at: 0,
+    })!;
+    expect(box(moved, 'Right/Doors')?.rect?.x).toBe(0);
+  });
+
+  it('keeps it where it was let go in a container that positions its members', async () => {
+    // A band lays its members out by coordinate, so both numbers are real
+    // there and the conversion is the whole answer.
+    const moved = reparentGroup(doc(), 'desktop', 'Left/Doors', {
+      path: 'Left/Motion',
+      box: { x: 100, y: 200, w: 700, h: 100 },
+    })!;
+    expect(box(moved, 'Left/Motion/Doors')?.rect).toEqual({ x: 60, y: 100, w: 700, h: 100 });
+  });
+
+  it('takes a section out on to the page, where the rectangle is the page one', async () => {
+    const moved = reparentGroup(doc(), 'desktop', 'Left/Doors', {
+      path: undefined,
+      box: { x: 300, y: 700, w: 700, h: 100 },
+    })!;
+    expect(box(moved, 'Doors')?.rect).toEqual({ x: 300, y: 700, w: 700, h: 100 });
+    expect(group(moved, 'd1')).toBe('Doors');
+  });
+
+  it('numbers a name the destination has already used', async () => {
+    // **The one place the widget rule is turned round.** A card joins a
+    // cluster of the same name because agreeing on a name is what a cluster
+    // is. Two containers agreeing would be one box swallowing another's
+    // members while its own rectangle stayed where it was.
+    const taken = doc();
+    taken.layouts![0]!.groups!.push({
+      path: 'Right/Doors',
+      rect: { x: 0, y: 200, w: 400, h: 40 },
+      frame: true,
+      fit: 'content',
+    });
+    const moved = reparentGroup(taken, 'desktop', 'Left/Doors', {
+      path: 'Right',
+      box: { x: 820, y: 150, w: 700, h: 100 },
+      at: 0,
+    })!;
+    expect(box(moved, 'Right/Doors 2')).not.toBeUndefined();
+    expect(box(moved, 'Right/Doors')?.rect?.w, 'the one already there').toBe(400);
+    expect(group(moved, 'd1')).toBe('Right/Doors 2');
+  });
+
+  it('reorders a section inside its own column by its place, not by its top', async () => {
+    // **Why this is a drop and not a move.** A column's stored tops are an
+    // ordering while what separates two rows on screen is their content, and
+    // the two drift — so adding the pointer's travel to a stored top lands a
+    // section wherever the drift had got to.
+    const moved = reparentGroup(doc(), 'desktop', 'Left/Doors', {
+      path: 'Left',
+      box: { x: 40, y: 100, w: 700, h: 100 },
+      at: 0,
+    })!;
+    expect(box(moved, 'Left/Doors')?.rect?.y).toBe(0);
+    expect(box(moved, 'Left/Motion')?.rect?.y).toBe(110);
+    expect(group(moved, 'd1'), 'renamed for no reason').toBe('Left/Doors');
+  });
+
+  it('leaves the column it came from exactly as it was', async () => {
+    // The order of what remains is unchanged, and rewriting rows nobody
+    // touched to close a hole that does not draw is a diff for its own sake.
+    const moved = reparentGroup(doc(), 'desktop', 'Left/Doors', {
+      path: 'Right',
+      box: { x: 820, y: 150, w: 700, h: 100 },
+      at: 0,
+    })!;
+    expect(box(moved, 'Left/Motion')?.rect).toEqual({ x: 0, y: 0, w: 700, h: 120 });
+    expect(box(moved, 'Left')?.rect).toEqual({ x: 40, y: 100, w: 700, h: 400 });
+  });
+
+  it('refuses to put a container inside itself, or inside what it holds', async () => {
+    expect(
+      reparentGroup(doc(), 'desktop', 'Left', {
+        path: 'Left/Motion',
+        box: { x: 0, y: 0, w: 700, h: 400 },
+      }),
+    ).toBeUndefined();
+    expect(
+      reparentGroup(doc(), 'desktop', 'Left', {
+        path: 'Left',
+        box: { x: 0, y: 0, w: 700, h: 400 },
+      }),
+    ).toBeUndefined();
+  });
+
+  it('leaves an ordinary move to the door that owns it', async () => {
+    // A positioned container let go in the space it already sits in has not
+    // been dropped anywhere — that is `moveGroupBox`, which writes a delta.
+    expect(
+      reparentGroup(doc(), 'desktop', 'Foot', {
+        path: undefined,
+        box: { x: 100, y: 620, w: 700, h: 80 },
+      }),
+    ).toBeUndefined();
+  });
+
+  it('writes nothing when there is nothing it could write', async () => {
+    expect(
+      reparentGroup(doc(), 'desktop', 'Nothing', {
+        path: 'Right',
+        box: { x: 0, y: 0, w: 10, h: 10 },
+      }),
+    ).toBeUndefined();
+    const packed = doc();
+    packed.layouts![0]!.flow = 'packed';
+    expect(
+      reparentGroup(packed, 'desktop', 'Left/Doors', {
+        path: 'Right',
+        box: { x: 0, y: 0, w: 10, h: 10 },
+      }),
     ).toBeUndefined();
   });
 });

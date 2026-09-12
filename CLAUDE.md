@@ -6,8 +6,8 @@
 
 **Status:** Phases 0–3 done, Phase 4 all but the last of §7.3's family.
 Phase 10 is in progress: both authoring modes, containers (§14.2b), and
-host-enforced edit mode are in, and a widget can be dragged between
-containers.
+host-enforced edit mode are in, and a widget — or a whole container — can be
+dragged between containers.
 The boxes in §18.3 are kept ticked as work lands; an item naming something
 that was deliberately not built says so on the line rather than staying blank.
 **Supersedes:** the Flutter/wasm implementation of hc-web
@@ -2003,6 +2003,17 @@ a top that is only an ordering loses nothing by being restated, and the numbers
 it writes are the ones an unstack would want. A positioned container has no
 order to take a place in and simply takes the rectangle, converted.
 
+**A place is read off the page; the number that states it is the document's.**
+A column draws only the rows that have something to show and holds every row
+it was given, so the two lists are different lengths on any page with a hidden
+section — the drop names the row it went past, and its index in the document's
+order is what the write splices at. And what may be *aimed at* differs by what
+is in hand: a card aimed at a section is aimed at that section, while a
+container is aimed at a place in a column, so a container let go over a row of
+a column lands beside that row rather than inside it. Nesting a container is
+Frame on a selection, which is where it was made before a container could be
+dragged at all.
+
 ### 14.3 The document
 
 **Dashboard document format — already exists.** It is
@@ -2617,8 +2628,48 @@ not a failure of it.
       container's destroys and rebuilds the grip on the first frame of the
       drag, taking the capture and both listeners with it; the gesture died the
       instant it started working, and silently, because the card had already
-      left. Not done here: moving a whole *container* into another one, which
-      is a rename of its path rather than a write to a widget's config
+      left. Moving a whole *container* into another one is the next box, and
+      is a different write: a rename of its path rather than a write to a
+      widget's config
+- [x] **Drag a whole container into another container**, or out on to the
+      page. The half the card's drop left open, and not the same edit: a card
+      changes container by a write to its own config, and a container cannot —
+      its membership **is** its path, so this renames that path and every path
+      underneath it (`reparentGroup`), converts one rectangle, and writes
+      nothing at all to the things inside it, whose rectangles are stated in
+      the space that travelled with the box. **An arriving name that is taken
+      gets a number**, which is the one place the card's rule is turned round:
+      a card dropped into `Footer` joins whatever `Footer/Lights` it finds,
+      because agreeing on a name is what a cluster is *for*; two containers
+      agreeing would be one box swallowing another's members while its own
+      rectangle stayed where it was.
+      **A section aimed at a section takes a place beside it, not inside it.**
+      The deepest container under the pointer is the right answer for a card
+      and cannot be for a section: on a page whose columns are wall to wall
+      with sections, the deepest match is always one of them, so the household's
+      room page nested `doors` inside `motion` the first time it was dragged
+      back, and a sibling slot could only be hit in the 20px gap between two
+      rows. One step up, and one only — pointing inside a row lands beside that
+      row, pointing at the row's own padding lands beside *it* — so both depths
+      stay reachable, and nesting a container is Frame on a selection, which is
+      where it was made before this gesture existed.
+      **The place is read off the page and the number is stated in the
+      document**, which are two different lists and were being treated as one.
+      A container draws only the rows that have something to show, and the
+      write splices into every row the column holds: on the office room five of
+      the left column's nine sections are hidden, so a section aimed at the
+      foot of the column counted six rows past and landed sixth of eleven. The
+      row the drop went past is named, and its place in the document's own
+      order is the answer — **which was wrong for a card's drop too**, and is
+      fixed for both. Two more numbers that were nobody's intent: a column sets
+      its members' left edge, so a drop's x is a number that draws nothing and
+      is where the section would leap the moment anybody unstacked the column
+      (the room page stored an `x: -128` from this), and it is written as zero
+      the same way the renumber writes the tops; and a carried container keeps
+      its members, because taking them out of the flow empties the thing in
+      hand — measured, a section collapsed from 82px to 0 the moment it moved,
+      which is invisible and, since the drop is decided by the box's own
+      centre, the wrong rectangle to decide it with
 - [x] **The widgets are the size their placements say.** The household's
       verdict on this client against the one it replaces was that the widgets
       are a downgrade, and most of that turned out not to be taste. The room

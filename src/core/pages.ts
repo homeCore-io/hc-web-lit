@@ -23,8 +23,27 @@ import type {
 import { layoutToDraw } from './dashboard.js';
 import type { DashboardRect } from './layout.js';
 import { cellsOf } from './geometry.js';
-import { groupOf, isUnder, join, relativeTo, withGroup } from './groups.js';
-import { containerOf, framesByPath, framesIn, flowFrames, toLocal } from './frames.js';
+import {
+  SEPARATOR,
+  groupOf,
+  isUnder,
+  join,
+  namesIn,
+  relativeTo,
+  renamedPath,
+  segmentsOf,
+  uniqueName,
+  withGroup,
+} from './groups.js';
+import {
+  containerOf,
+  containerOfBox,
+  framesByPath,
+  framesIn,
+  flowFrames,
+  spaceOfBox,
+  toLocal,
+} from './frames.js';
 
 /**
  * A page id from what somebody typed.
@@ -427,6 +446,11 @@ export interface Landing {
    * two rows on screen is their content, while their stored tops are an
    * ordering. The two drift apart down a long column, and converting the
    * drop's page y would put the card wherever the drift had got to.
+   *
+   * **An index into the rows this column *holds*, not into the ones it drew.**
+   * The surface reads the place off the page and then states it against the
+   * document's own order, because that is the list this splices into and the
+   * two are different lengths wherever a section has nothing to show.
    */
   at?: number;
 }
@@ -518,7 +542,15 @@ export function reparentWidgets(
     if (!paths.has(id)) continue;
     const p = placements.find((q) => q.widget_id === id);
     if (p === undefined) continue;
-    rects.set(id, toLocal({ ...(p.rect ?? {}), ...landing.box }, paths.get(id), frames));
+    const at = toLocal({ ...(p.rect ?? {}), ...landing.box }, paths.get(id), frames);
+    // **A column decides where its members sit across as well as down.** A
+    // member's left edge is the column's, so the x a drop happened to let go
+    // at is a number that draws nothing and reads wrong — the household's room
+    // page took an `x: -128` from a section let go over the right column,
+    // which is where it would leap to the moment anybody unstacked that
+    // column. The renumber below writes the tops an unstack would want; this
+    // is the same rule, one axis over.
+    rects.set(id, stacksAt(landing.path, flow) ? { ...at, x: 0 } : at);
   }
 
   const tops = new Map<string, number>();
@@ -584,6 +616,11 @@ export function reparentWidgets(
       l.breakpoint === editing ? { ...l, placements: placed, groups } : l,
     ),
   };
+}
+
+/** Whether a landing places its arrivals as a column, which decides x and y. */
+function stacksAt(path: string | undefined, flow: ReadonlyMap<string, DashboardGroupBox>): boolean {
+  return path !== undefined && flow.get(path)?.stack === true;
 }
 
 /** Which container lays each widget out, for the widgets that are in one. */
@@ -898,6 +935,171 @@ export function moveGroupBox(
       l.breakpoint === editing
         ? { ...l, groups: (l.groups ?? []).map((b) => (b.path === path ? moved : b)) }
         : l,
+    ),
+  };
+}
+
+/**
+ * A container moved into another container, or out on to the page (§14.2b).
+ *
+ * **The half of the drop `reparentWidgets` deliberately left out.** A widget
+ * changes container by a write to its own config, because membership is
+ * `group` there. A container cannot: its membership *is* its path, so moving
+ * one is a rename of that path and of every path underneath it, plus the rect
+ * conversion the rename implies. Nothing inside it is rewritten at all — a
+ * member's rectangle is stated in this box's space, and that space travels
+ * with the box.
+ *
+ * **An arriving name that is already taken gets a number** (`uniqueName`), and
+ * this is the one place the widget rule is turned round. A card dropped into
+ * `Footer` joins whatever `Footer/Lights` it finds, because a cluster is a
+ * name several elements agree on and agreeing is what it is for. Two
+ * *containers* agreeing would be one box swallowing another's members while
+ * its own rectangle stayed where it was — a merge nobody asked for, out of a
+ * gesture that said "put this here".
+ *
+ * **The tag below the old container is kept**, exactly as it is for a card: a
+ * box at `Room/Lights` dropped into `Footer` lands at `Footer/Lights`.
+ *
+ * **A column is renumbered and the column left behind is not** — the same rule
+ * as a card's, and here it earns itself twice over. A column's stored tops are
+ * an ordering while what separates two rows on screen is their content, and
+ * the two drift (§14.2b), so reordering a section *within its own column* by
+ * adding the pointer's travel to its stored top lands it wherever the drift
+ * had got to. Arriving in a column is taking a place in it, and that is as
+ * true of the column it is already in as of a new one — which is why the
+ * column it already lives in is a destination here rather than a move.
+ *
+ * `undefined` when there is nothing to do: a packed page, no such box, a
+ * container aimed at itself or at something it holds, or a *positioned*
+ * container dropped back into the space it already sits in — which is an
+ * ordinary move and has its own door (`moveGroupBox`).
+ */
+export function reparentGroup(
+  doc: DashboardDefinition,
+  breakpoint: DashboardBreakpoint,
+  path: string,
+  landing: Landing,
+): DashboardDefinition | undefined {
+  const drawn = layoutToDraw(doc, breakpoint);
+  if (drawn === undefined) return undefined;
+  const editing = drawn.borrowedFrom ?? breakpoint;
+  const layout = (doc.layouts ?? []).find((l) => l.breakpoint === editing);
+  // Composed only, for the reason every container write is: a column of
+  // rectangles is not expressible in packed cells (§14.1).
+  if (layout === undefined || layout.flow !== 'free') return undefined;
+
+  const boxes = layout.groups ?? [];
+  const box = boxes.find((b) => b.path === path);
+  const rect = box?.rect;
+  if (box === undefined || rect == null || box.frame !== true) return undefined;
+
+  const into = landing.path;
+  // A thing cannot be put inside itself, or inside anything it is holding.
+  if (into !== undefined && isUnder(into, path)) return undefined;
+
+  const flow = flowFrames(boxes);
+  const from = containerOfBox(box, flow);
+  const column = into === undefined ? undefined : flow.get(into);
+  const stacks = column?.stack === true;
+  if (from === into && !stacks) return undefined;
+
+  const widgets = doc.widgets ?? [];
+  // Where it lands, as a path. Unchanged when it is taking a new place in the
+  // column it already lives in: there is nothing to rename, and asking
+  // `uniqueName` about a name the box itself holds would answer with a 2.
+  const to = (() => {
+    if (from === into) return path;
+    const rest = (from === undefined ? path : relativeTo(path, from)) ?? path;
+    const parts = segmentsOf(rest);
+    const taken = namesIn(
+      [...boxes.map((b) => b.path), ...widgets.map((w) => groupOf(w.config))].filter(
+        (p) => p === undefined || !isUnder(p, path),
+      ),
+      into,
+    );
+    const head = uniqueName(parts[0] ?? path, taken);
+    return join(into, [head, ...parts.slice(1)].join(SEPARATOR));
+  })();
+
+  // The renamed boxes first, because the rectangle is stated in the space the
+  // box is *about to* be in and that space is read off them. Its own entry
+  // carries the old rect for one more line, which changes nothing: a frame's
+  // origin walk never includes the frame itself.
+  const renamed = boxes.map((b) =>
+    isUnder(b.path, path) ? { ...b, path: renamedPath(b.path, path, to) as string } : b,
+  );
+  const local = toLocal(
+    // **The drawn page rectangle, restated — and only its corner.** A column
+    // is as tall as its content and a band is measured after layout, so the
+    // height the drag hands back is what the browser made of the box rather
+    // than what its author drew. Taking it would quietly rewrite the size of
+    // every container that crossed a boundary; the corner is the whole of what
+    // a move has an opinion about.
+    { ...rect, x: Math.round(landing.box.x), y: Math.round(landing.box.y) },
+    spaceOfBox(to),
+    framesByPath(renamed),
+  );
+  // A column sets its members' left edge, so the x a drop let go at is a
+  // number nothing draws — and the one an unstack would jump to.
+  const placedAt = stacks ? { ...local, x: 0 } : local;
+
+  const tops = new Map<string, number>();
+  const boxTops = new Map<string, number>();
+  if (into !== undefined && stacks) {
+    const rows = columnRows(layout, flow, into, containersOf(widgets, flow), new Set()).filter(
+      (r) => r.box?.path !== path,
+    );
+    const at = Math.max(0, Math.min(rows.length, landing.at ?? rows.length));
+    rows.splice(at, 0, { rect: placedAt, box: { ...box, path: to } });
+
+    const gap = column?.stack_gap ?? 0;
+    let y = 0;
+    for (const row of rows) {
+      if (row.widget !== undefined) tops.set(row.widget, y);
+      else if (row.box !== undefined) boxTops.set(row.box.path, y);
+      y += row.rect.h + gap;
+    }
+  }
+
+  const groups = renamed.map((b) => {
+    const top = boxTops.get(b.path);
+    if (b.path === to) {
+      return { ...b, rect: { ...placedAt, ...(top === undefined ? {} : { y: top }) } };
+    }
+    return top === undefined || b.rect == null ? b : { ...b, rect: { ...b.rect, y: top } };
+  });
+
+  const frame = layout.frame;
+  const placements = (layout.placements ?? []).map((p) => {
+    const top = tops.get(p.widget_id);
+    if (top === undefined || p.rect == null) return p;
+    const next = { ...p.rect, y: top };
+    if (frame == null) return { ...p, rect: next };
+    // The cells follow the rectangle, the same safety property every other
+    // composed write keeps (§14.3).
+    return {
+      ...p,
+      rect: next,
+      ...cellsOf(next, {
+        width: frame.width,
+        columns: layout.columns,
+        rowHeight: layout.row_height,
+        gap: layout.gap,
+      }),
+    };
+  });
+
+  return {
+    ...doc,
+    widgets: widgets.map((w) => {
+      const at = groupOf(w.config);
+      return at !== undefined && isUnder(at, path)
+        ? { ...w, config: withGroup(w.config, renamedPath(at, path, to)) }
+        : w;
+    }),
+    layouts: (doc.layouts ?? []).map((l) =>
+      l.breakpoint === editing ? { ...l, groups, placements } : l,
     ),
   };
 }

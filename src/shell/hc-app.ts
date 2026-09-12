@@ -23,6 +23,7 @@ import {
   placeWidgets,
   reparentWidgets,
   moveGroupBox,
+  reparentGroup,
   regroupWidgets,
   frameGroup,
   sizeGroupBox,
@@ -871,6 +872,31 @@ export class HcApp extends LitElement {
     const doc = this.current;
     if (doc === undefined) return;
     const next = moveGroupBox(doc, this.breakpoint, path, by);
+    if (next === undefined) return;
+    this.writePages(this.replacing(next), next.id);
+    return Promise.resolve();
+  };
+
+  /**
+   * Drop a container into another container, or out on to the page (§14.2b).
+   *
+   * **A rename, not a delta.** A widget changes container by a write to its
+   * own config; a container's membership is its path, so moving one renames
+   * that path and every path underneath it — one document, one step to undo,
+   * and nothing inside it rewritten, because a member's rectangle is stated
+   * in the space that travelled with the box.
+   */
+  private readonly dropGroupOnPage = async (
+    path: string,
+    drop: { into: string | undefined; box: Box; at?: number },
+  ): Promise<void> => {
+    const doc = this.current;
+    if (doc === undefined) return;
+    const next = reparentGroup(doc, this.breakpoint, path, {
+      path: drop.into,
+      box: drop.box,
+      ...(drop.at === undefined ? {} : { at: drop.at }),
+    });
     if (next === undefined) return;
     this.writePages(this.replacing(next), next.id);
     return Promise.resolve();
@@ -2179,6 +2205,7 @@ export class HcApp extends LitElement {
         .onPlaceWidgets=${this.mayWriteDashboards() ? this.placeWidgetsOnPage : undefined}
         .onDropWidgets=${this.mayWriteDashboards() ? this.dropWidgetsOnPage : undefined}
         .onPlaceGroup=${this.mayWriteDashboards() ? this.placeGroupOnPage : undefined}
+        .onDropGroup=${this.mayWriteDashboards() ? this.dropGroupOnPage : undefined}
         .onSizeGroup=${this.mayWriteDashboards() ? this.sizeGroupOnPage : undefined}
         .onTurnWidget=${this.mayWriteDashboards() ? this.turnWidgetOnPage : undefined}
         .onTurnWidgets=${this.mayWriteDashboards() ? this.turnWidgetsOnPage : undefined}

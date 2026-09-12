@@ -1265,3 +1265,224 @@ describe('dragging a widget into a container, and out of one', () => {
     ]);
   });
 });
+
+describe('dragging a whole container into another one', () => {
+  /**
+   * Two columns and a section in one of them, with the section drawn where the
+   * drag has just put it — over the other column.
+   *
+   * Stated rather than measured, as everything here is: jsdom lays nothing
+   * out, and this gesture is decided entirely by what is drawn.
+   */
+  const drawn = new Map<string, { x: number; y: number; w: number; h: number }>([
+    ['frame', { x: 0, y: 0, w: 1240, h: 900 }],
+    ['box:Left', { x: 40, y: 100, w: 700, h: 400 }],
+    ['box:Left/Doors', { x: 820, y: 150, w: 700, h: 100 }],
+    ['box:Right', { x: 800, y: 100, w: 400, h: 400 }],
+    ['w:head', { x: 830, y: 160, w: 300, h: 20 }],
+    ['w:list', { x: 830, y: 190, w: 300, h: 60 }],
+    ['w:r1', { x: 800, y: 100, w: 400, h: 60 }],
+    ['w:note', { x: 40, y: 300, w: 700, h: 30 }],
+    ['box:Left/Notes', { x: 40, y: 250, w: 700, h: 200 }],
+  ]);
+
+  const keyOf = (el: Element): string | undefined => {
+    const at = el as HTMLElement;
+    if (at.dataset?.['frame'] !== undefined) return `box:${at.dataset['frame']}`;
+    if (at.dataset?.['widget'] !== undefined) return `w:${at.dataset['widget']}`;
+    return el.classList?.contains('frame') === true ? 'frame' : undefined;
+  };
+
+  const real = Element.prototype.getBoundingClientRect;
+  beforeAll(() => {
+    Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
+      const at = drawn.get(keyOf(this) ?? '');
+      if (at === undefined) return real.call(this);
+      return {
+        x: at.x,
+        y: at.y,
+        left: at.x,
+        top: at.y,
+        width: at.w,
+        height: at.h,
+        right: at.x + at.w,
+        bottom: at.y + at.h,
+        toJSON: () => ({}),
+      } as DOMRect;
+    };
+  });
+  afterAll(() => {
+    Element.prototype.getBoundingClientRect = real;
+  });
+
+  const layout = {
+    breakpoint: 'desktop' as const,
+    columns: 12,
+    row_height: 120,
+    gap: 12,
+    flow: 'free' as const,
+    frame: { width: 1240, height: 900, fit: 'scroll' as const },
+    groups: [
+      {
+        path: 'Left',
+        rect: { x: 40, y: 100, w: 700, h: 400 },
+        frame: true,
+        stack: true,
+        stack_gap: 10,
+      },
+      {
+        path: 'Left/Doors',
+        rect: { x: 0, y: 0, w: 700, h: 100 },
+        frame: true,
+        fit: 'content' as const,
+      },
+      {
+        path: 'Left/Notes',
+        rect: { x: 0, y: 150, w: 700, h: 200 },
+        frame: true,
+        fit: 'content' as const,
+      },
+      // A section with nothing in it, which the column still holds and does
+      // not draw — every room page has several (§14.2b).
+      {
+        path: 'Left/Hidden',
+        rect: { x: 0, y: 100, w: 700, h: 40 },
+        frame: true,
+        fit: 'content' as const,
+      },
+      {
+        path: 'Right',
+        rect: { x: 800, y: 100, w: 400, h: 400 },
+        frame: true,
+        stack: true,
+        stack_gap: 10,
+      },
+    ],
+    placements: [
+      { widget_id: 'head', x: 0, y: 0, w: 1, h: 1, rect: { x: 0, y: 0, w: 300, h: 20 } },
+      { widget_id: 'list', x: 0, y: 0, w: 1, h: 1, rect: { x: 0, y: 30, w: 300, h: 60 } },
+      { widget_id: 'r1', x: 0, y: 0, w: 1, h: 1, rect: { x: 0, y: 0, w: 400, h: 60 } },
+      { widget_id: 'note', x: 0, y: 0, w: 1, h: 1, rect: { x: 0, y: 110, w: 700, h: 30 } },
+    ],
+  };
+
+  const mount = async (wired = true) => {
+    const el = document.createElement('hc-page');
+    const drops: { path: string; drop: unknown }[] = [];
+    const moved: { path: string; by: unknown }[] = [];
+    el.doc = {
+      id: 'd',
+      name: 'D',
+      icon: 'home',
+      owner_user_id: 'u',
+      layouts: [layout],
+      widgets: [
+        { id: 'head', type: 'text', config: { text: 'DOORS', group: 'Left/Doors' } },
+        { id: 'list', type: 'text', config: { text: 'rows', group: 'Left/Doors' } },
+        { id: 'r1', type: 'text', config: { text: 'over there', group: 'Right' } },
+        // A second row in the left column, so holding the section is not also
+        // holding everything the column has: a press that holds all of a
+        // container holds *that* container, and the outermost one wins.
+        { id: 'note', type: 'text', config: { text: 'below', group: 'Left/Notes' } },
+      ],
+    };
+    el.store = new DeviceStore();
+    el.mode = 'edit';
+    el.onPlaceGroup = (path, by) => {
+      moved.push({ path, by });
+    };
+    if (wired) {
+      el.onDropGroup = async (path, drop) => {
+        drops.push({ path, drop });
+      };
+    }
+    document.body.append(el);
+    await el.updateComplete;
+    return { el, drops, moved };
+  };
+
+  /** The section let go where the stub says it is drawn. */
+  const drop = async (el: HcPage) => {
+    const inner = el as unknown as { commit: (m: Map<string, unknown>) => Promise<void> };
+    await inner.commit(
+      new Map([
+        ['head', { x: 830, y: 160, w: 300, h: 20 }],
+        ['list', { x: 830, y: 190, w: 300, h: 60 }],
+      ]),
+    );
+  };
+
+  it('lands the section in the column it was let go over', async () => {
+    // Its own centre decides it, not the pointer: a section is grabbed by
+    // whichever member the press landed on, so the pointer is somewhere
+    // arbitrary inside it.
+    const { el, drops, moved } = await mount();
+    await drop(el);
+    expect(drops).toEqual([
+      {
+        path: 'Left/Doors',
+        drop: { into: 'Right', box: { x: 820, y: 150, w: 700, h: 100 }, at: 1 },
+      },
+    ]);
+    expect(moved, 'a drop is not also a move').toEqual([]);
+  });
+
+  it('still moves the box for a host that has not opened the door', async () => {
+    // The gesture this surface had before, unchanged: a section simply stays
+    // in the column it started in.
+    const { el, drops, moved } = await mount(false);
+    await drop(el);
+    expect(drops).toEqual([]);
+    expect(moved).toHaveLength(1);
+  });
+
+  it('takes a place beside the section it was let go over, not one inside it', async () => {
+    // **The deepest container wins for a card and cannot for a section.** A
+    // card aimed at a section is aimed at that section; a section is aimed at
+    // a place in a column, and on a page whose columns are wall to wall with
+    // sections the deepest match is always one of them. Measured on the
+    // household's room page: a section dragged back to the left column nested
+    // itself inside whichever section it was let go over.
+    drawn.set('box:Left/Doors', { x: 40, y: 290, w: 700, h: 100 });
+    const { el, drops } = await mount();
+    await drop(el);
+    drawn.set('box:Left/Doors', { x: 820, y: 150, w: 700, h: 100 });
+    expect(drops).toEqual([
+      {
+        path: 'Left/Doors',
+        drop: { into: 'Left', box: { x: 40, y: 290, w: 700, h: 100 }, at: 0 },
+      },
+    ]);
+  });
+
+  it('counts the rows the column holds, not the ones this room draws', async () => {
+    // **The place is read off the page and the number is stated in the
+    // document**, and they are two different lists: a container draws only
+    // what has something to show. On the household's office room five of the
+    // left column's nine sections are hidden, so a section aimed at the foot
+    // of the column counted six rows past and landed sixth of eleven — in the
+    // middle of it.
+    drawn.set('box:Left/Doors', { x: 40, y: 430, w: 700, h: 100 });
+    const { el, drops } = await mount();
+    await drop(el);
+    drawn.set('box:Left/Doors', { x: 820, y: 150, w: 700, h: 100 });
+    // Past the one row this page draws, which is the *second* the column
+    // holds: the empty one above it is a row all the same.
+    expect((drops[0] as { drop: { at: number } }).drop.at).toBe(2);
+  });
+
+  it('reads a section let go in its own column as a place in it', async () => {
+    // A column's stored tops are an ordering and the drawn ones are the flow,
+    // so a move by a delta lands it wherever the drift had got to.
+    drawn.set('box:Left/Doors', { x: 40, y: 150, w: 700, h: 100 });
+    const { el, drops } = await mount();
+    await drop(el);
+    drawn.set('box:Left/Doors', { x: 820, y: 150, w: 700, h: 100 });
+    expect(drops).toEqual([
+      {
+        path: 'Left/Doors',
+        drop: { into: 'Left', box: { x: 40, y: 150, w: 700, h: 100 }, at: 0 },
+      },
+    ]);
+  });
+});
