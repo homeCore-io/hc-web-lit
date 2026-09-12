@@ -204,16 +204,21 @@ export class HcMediaCard extends LitElement {
       position: relative;
       display: flex;
       align-items: center;
-      gap: 0.875rem;
+      gap: 1rem;
       min-width: 0;
     }
+    /* **Album art is the thing a person recognises.** At 3.5rem it was a
+       thumbnail beside a line of text — a row in a list rather than the thing
+       playing in this room. The card's placement on the house's room page is
+       429x400 and it was drawing about 190 of that, so the space was already
+       there and nothing was using it. */
     .art {
       flex: none;
       display: grid;
       place-items: center;
-      width: 3.5rem;
-      height: 3.5rem;
-      border-radius: var(--hc-radius-sm, 8px);
+      width: 6.5rem;
+      height: 6.5rem;
+      border-radius: var(--hc-radius-md, 14px);
       overflow: hidden;
       background: var(--hc-surface-sunken, #0d1116);
       color: var(--hc-ink-muted, #8b95a4);
@@ -225,24 +230,42 @@ export class HcMediaCard extends LitElement {
       object-fit: cover;
     }
     .art svg {
-      width: 1.5rem;
-      height: 1.5rem;
+      width: 2.25rem;
+      height: 2.25rem;
     }
     .lines {
       min-width: 0;
       display: grid;
-      gap: 0.15rem;
+      gap: 0.2rem;
       flex: 1 1 auto;
     }
+    /* The title is the biggest thing on the card, because it is what the card
+       is about. It was body size, which put it level with the room name above
+       it and the artist below — three lines of the same weight, and nothing
+       to land on. */
     .title {
-      font-weight: 600;
+      font-weight: 650;
+      font-size: var(--hc-text-title-size, 20px);
+      line-height: 1.15;
+      letter-spacing: -0.01em;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
+    /* **Artist and album on their own lines.** They were joined with a dot
+       into one line that the card then truncated, so an album with a long
+       name ate the artist — the reference house's "Drowning Pool · Sinner
+       (Unlucky 13th Anniversary Delu…" is the whole failure in one string. */
     .sub,
     .where {
       font-size: var(--hc-text-body-small-size, 12.5px);
+      color: var(--hc-ink-dim, #93a0b4);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .album {
+      font-size: var(--hc-text-caption-size, 11px);
       color: var(--hc-ink-muted, #8b95a4);
       white-space: nowrap;
       overflow: hidden;
@@ -266,10 +289,11 @@ export class HcMediaCard extends LitElement {
       font-variant-numeric: tabular-nums;
     }
     .track {
-      height: 4px;
+      height: 6px;
       border-radius: var(--hc-radius-pill, 999px);
       background: var(--hc-surface-sunken, #0d1116);
       overflow: hidden;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
     }
     .fill {
       display: block;
@@ -288,7 +312,7 @@ export class HcMediaCard extends LitElement {
     .buttons {
       display: flex;
       align-items: center;
-      gap: 0.375rem;
+      gap: 0.5rem;
     }
     button {
       display: grid;
@@ -309,12 +333,39 @@ export class HcMediaCard extends LitElement {
     button:hover {
       border-color: color-mix(in srgb, var(--hc-accent-active, #ffb661) 45%, transparent);
     }
+    /* **Play is the one button on the card somebody is looking for.** It was
+       2.75rem against the others' 2.5, in the same square with the same
+       hairline — a difference you find by measuring rather than by looking.
+       Round and filled, which is what every transport in the world does, and
+       the only round thing in the row. */
     button[data-primary] {
-      width: 2.75rem;
-      height: 2.75rem;
-      background: color-mix(in srgb, var(--hc-accent-active, #ffb661) 16%, transparent);
-      border-color: color-mix(in srgb, var(--hc-accent-active, #ffb661) 40%, transparent);
-      color: var(--hc-accent-active, #ffb661);
+      width: 3.25rem;
+      height: 3.25rem;
+      border-radius: var(--hc-radius-pill, 999px);
+      background: var(--hc-accent-active, #ffb661);
+      border-color: transparent;
+      color: var(--hc-accent-on-primary, #06131f);
+      box-shadow: 0 4px 14px color-mix(in srgb, var(--hc-accent-active, #ffb661) 35%, transparent);
+    }
+    button[data-primary]:hover {
+      border-color: transparent;
+      filter: brightness(1.08);
+    }
+    button[data-primary] svg {
+      width: 1.5rem;
+      height: 1.5rem;
+    }
+    /* The others are quieter than they were: a row of equally-weighted keys
+       has no centre, and skip is not the thing being reached for. */
+    button:not([data-primary]) {
+      border-color: transparent;
+      background: transparent;
+      color: var(--hc-ink-dim, #93a0b4);
+    }
+    button:not([data-primary]):hover {
+      background: var(--hc-surface-sunken, #0d1116);
+      color: var(--hc-ink, #e9edf2);
+      border-color: transparent;
     }
     button:focus-visible {
       outline: 2px solid var(--hc-stroke-focus, #7cc4ff);
@@ -473,7 +524,10 @@ export class HcMediaCard extends LitElement {
         <span class="lines">
           <span class="where" part="state">${effectiveName(d)}</span>
           <span class="title" part="name">${n.title ?? n.source ?? summary(n)}</span>
-          <span class="sub">${n.title === undefined ? nothing : summary(n)}</span>
+          <span class="sub">${n.title === undefined ? nothing : (n.artist ?? summary(n))}</span>
+          <span class="album"
+            >${n.title === undefined || n.album === undefined ? nothing : n.album}</span
+          >
         </span>
       </div>
       ${this.renderProgress(n)} ${this.renderControls(d, n, transport, offer(VOLUME))}
@@ -486,10 +540,15 @@ export class HcMediaCard extends LitElement {
       // A live stream says so instead of drawing a bar that never fills.
       return n.live ? html`<div class="progress" part="note"><span>Live</span></div>` : nothing;
     }
+    // **How much is left, not how long it is.** The duration never changes
+    // while a track plays, so the number on the right sat still for three
+    // minutes and answered a question nobody was asking; what somebody
+    // glancing at a card wants is whether there is time to start something.
+    const left = Math.max(0, (n.duration ?? 0) - (n.position ?? 0));
     return html`<div class="progress" part="note">
       <span>${clock(n.position ?? 0)}</span>
       <span class="track"><span class="fill" style="width:${done * 100}%"></span></span>
-      <span>${clock(n.duration ?? 0)}</span>
+      <span>-${clock(left)}</span>
     </div>`;
   }
 
