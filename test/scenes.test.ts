@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { orbFor, paletteFor } from '../src/design/scene-palette.js';
 import type { DeviceState } from '../src/core/device.js';
 import { scenesInScope } from '../src/core/scenes.js';
 
@@ -166,5 +167,65 @@ describe('the scenes that drive one device', () => {
 
   it('is nothing when nothing is picked', () => {
     expect(scenesInScope({ scope: 'device', device_id: '@picked' }, house)).toEqual([]);
+  });
+});
+
+describe('the colour a scene is recognised by', () => {
+  // The bridge tells us nothing: a Hue scene arrives with a name, an area,
+  // whether it is active and three resource ids. Checked against the reference
+  // house's 58 scenes — not one carries a colour, so the name is the only
+  // evidence there is.
+  it('knows the names the household actually has', () => {
+    // The twelve in the office, which is the row this was built for.
+    const office = [
+      'Tropical twilight',
+      'Dimmed',
+      'Energize',
+      'Nightlight',
+      'On Air',
+      'Relax',
+      'Savanna sunset',
+      'Read',
+      'Concentrate',
+      'Spring blossom',
+      'Bright',
+      'Arctic aurora',
+    ];
+    const dots = office.map((n) => paletteFor(n).dot);
+    // Every one from the written table rather than derived, which is what
+    // makes them the colours somebody recognises.
+    expect(new Set(dots).size, 'twelve scenes, twelve colours').toBe(12);
+    expect(paletteFor('Relax').dot).toBe('#ffb661');
+    expect(paletteFor('Spring blossom').dot).toBe('#ff9ec4');
+  });
+
+  it('does not let a word inside a name claim it', () => {
+    // "nightlight" contains no other key, but "night light" would find
+    // "light" if the table were scanned shortest-first — and the longest key
+    // winning is the only thing keeping the two apart.
+    expect(paletteFor('Nightlight').dot).toBe('#c25a3a');
+  });
+
+  it('gives a colour to a scene nobody wrote a palette for', () => {
+    // Flutter's version returns nothing here, which leaves one chip with no
+    // dot beside eleven that have one — and the odd one out reads as broken
+    // rather than as unknown.
+    const made = paletteFor('Gerald');
+    expect(made.dot).toMatch(/^hsl\(/);
+    expect(made.gradient.length).toBeGreaterThan(0);
+  });
+
+  it('gives the same scene the same colour every time', () => {
+    // A scene that changed colour between rooms or between reloads would be
+    // worse than no colour at all.
+    expect(paletteFor('Gerald').dot).toBe(paletteFor('gerald').dot);
+    expect(paletteFor('Gerald').dot).not.toBe(paletteFor('Mildred').dot);
+  });
+
+  it('makes an orb the scene is recognised by, not one the shadow takes over', () => {
+    // Running the three stops evenly let the last one take the rim, which is
+    // most of what the eye sees, so twilight and blossom both came out pink.
+    const orb = orbFor('Tropical twilight');
+    expect(orb).toContain('#b98bff 58%');
   });
 });

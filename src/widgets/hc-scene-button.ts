@@ -13,7 +13,7 @@
  * house report nothing at all, and drawing those as "Off" says a thing about
  * the house that nobody knows.
  */
-import { css, nothing } from 'lit';
+import { css, html, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { DeviceState } from '../core/device.js';
 import type { CommandRequest } from '../core/widget.js';
@@ -22,7 +22,7 @@ import { noStatusReason } from '../core/present.js';
 import { effectiveName, isOn } from '../core/present.js';
 import { registerForCapability, registerForDevice, registerWidget } from '../core/registry.js';
 import { isScene } from '../core/capability.js';
-import { icon } from '../design/icons.js';
+import { orbFor, paletteFor } from '../design/scene-palette.js';
 import { HcLayoutShell } from '../sdk/shell.js';
 
 @customElement('hc-scene-button')
@@ -54,20 +54,41 @@ export class HcSceneButton extends HcLayoutShell {
          state the house is in, and a slab of accent reads as the primary
          button on the page — which is a different claim. */
       :host([data-applied]) .shell {
-        border-color: color-mix(in srgb, var(--hc-accent-active, #ffb661) 55%, transparent);
+        border-color: color-mix(in srgb, var(--hc-scene-dot) 65%, transparent);
       }
       :host(:focus-visible) {
         outline: 2px solid var(--hc-stroke-focus, #7cc4ff);
         outline-offset: 2px;
       }
+      /* **The mark is the scene's own colour, not a sparkle.** Every chip
+         wore the same glyph, so a row of twelve scenes was twelve identical
+         marks and twelve words — the mark carried nothing and the row could
+         only be read one name at a time. A scene is a colour before it is a
+         name, which is how somebody picks one across a room. */
       .tile {
         width: 1.75rem;
         height: 1.75rem;
         border-radius: var(--hc-radius-pill, 999px);
+        background: none;
       }
-      .tile svg {
-        width: 1rem;
-        height: 1rem;
+      .orb {
+        width: 1.05rem;
+        height: 1.05rem;
+        border-radius: var(--hc-radius-pill, 999px);
+        background: var(--hc-scene-orb);
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 255, 255, 0.22),
+          0 1px 4px rgba(0, 0, 0, 0.5);
+      }
+      /* The glow is the scene's, so hovering it is a preview of the light it
+         makes rather than a generic highlight. */
+      .shell:hover {
+        box-shadow: 0 0 0 1px color-mix(in srgb, var(--hc-scene-dot) 45%, transparent);
+      }
+      :host([data-applied]) .orb {
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 255, 255, 0.35),
+          0 0 10px color-mix(in srgb, var(--hc-scene-dot) 70%, transparent);
       }
       .primary {
         font-weight: 500;
@@ -76,9 +97,11 @@ export class HcSceneButton extends HcLayoutShell {
          answer for itself — 13 of the 58 scenes here report nothing at all,
          and a button that looks identical after being pressed reads as
          broken. */
-      :host([data-fired]) .tile {
-        background: var(--hc-accent-active, #ffb661);
-        color: var(--hc-accent-on-primary, #06131f);
+      :host([data-fired]) .orb {
+        transform: scale(1.25);
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 255, 255, 0.5),
+          0 0 14px color-mix(in srgb, var(--hc-scene-dot) 85%, transparent);
         transition: none;
       }
     `,
@@ -120,12 +143,18 @@ export class HcSceneButton extends HcLayoutShell {
       if (sceneKind(d) === 'stateful') this.setAttribute('aria-pressed', String(applied));
       else this.removeAttribute('aria-pressed');
     }
-    this.style.setProperty('--hc-shell-colour', 'var(--hc-accent-active, #ffb661)');
-    this.style.setProperty('--hc-shell-tint', applied ? '18%' : '0%');
+    // The chip is tinted by the scene it runs, so an applied one is washed in
+    // the light it made rather than in the page's accent.
+    const name = d === undefined ? '' : effectiveName(d);
+    const palette = paletteFor(name);
+    this.style.setProperty('--hc-scene-dot', palette.dot);
+    this.style.setProperty('--hc-scene-orb', orbFor(name));
+    this.style.setProperty('--hc-shell-colour', palette.dot);
+    this.style.setProperty('--hc-shell-tint', applied ? '22%' : '0%');
   }
 
   protected override renderIcon() {
-    return icon('scene');
+    return html`<span class="orb" part="indicator"></span>`;
   }
 
   protected override renderPrimary(): unknown {
