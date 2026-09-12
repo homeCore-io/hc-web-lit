@@ -84,6 +84,14 @@ const CONFIRM = [
   { value: 'never', label: 'never ask' },
 ] as const;
 
+/** One thing a box can be given, as the list under it draws it. */
+interface Offer {
+  value: string;
+  label: string;
+  /** What tells it apart from something with the same name — a device's room. */
+  hint?: string;
+}
+
 @customElement('hc-property-panel')
 export class HcPropertyPanel extends LitElement {
   static override styles = css`
@@ -246,6 +254,57 @@ export class HcPropertyPanel extends LitElement {
       flex: 1 1 100%;
       color: var(--hc-ink-muted, #8b95a4);
       font-size: var(--hc-text-caption-size, 11px);
+    }
+    /* What the house has, under the box asking for it. In the flow rather
+       than floating over it: a panel is a column that scrolls, and a floating
+       list is a list clipped by the first ancestor that scrolls. */
+    .suggestions {
+      flex: 1 1 100%;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      max-height: 12rem;
+      overflow-y: auto;
+      border: var(--hc-stroke-width, 1px) solid var(--hc-stroke-hairline, #262d38);
+      border-radius: var(--hc-radius-sm, 8px);
+      background: var(--hc-surface-sunken, #0d1116);
+    }
+    .suggestions button {
+      display: flex;
+      gap: 0.5rem;
+      align-items: baseline;
+      justify-content: space-between;
+      width: 100%;
+      padding: 0.25rem 0.5rem;
+      border: 0;
+      border-radius: 0;
+      background: none;
+      color: var(--hc-ink, #e9edf2);
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+    .suggestions button:hover,
+    .suggestions button:focus-visible {
+      background: var(--hc-surface-raised, #141922);
+    }
+    /* What tells two things with the same name apart — the room, for a device.
+       Quiet, and never at the cost of the name beside it: it shrinks first and
+       ends in an ellipsis rather than pushing the row wider than the panel. */
+    .suggestions .which {
+      flex: 0 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--hc-ink-muted, #8b95a4);
+      font-family: var(--hc-font-mono, ui-monospace, monospace);
+      font-size: var(--hc-text-overline-size, 10px);
+      white-space: nowrap;
+    }
+    .suggestions .what {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     /* The toggle between a plain value and one worked out from the house
        (§6.3). Quiet until it is on, because most fields are never expressions
@@ -1102,44 +1161,139 @@ export class HcPropertyPanel extends LitElement {
     </label>`;
   }
 
-  private datalist(kind: Suggest | undefined, id: string) {
-    const options = this.suggestions(kind);
-    if (options.length === 0) return nothing;
-    return html`<datalist id=${id}>
-      ${options.map((o) =>
-        o.label === undefined
-          ? html`<option value=${o.value}></option>`
-          : html`<option value=${o.value} label=${o.label}></option>`,
-      )}
-    </datalist>`;
-  }
-
   /**
    * A box that takes anything and offers what exists.
    *
-   * The suggestion list is emitted by the caller, once per property rather
-   * than once per input: a list of six device ids would otherwise render six
-   * `datalist` elements under one id, which browsers resolve by taking the
-   * first and readers resolve by wondering.
+   * **The offer is drawn here rather than handed to a `datalist`.** That was
+   * one element per property, shared by every row of a list, and it put the
+   * filtering — the only part that matters on a house with 184 devices — in
+   * the browser's hands and out of reach of anything that could check it. See
+   * `suggested`.
    */
   private text(p: Property, value: string, onChange: (v: string) => void) {
     const kind = p.suggest ?? p.of;
+    const box = `${p.name}|${p.label}`;
+    const open = this.picking === box;
+    const shown = open ? this.suggested(kind, value) : [];
     return html`<input
-      part="select"
-      type="text"
-      aria-label=${p.label}
-      .value=${value}
-      list=${this.suggestions(kind).length > 0 ? `list-${p.name}` : nothing}
-      @input=${(e: Event) => onChange((e.target as HTMLInputElement).value)}
-    />`;
+        part="select"
+        type="text"
+        aria-label=${p.label}
+        .value=${value}
+        autocomplete="off"
+        @focus=${() => {
+          if (this.suggestions(kind).length > 0) this.picking = box;
+        }}
+        @blur=${() => {
+          if (this.picking === box) this.picking = undefined;
+        }}
+        @keydown=${(e: KeyboardEvent) => {
+          // The same key that drops a tool and steps out of a group.
+          if (e.key === 'Escape' && this.picking === box) {
+            e.stopPropagation();
+            this.picking = undefined;
+          }
+        }}
+        @input=${(e: Event) => {
+          if (this.suggestions(kind).length > 0) this.picking = box;
+          onChange((e.target as HTMLInputElement).value);
+        }}
+      />
+      ${this.offers(shown, onChange)}`;
+  }
+
+  /**
+   * What the house has, under the box asking for it.
+   *
+   * Its own method rather than another level of the template above: six
+   * levels of nesting is where prettier stops agreeing with itself about the
+   * indentation, and a file that reformats differently on every run is a file
+   * whose diffs stop meaning anything.
+   */
+  private offers(shown: readonly Offer[], onChange: (v: string) => void) {
+    if (shown.length === 0) return nothing;
+    const take = (e: PointerEvent, value: string): void => {
+      // Before the blur, and without taking the focus: a click handler here
+      // fires after the box has already closed the list that was clicked.
+      e.preventDefault();
+      onChange(value);
+      this.picking = undefined;
+    };
+    return html`<ul class="suggestions" part="set">
+      ${shown.map(
+        (o) =>
+          html`<li>
+            <button part="row" @pointerdown=${(e: PointerEvent) => take(e, o.value)}>
+              <span class="what">${o.label}</span>
+              ${o.hint === undefined ? nothing : html`<span class="which">${o.hint}</span>`}
+            </button>
+          </li>`,
+      )}
+    </ul>`;
+  }
+
+  /**
+   * Which box is offering suggestions, and nothing else about it.
+   *
+   * Keyed by field *and* label, because a list of device ids renders one box
+   * per row and they share a name.
+   */
+  @state() private picking: string | undefined;
+
+  /**
+   * What a household has typed, matched against what it reads.
+   *
+   * **This is the whole reason the list is drawn here rather than left to a
+   * `datalist`.** A device's suggestion carries the id as its value and the
+   * name as its label, because the id is what gets stored — and what a native
+   * datalist popup *filters* on is the browser's business, unverifiable from
+   * here (the popup does not open under automation), and at best the value.
+   * On this house that means typing "Desk" to find a desk lamp either works or
+   * silently offers nothing, depending on a browser version. Somebody looking
+   * for a lamp knows its name, not `yolink_d88b4c01000ce0b6`.
+   *
+   * So the matching is ours: the name, the id, and — for a device — the room
+   * it is in, which is how a household says which of the four table lamps it
+   * means. Still only a *suggestion*: the box takes anything typed into it,
+   * because a field that restricted would make a document naming something
+   * this build has not learned unsaveable (§18.3).
+   */
+  private suggested(kind: Suggest | undefined, typed: string): Offer[] {
+    const all = this.suggestions(kind);
+    if (all.length === 0) return [];
+    const q = typed.trim().toLowerCase();
+    const hit = (o: { value: string; label?: string }): boolean =>
+      q === '' ||
+      o.value.toLowerCase().includes(q) ||
+      (o.label ?? '').toLowerCase().includes(q) ||
+      this.roomOf(o.value).toLowerCase().includes(q);
+    // **Everything that matches, and the box scrolls.** A cap would hide what
+    // a household has not thought to type yet — which is the whole use of an
+    // empty box showing what exists — and the list is twelve rem tall with its
+    // own scrollbar either way.
+    return all.filter(hit).map((o) => {
+      // **The room, where there is one, rather than the id.** This house's
+      // device ids run to seventy characters of hex; the id is what the box
+      // itself holds the moment a row is pressed, and what tells two desk
+      // lamps apart is which room each is in. Where there is no room, the
+      // value — for an icon or a role that is the useful half.
+      const hint = this.roomOf(o.value) || (o.label === undefined ? '' : o.value);
+      return { value: o.value, label: o.label ?? o.value, ...(hint === '' ? {} : { hint }) };
+    });
+  }
+
+  /** The room a suggested id is in, humanised, or nothing for a non-device. */
+  private roomOf(value: string): string {
+    const d = this.devices.find((x) => x.device_id === value);
+    const area = d === undefined ? undefined : effectiveArea(d);
+    return area == null || area === '' ? '' : humanise(area);
   }
 
   private renderList(p: Property) {
     const items = asList(p.value);
     const write = (next: string[]): void => this.set(p, next);
 
-    return html`${this.datalist(p.of ?? p.suggest, `list-${p.name}`)}
-      ${items.map(
+    return html`${items.map(
         (item, i) =>
           html`<div class="listrow">
             ${this.text({ ...p, label: `${p.label} ${i + 1}` }, item, (v) =>
@@ -1441,7 +1595,7 @@ export class HcPropertyPanel extends LitElement {
         return html`${this.text(p, typeof p.value === 'string' ? p.value : '', (v) =>
           this.set(p, v),
         )}
-        ${this.datalist(p.suggest, `list-${p.name}`)}${this.addAsset(p)}`;
+        ${this.addAsset(p)}`;
     }
   }
 

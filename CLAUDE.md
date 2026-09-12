@@ -2823,7 +2823,7 @@ not a failure of it.
       `params.room` through the `ƒx` toggle, since substitution is P1's
       language) and the template's inputs are whatever they wrote — a declared
       list that can disagree with the subtree is one that eventually does
-- [ ] Device/query picker, asset picker, room picker, extension browser.
+- [x] Device/query picker, asset picker, room picker, extension browser.
       **The asset picker is in**, which is the one of the four that had
       nothing at all: the store could hold a file and serve it back long
       before the GUI could reach it, so the only picture a `url` field could
@@ -2839,10 +2839,23 @@ not a failure of it.
       from what the house has, and it says what the query matches *right now*,
       which is the thing worth having a builder for at all. Clauses it does not
       offer — `attribute`, `not`, `role`, `sort` — are carried through
-      untouched and named on screen. Still open: searching a device list by the
-      name a person reads rather than by the id a `datalist` matches on, which
-      is unverified — the native popup does not open under automation, so what
-      Chrome filters on has not actually been established
+      untouched and named on screen. **And the suggestion is this panel's own
+      list now rather than a `datalist`.** The open question was what the
+      native popup filters on — the value, the label, or both — which could not
+      be established from here because the popup does not open under
+      automation. It is the wrong question to be depending on: a device's
+      suggestion carries the id as its value because the id is what gets
+      stored, and this house's ids look like
+      `hue_001788fffe6841b3_light_0691ac16_e137_4358_b679_d49373fde3ca`. If the
+      browser filters on the value, typing "desk" to find the desk lamp matches
+      nothing at all, and a household is left scrolling 184 rows. So the
+      matching is ours: the name, the id, **and the room**, which is how
+      somebody says which of seven lamps they mean — measured on the live
+      house, "lamp" gives seven with their rooms beside them and "desk" gives
+      three. Each row shows the room rather than the id, because the id is what
+      the box itself holds the moment a row is pressed. Still only a
+      suggestion: the box takes anything typed into it, for the reason it
+      always did
 - [ ] Validate → diff → apply deployment flow. **Obsolete as written, and
       recorded rather than ticked.** It was designed when core stored
       dashboards: you validated a document, saw what would change, and applied

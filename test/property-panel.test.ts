@@ -80,25 +80,65 @@ describe('what it draws', () => {
     expect((field(el, 'Selection mode') as HTMLSelectElement).value).toBe('manual');
   });
 
+  /**
+   * What a box offers, which is only offered once somebody is in it.
+   *
+   * The list is the panel's own now rather than a `datalist` — see
+   * `suggested` — so it renders on focus and filters on what is typed, which
+   * is the part a native popup did in the browser's own way and out of reach
+   * of any check.
+   */
+  const offered = async (
+    el: HcPropertyPanel,
+    label: string,
+    typed?: string,
+  ): Promise<{ what: string[]; which: string[] }> => {
+    const input = field(el, label) as HTMLInputElement;
+    if (typed !== undefined) {
+      input.value = typed;
+      input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    }
+    input.dispatchEvent(new FocusEvent('focus', { bubbles: true, composed: true }));
+    await el.updateComplete;
+    const rows = [...(el.shadowRoot?.querySelectorAll('.suggestions button') ?? [])];
+    return {
+      what: rows.map((r) => r.querySelector('.what')?.textContent?.trim() ?? ''),
+      which: rows.map((r) => r.querySelector('.which')?.textContent?.trim() ?? ''),
+    };
+  };
+
   it('offers the house in a field that points at a device, without restricting it', async () => {
     const el = await panel({ type: 'slider', config: { device_id: 'hue_1', attribute: 'on' } });
     const input = field(el, 'Device id') as HTMLInputElement;
-    expect(input.tagName).toBe('INPUT');
+    expect(input.tagName, 'a box that takes anything, not a select').toBe('INPUT');
 
-    const options = [...(el.shadowRoot?.querySelectorAll('datalist option') ?? [])].map((o) =>
-      o.getAttribute('label'),
-    );
-    expect(options).toContain('Desk Lamp');
-    // And it says which device that id is, because an id is not a name.
+    const list = await offered(el, 'Device id');
+    expect(list.what).toContain('Desk Lamp');
+    // **The room beside the name, not the id.** This house's ids run to
+    // seventy characters of hex; the id is what the box itself holds the
+    // moment a row is pressed, and what tells two desk lamps apart is which
+    // room each is in.
+    expect(list.which[list.what.indexOf('Desk Lamp')]).toBe('Office');
+    // And it says which device the id in the box is, because an id is not a name.
     expect(el.shadowRoot?.textContent).toContain('Desk Lamp');
+  });
+
+  it('finds a device by the name a household reads, not by its id', async () => {
+    // **The reason this list is drawn here at all.** The value is the id
+    // because the id is what gets stored, and what a native datalist popup
+    // filters on is the browser's business — on this house that means typing
+    // "Desk" either finds the desk lamp or silently offers nothing, depending
+    // on a browser version. Nobody looking for a lamp knows `hue_1`.
+    const el = await panel({ type: 'slider', config: {} });
+    const list = await offered(el, 'Device id', 'desk');
+    expect(list.what).toContain('Desk Lamp');
+    expect(list.what.length, 'the rest of the house is filtered out').toBeLessThan(3);
   });
 
   it('offers the bound device’s own attributes, not the whole house’s', async () => {
     const el = await panel({ type: 'slider', config: { device_id: 'hue_1' } });
-    const values = [...(el.shadowRoot?.querySelectorAll('datalist option') ?? [])].map((o) =>
-      o.getAttribute('value'),
-    );
-    expect(values).toContain('brightness_pct');
+    const list = await offered(el, 'Attribute');
+    expect(list.which.concat(list.what)).toContain('brightness_pct');
   });
 
   it('offers the facet names that actually select something', async () => {
@@ -106,13 +146,15 @@ describe('what it draws', () => {
     // `doors_windows`; `facetHints` is the singular `ui_hint` set on one
     // device. A picker offering the wrong one has every value looking
     // official and selecting nothing.
-    const el = await panel({ type: 'device_grid', config: { selection_mode: 'facet' } });
-    const offered = [
-      ...(el.shadowRoot?.querySelectorAll('datalist[id="list-facet"] option') ?? []),
-    ].map((o) => o.getAttribute('value'));
-    expect(offered).toEqual(knownFacets());
-    expect(offered).toContain('lights');
-    expect(offered).not.toContain('light');
+    const el = await panel({
+      type: 'device_grid',
+      config: { selection_mode: 'facet', facet: [''] },
+    });
+    const list = await offered(el, 'Facet 1');
+    const values = list.which.map((w, i) => (w === '' ? list.what[i] : w));
+    expect(values).toEqual(knownFacets());
+    expect(values).toContain('lights');
+    expect(values).not.toContain('light');
   });
 
   it('says which field nothing else would be able to read', async () => {
