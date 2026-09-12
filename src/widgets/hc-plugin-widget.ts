@@ -104,11 +104,6 @@ export class HcPluginWidget extends LitElement {
     .mark svg {
       width: 1.25rem;
       height: 1.25rem;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 1.6;
-      stroke-linecap: round;
-      stroke-linejoin: round;
     }
     .shape {
       min-width: 1rem;

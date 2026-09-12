@@ -68,11 +68,6 @@ export class HcDeviceBreakdown extends LitElement {
     .mark svg {
       width: 100%;
       height: 100%;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 1.7;
-      stroke-linecap: round;
-      stroke-linejoin: round;
     }
     .name {
       overflow: hidden;

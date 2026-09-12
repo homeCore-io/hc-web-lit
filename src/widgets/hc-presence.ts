@@ -70,7 +70,7 @@ export class HcPresence extends HcLayoutShell {
   }
 
   protected override renderIcon() {
-    return icon(iconFor(this.device));
+    return icon(iconFor(this.device), this.device !== undefined && isOn(this.device) === true);
   }
 
   protected override renderPrimary() {

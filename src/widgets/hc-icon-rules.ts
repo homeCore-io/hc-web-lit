@@ -116,11 +116,6 @@ export class HcIconRules extends LitElement {
     .mark svg {
       width: 1.25rem;
       height: 1.25rem;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 1.6;
-      stroke-linecap: round;
-      stroke-linejoin: round;
     }
     .matches {
       flex: 1 1 100%;

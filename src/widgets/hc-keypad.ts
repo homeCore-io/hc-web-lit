@@ -99,11 +99,6 @@ export class HcKeypad extends LitElement {
     .tile svg {
       width: 1.25rem;
       height: 1.25rem;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 1.6;
-      stroke-linecap: round;
-      stroke-linejoin: round;
     }
     .lines {
       min-width: 0;

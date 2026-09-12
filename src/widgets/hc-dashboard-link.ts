@@ -61,11 +61,6 @@ export class HcDashboardLink extends LitElement {
     .mark svg {
       width: 1.1rem;
       height: 1.1rem;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 1.6;
-      stroke-linecap: round;
-      stroke-linejoin: round;
     }
     .unknown {
       color: var(--hc-ink-muted, #8b95a4);

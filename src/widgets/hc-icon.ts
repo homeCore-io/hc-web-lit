@@ -43,11 +43,6 @@ export class HcIcon extends LitElement {
       width: 100%;
       height: 100%;
       max-height: 3rem;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 1.6;
-      stroke-linecap: round;
-      stroke-linejoin: round;
     }
   `;
 

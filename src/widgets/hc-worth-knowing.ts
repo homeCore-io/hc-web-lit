@@ -88,11 +88,6 @@ export class HcWorthKnowing extends LitElement {
     .mark svg {
       width: 1rem;
       height: 1rem;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 1.7;
-      stroke-linecap: round;
-      stroke-linejoin: round;
     }
     .name {
       min-width: 0;

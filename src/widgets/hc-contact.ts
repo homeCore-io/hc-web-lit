@@ -65,7 +65,7 @@ export class HcContact extends HcLayoutShell {
   protected override renderIcon() {
     // The user's rule first, then `ui_hint`, then the type — the order
     // `iconFor` already keeps, and the reason this widget needs no table.
-    return icon(iconFor(this.device));
+    return icon(iconFor(this.device), this.device !== undefined && isOn(this.device) === true);
   }
 
   protected override renderPrimary() {

@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "homeCore web UI \u2014 viewer and designer",
+  "description": "homeCore web UI — viewer and designer",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=24"
@@ -29,6 +29,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
+    "@phosphor-icons/core": "^2.1.1",
     "@types/node": "^24.0.0",
     "eslint": "^9.17.0",
     "jsdom": "^25.0.1",

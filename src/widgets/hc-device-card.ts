@@ -203,7 +203,7 @@ export class HcDeviceCard extends HcLayoutShell {
   }
 
   protected override renderIcon() {
-    return icon(iconFor(this.chosen));
+    return icon(iconFor(this.chosen), this.chosen !== undefined && isOn(this.chosen) === true);
   }
 
   protected override renderPrimary(): unknown {

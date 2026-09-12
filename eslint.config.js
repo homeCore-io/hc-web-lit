@@ -38,4 +38,15 @@ export default tseslint.config(
       'no-restricted-globals': 'off',
     },
   },
+  {
+    // Build-time scripts. Node, not a browser — they run under `node` and
+    // never ship, so `console` is how they report and `process` is how they
+    // fail. Linted rather than ignored, for the same reason the service
+    // worker is: `tool/icons.mjs` decides what every icon in the product
+    // looks like.
+    files: ['tool/*.mjs'],
+    languageOptions: {
+      globals: { console: 'readonly', process: 'readonly' },
+    },
+  },
 );

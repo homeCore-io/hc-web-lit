@@ -227,11 +227,6 @@ export class HcMediaCard extends LitElement {
     .art svg {
       width: 1.5rem;
       height: 1.5rem;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 1.6;
-      stroke-linecap: round;
-      stroke-linejoin: round;
     }
     .lines {
       min-width: 0;
@@ -328,11 +323,6 @@ export class HcMediaCard extends LitElement {
     button svg {
       width: 1.25rem;
       height: 1.25rem;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 1.7;
-      stroke-linecap: round;
-      stroke-linejoin: round;
     }
     .fill-mark svg {
       fill: currentColor;
