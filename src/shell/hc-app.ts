@@ -8,6 +8,7 @@
  * store fed from the event stream, and draw the page. No router yet.
  */
 import { LitElement, css, html, nothing } from 'lit';
+import { keyed } from 'lit/directives/keyed.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HcApi, HcApiError } from '../core/api.js';
 import { applyTokens } from '../design/css.js';
@@ -15,8 +16,10 @@ import { builtInSeeds, defaultSkin } from '../design/seeds.js';
 import { deriveTokens } from '../design/tokens.js';
 import type { DashboardBreakpoint, DashboardDefinition } from '../core/dashboard.js';
 import { layoutToDraw, withWidgetConfig } from '../core/dashboard.js';
+import type { DashboardWidget } from '../core/dashboard.js';
 import {
   addWidget,
+  boxOf,
   duplicatePage,
   newPage,
   placeWidget,
@@ -30,6 +33,7 @@ import {
   sizeGroupBox,
   transformWidgets,
   removeWidget,
+  reshapeWidget,
   turnWidget,
   renamed,
   type Body,
@@ -45,7 +49,6 @@ import {
   ungrouped,
 } from '../core/groups.js';
 import { instantiate, templateId } from '../core/templates.js';
-import { knownTypes } from '../core/registry.js';
 import { humanise } from '../core/text.js';
 import { EventStream } from '../core/events.js';
 import { check, checkAction } from '../core/safety.js';
@@ -69,6 +72,10 @@ import type { MountEnv } from './mount.js';
 import './hc-page.js';
 import type { HcPage } from './hc-page.js';
 import './hc-overlay.js';
+import './hc-editor-rail.js';
+import { layerName, TEMPLATE_TOOL, typeName } from './hc-editor-rail.js';
+import { deviceOfTool, firstWay, startSize, wayIndex, waysToShow } from '../core/insert.js';
+import type { StartSize } from '../core/insert.js';
 import type { HcOverlay } from './hc-overlay.js';
 import '../widgets/hc-device-grid.js';
 import '../widgets/hc-event-feed.js';
@@ -127,14 +134,13 @@ import '../widgets/hc-extensions.js';
 
 type Phase = 'idle' | 'connecting' | 'ready' | 'failed';
 
-/**
- * How the palette says "this tool is a template, not a widget type".
- *
- * A prefix rather than a second control: the two are the same gesture — pick a
- * thing, drag it out — and a household that made a template called `toggle`
- * should not have that shadow the widget type of the same name.
+/*
+ * How the palette says "this tool is a template, not a widget type" is
+ * `TEMPLATE_TOOL`, from the rail that offers both. A prefix rather than a
+ * second control: the two are the same gesture — pick a thing, drag it out —
+ * and a household that made a template called `toggle` should not have that
+ * shadow the widget type of the same name.
  */
-const TEMPLATE_TOOL = 'template:';
 
 /** A group name placed under where the surface is standing. */
 const joinIn = (inside: string | undefined, name: string): string =>
@@ -157,6 +163,26 @@ const joinIn = (inside: string | undefined, name: string): string =>
  * says everything else.
  */
 const STALE_AFTER_MS = 2 * 60 * 1000;
+
+/**
+ * Whether a key press belongs to a field somebody is typing in.
+ *
+ * Read off the composed path, because the field is usually several shadow
+ * roots below the window — in the inspector, inside the property panel — and
+ * `e.target` at the window is the outermost host, never the input.
+ */
+function typing(e: KeyboardEvent): boolean {
+  return e
+    .composedPath()
+    .some(
+      (n) =>
+        n instanceof HTMLElement &&
+        (n.tagName === 'INPUT' ||
+          n.tagName === 'TEXTAREA' ||
+          n.tagName === 'SELECT' ||
+          n.isContentEditable),
+    );
+}
 
 export function sinceHeard(at: number): string {
   return since(at);
@@ -327,6 +353,184 @@ export class HcApp extends LitElement {
     }
     main {
       padding: 1rem;
+    }
+    header button.primary {
+      border-color: var(--hc-accent-primary, #ffb661);
+      background: var(--hc-accent-primary, #ffb661);
+      color: var(--hc-accent-on-primary, #412402);
+      font-weight: 600;
+    }
+    header .sep {
+      width: 1px;
+      align-self: stretch;
+      margin: 0.25rem 0;
+      background: var(--hc-stroke-hairline, #262d38);
+    }
+    header .segmented {
+      display: inline-flex;
+    }
+    header .segmented button {
+      border-radius: 0;
+      margin-left: -1px;
+    }
+    header .segmented button:first-child {
+      border-radius: var(--hc-radius-sm, 8px) 0 0 var(--hc-radius-sm, 8px);
+    }
+    header .segmented button:last-child {
+      border-radius: 0 var(--hc-radius-sm, 8px) var(--hc-radius-sm, 8px) 0;
+    }
+    header .segmented button[aria-pressed='true'] {
+      background: var(--hc-surface-overlay, #1b2230);
+      border-color: var(--hc-stroke-focus, #7cc4ff);
+      position: relative;
+    }
+    /* **The editor's bar holds still.** It is the way out, and a way out that
+       scrolls off the top of a long page is one somebody has to go looking
+       for. One row, never wrapped: the editor is a desktop and tablet surface
+       (§16), and what does not fit gives way from the right. */
+    header.editor {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      height: var(--editor-bar, 48px);
+      box-sizing: border-box;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      background: var(--hc-surface-base, #0b0e13);
+    }
+    header.editor > * {
+      flex: none;
+    }
+    header.editor .spacer {
+      flex: 1;
+    }
+    main.editing {
+      padding: 0;
+    }
+    /* The page in the middle, the rails either side. The rails are sticky
+       rather than the page being a scrolling box, because the document is
+       what scrolls (§14.2): zoom pans by scrolling the window. */
+    .workspace {
+      display: grid;
+      grid-template-columns: 248px minmax(0, 1fr) 340px;
+      align-items: start;
+      min-height: calc(100vh - var(--editor-bar, 48px));
+    }
+    .rail {
+      position: sticky;
+      top: var(--editor-bar, 48px);
+      height: calc(100vh - var(--editor-bar, 48px));
+      box-sizing: border-box;
+      overflow: auto;
+      background: var(--hc-surface-base, #0b0e13);
+      z-index: 4;
+    }
+    .rail.left {
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--hc-stroke-hairline, #262d38);
+    }
+    .rail.left hc-editor-rail {
+      flex: 1;
+      min-height: 0;
+    }
+    .rail.right {
+      border-left: 1px solid var(--hc-stroke-hairline, #262d38);
+      padding: 0.75rem;
+      font-size: var(--hc-text-body-small-size, 12.5px);
+    }
+    .rail.right hc-property-panel {
+      height: auto;
+      overflow: visible;
+    }
+    .canvas {
+      min-width: 0;
+      padding: 1rem;
+      /* The page sits on a ground of its own so its edges read as edges. */
+      background: color-mix(in srgb, var(--hc-surface-sunken, #0d1116) 70%, black);
+      min-height: calc(100vh - var(--editor-bar, 48px));
+      box-sizing: border-box;
+    }
+    .insp-head {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding-bottom: 0.75rem;
+      margin-bottom: 0.5rem;
+      border-bottom: 1px solid var(--hc-stroke-hairline, #262d38);
+    }
+    .insp-title {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .insp-kind {
+      color: var(--hc-ink-muted, #8b95a4);
+      font-size: var(--hc-text-caption-size, 11px);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .insp-name {
+      font-size: var(--hc-text-title-size, 16px);
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .rail button {
+      min-height: 30px;
+      padding: 0 0.5rem;
+      border: 1px solid var(--hc-stroke-hairline, #262d38);
+      border-radius: var(--hc-radius-sm, 8px);
+      background: var(--hc-surface-raised, #141922);
+      color: var(--hc-ink, #e9edf2);
+      font: inherit;
+      cursor: pointer;
+    }
+    .rail button.danger {
+      border-color: color-mix(in srgb, var(--hc-accent-danger, #ff7b72) 55%, transparent);
+      color: var(--hc-accent-danger, #ff7b72);
+    }
+    .insp-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.375rem;
+    }
+    .insp-show {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin: 0 0 0.75rem;
+    }
+    .insp-show span {
+      color: var(--hc-ink-muted, #8b95a4);
+    }
+    .insp-show select {
+      flex: 1;
+      min-width: 0;
+      padding: 0.25rem 0.5rem;
+      border: 1px solid var(--hc-stroke-hairline, #262d38);
+      border-radius: var(--hc-radius-sm, 8px);
+      background: var(--hc-surface-sunken, #0d1116);
+      color: inherit;
+      font: inherit;
+    }
+    .insp-note {
+      color: var(--hc-ink-muted, #8b95a4);
+      line-height: 1.5;
+    }
+    .insp-facts {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.375rem 0.75rem;
+      margin: 0.5rem 0;
+    }
+    .insp-facts dt {
+      color: var(--hc-ink-muted, #8b95a4);
+    }
+    .insp-facts dd {
+      margin: 0;
     }
     .note {
       padding: 2rem;
@@ -749,6 +953,22 @@ export class HcApp extends LitElement {
     // own config, and nothing in the document says it came from one. Placing a
     // widget of type `template:room-tile` would be placing something nothing
     // can draw.
+    // **A device tool places the device**, drawn the way the house draws it
+    // and already bound to it — the widget arrives working, not as an empty
+    // box waiting to be told what it is about.
+    const deviceId = deviceOfTool(type);
+    if (deviceId !== undefined) {
+      const device = this.store.get(deviceId);
+      if (device === undefined) throw new Error('That device is no longer in the house.');
+      const way = firstWay(device);
+      const { doc: added, id } = addWidget(doc, way.type);
+      const bound = withWidgetConfig(added, id, way.config) ?? added;
+      const placed = placeWidget(bound, this.breakpoint, id, box) ?? bound;
+      this.writePages(this.replacing(placed), placed.id);
+      this.dropTool();
+      return this.selectSoon([id]);
+    }
+
     const template = type.startsWith(TEMPLATE_TOOL)
       ? this.authored.templates().get(type.slice(TEMPLATE_TOOL.length))
       : undefined;
@@ -763,7 +983,7 @@ export class HcApp extends LitElement {
         const placed = placeWidget(copy, this.breakpoint, id, box) ?? copy;
         this.writePages(this.replacing(placed), placed.id);
         this.dropTool();
-        return Promise.resolve();
+        return this.selectSoon([id]);
       }
     }
     // A placement the layout does not have is not a failure here the way it is
@@ -773,7 +993,104 @@ export class HcApp extends LitElement {
 
     this.writePages(this.replacing(next), next.id);
     this.dropTool();
-    return Promise.resolve();
+    // **Selected the moment it exists**, so the inspector opens on it. A new
+    // widget is an empty one — no device, no words — and leaving somebody
+    // looking at a grey box with nothing in hand is how drawing one read as
+    // broken.
+    return this.selectSoon([id]);
+  };
+
+  /** Put these in hand once the page has drawn the document that holds them. */
+  private async selectSoon(ids: readonly string[]): Promise<void> {
+    await this.updateComplete;
+    const page = this.renderRoot.querySelector('hc-page');
+    if (page === null) return;
+    await page.updateComplete;
+    page.select(ids);
+  }
+
+  /** How big the held thing starts, so the page can show it while carried. */
+  private toolSize(): StartSize | undefined {
+    const tool = this.tool;
+    if (tool === undefined || tool.startsWith(TEMPLATE_TOOL)) return undefined;
+    const deviceId = deviceOfTool(tool);
+    if (deviceId === undefined) return startSize(tool);
+    const device = this.store.get(deviceId);
+    return device === undefined ? undefined : firstWay(device).size;
+  }
+
+  /**
+   * Show a device another way — card, pill, switch, chart.
+   *
+   * One write, so it is one undo: the widget keeps its place on every layout
+   * and changes only what it draws.
+   */
+  private reshape(id: string, deviceId: string, index: number): void {
+    const doc = this.current;
+    const device = this.store.get(deviceId);
+    if (doc === undefined || device === undefined || !this.mayWriteDashboards()) return;
+    const way = waysToShow(device)[index];
+    if (way === undefined) return;
+    const shown = reshapeWidget(doc, id, way.type, way.config);
+    // **Resized to the new form, from the same corner.** A switch kept in the
+    // box a card needed is a switch floating in an empty rectangle — the size
+    // was the old form's, not a choice somebody made about this one.
+    const at = boxOf(layoutToDraw(shown, this.breakpoint)?.layout, id);
+    const size = at?.units === 'pixels' ? way.size.free : way.size.cells;
+    const next =
+      at === undefined
+        ? shown
+        : (placeWidget(shown, this.breakpoint, id, { x: at.box.x, y: at.box.y, ...size }) ?? shown);
+    this.writePages(this.replacing(next), doc.id);
+  }
+
+  /** The "Show as" choice for a widget that is about one device. */
+  private showAs(w: DashboardWidget) {
+    const deviceId = w.config?.['device_id'];
+    if (typeof deviceId !== 'string') return nothing;
+    const device = this.store.get(deviceId);
+    if (device === undefined) return nothing;
+    const ways = waysToShow(device);
+    const at = wayIndex(ways, w.type, w.config ?? {});
+    return html`<label class="insp-show">
+      <span>Show as</span>
+      <select
+        @change=${(e: Event) =>
+          this.reshape(w.id, deviceId, Number((e.target as HTMLSelectElement).value))}
+      >
+        ${at < 0 ? html`<option selected value="-1">${typeName(w.type)}</option>` : nothing}
+        ${ways.map(
+          (way, i) => html`<option value=${i} ?selected=${i === at}>${way.label}</option>`,
+        )}
+      </select>
+    </label>`;
+  }
+
+  /** Select from the rails — the page's selection, set from outside it. */
+  private readonly selectFromRail = (e: CustomEvent<{ ids: string[] }>): void => {
+    this.renderRoot.querySelector('hc-page')?.select(e.detail.ids);
+  };
+
+  /**
+   * Take what is in hand off the page, as one step to undo.
+   *
+   * One document for all of them, for the reason a group move is one: a
+   * delete of five things that took five presses of undo to bring back would
+   * be five deletes nobody made.
+   */
+  private readonly deleteHeld = (): void => {
+    const doc = this.current;
+    const ids = this.held.ids;
+    if (doc === undefined || ids.length === 0 || !this.mayWriteDashboards()) return;
+    const next = ids.reduce((d, id) => removeWidget(d, id), doc);
+    this.writePages(this.replacing(next), doc.id);
+    this.renderRoot.querySelector('hc-page')?.select([]);
+  };
+
+  /** A device's name, for the rails, which have ids and want words. */
+  private readonly deviceName = (id: string): string | undefined => {
+    const d = this.store.get(id);
+    return d === undefined ? undefined : effectiveName(d);
   };
 
   /**
@@ -1194,6 +1511,21 @@ export class HcApp extends LitElement {
   @state() private editing = false;
 
   /**
+   * Using the page without leaving the editor.
+   *
+   * Nothing actuates while a page is being edited (§14.2), which is right and
+   * leaves no way to try the slider just placed short of leaving and coming
+   * back. Preview is that: the rails stay, the page behaves as a viewer's
+   * would, and commands reach the house.
+   */
+  @state() private previewing = false;
+
+  /** Whether the page surface is in edit mode right now. */
+  private get arranging(): boolean {
+    return this.editing && !this.previewing;
+  }
+
+  /**
    * The pages as they were when arranging began, and whether anything has
    * happened since.
    *
@@ -1219,6 +1551,23 @@ export class HcApp extends LitElement {
     this.arranged = false;
     this.editing = true;
     this.dropTool();
+    void this.fitIfWider();
+  }
+
+  /**
+   * Draw a composed page small enough to sit between the rails.
+   *
+   * The rails take about six hundred pixels, and a 1240px composition that
+   * filled the window as a viewer runs under the inspector as soon as they
+   * arrive. Never larger than full size: a narrow page is left as it is.
+   */
+  private async fitIfWider(): Promise<void> {
+    await this.updateComplete;
+    const page = this.renderRoot.querySelector('hc-page');
+    if (page === null || !this.free()) return;
+    await page.updateComplete;
+    const fit = page.fitZoom();
+    if (fit < 1) await page.zoomTo(fit);
   }
 
   /**
@@ -1230,6 +1579,7 @@ export class HcApp extends LitElement {
    */
   private leaveArrange(): void {
     this.editing = false;
+    this.previewing = false;
     this.arranged = false;
     this.arrangedFrom = undefined;
     this.dropTool();
@@ -1378,7 +1728,7 @@ export class HcApp extends LitElement {
       onSavePreferences: this.savePreferences,
       ...(this.vocabulary !== undefined ? { vocabulary: this.vocabulary } : {}),
       pages: this.pageList(),
-      mode: this.editing ? 'edit' : 'view',
+      mode: this.arranging ? 'edit' : 'view',
       extensions: this.extensions,
       assets: this.assets,
       ...(this.mayWriteDashboards()
@@ -1417,8 +1767,10 @@ export class HcApp extends LitElement {
     // It was neither, and both halves were unticked in Phase 10: a toggle in
     // a device list switched a real outlet while somebody was moving the card
     // it sat in.
-    if (this.editing) {
-      this.overlay?.toast('Not while you are arranging the page.', { kind: 'warn' });
+    if (this.arranging) {
+      this.overlay?.toast('Not while you are editing the page — use Preview to try it.', {
+        kind: 'warn',
+      });
       return;
     }
 
@@ -1494,6 +1846,13 @@ export class HcApp extends LitElement {
    * the one thing Escape means everywhere: never mind.
    */
   private readonly onKey = (e: KeyboardEvent): void => {
+    if ((e.key === 'Delete' || e.key === 'Backspace') && this.arranging && !typing(e)) {
+      if (this.held.ids.length > 0) {
+        e.preventDefault();
+        this.deleteHeld();
+      }
+      return;
+    }
     if (e.key !== 'Escape') return;
     // One layer at a time, outermost gesture first: a held tool is the most
     // recent thing somebody did, and stepping out of a group while still
@@ -1948,76 +2307,8 @@ export class HcApp extends LitElement {
 
   override render() {
     return html`
-      <header ?hidden=${this.kiosk}>
-        <span class="brand">homeCore</span>
-        ${
-          this.phase === 'ready'
-            ? html`
-                <select
-                  @change=${(e: Event) => {
-                    const id = (e.target as HTMLSelectElement).value;
-                    this.current = this.docs.find((d) => d.id === id);
-                  }}
-                >
-                  ${this.docs.map(
-                    (d) =>
-                      // Marked from `current`, because the page is no longer
-                      // only ever changed here: a breadcrumb's `on_tap` moves
-                      // it too, and a picker that says otherwise is lying about
-                      // what is on the screen.
-                      html`<option value=${d.id} ?selected=${d.id === this.current?.id}>
-                        ${d.name}
-                      </option>`,
-                  )}
-                </select>
-                ${this.pageControls()}
-                <select
-                  @change=${(e: Event) => {
-                    this.skin = (e.target as HTMLSelectElement).value;
-                  }}
-                >
-                  ${Object.keys(builtInSeeds).map(
-                    (n) => html`<option value=${n} ?selected=${n === this.skin}>${n}</option>`,
-                  )}
-                </select>
-                <select
-                  .value=${this.breakpoint}
-                  @change=${(e: Event) => {
-                    this.breakpoint = (e.target as HTMLSelectElement).value as DashboardBreakpoint;
-                  }}
-                >
-                  ${(['mobile', 'tablet', 'desktop', 'tv'] as const).map(
-                    (b) =>
-                      html`<option value=${b} ?selected=${b === this.breakpoint}>${b}</option>`,
-                  )}
-                </select>
-              `
-            : nothing
-        }
-        <span class="spacer"></span>
-        ${
-          this.phase === 'ready'
-            ? html`<span class="status">
-                <span class="dot" ?data-live=${this.live}></span>
-                ${this.live ? 'live' : `last heard ${sinceHeard(this.lastHeard)}`} ·
-                ${this.store.size} devices
-              </span>`
-            : nothing
-        }
-        ${
-          // Only when it is true, and only when it costs the household
-          // something: a key without the content scopes gives this panel its
-          // *own* icon rules and templates rather than the house's, and two
-          // devices quietly disagreeing about what a mark means is worse than
-          // one that says so.
-          this.phase === 'ready' && this.panelLimit !== undefined
-            ? html`<span class="status error" title=${this.panelLimit.why}>
-                ${this.panelLimit.text}
-              </span>`
-            : nothing
-        }
-      </header>
-      <main>${this.body()}</main>
+      ${this.editing && this.phase === 'ready' ? this.editorBar() : this.viewerBar()}
+      <main class=${this.editing ? 'editing' : ''}>${this.body()}</main>
       ${
         // The one thing a panel must never hide. Chrome goes; "what you are
         // looking at is four minutes old" stays, because a dashboard that
@@ -2061,55 +2352,6 @@ export class HcApp extends LitElement {
    * again, and the reason is sharper here than usual, because the failure
    * would be a page somebody made that vanishes on reload.
    */
-  /**
-   * The tool palette — pick a widget, then draw it (§14.1).
-   *
-   * **Only while the page is being arranged**, because a tool is a thing you
-   * hold over a page you are editing, and arming the surface of a page
-   * somebody is using would mean a press on a light drawing a rectangle.
-   *
-   * A list rather than a row of tool buttons: this client draws fifty-odd
-   * widget types and a palette with fifty buttons in the header is a palette
-   * nobody reads. What it offers is `knownTypes()` — what *this client can
-   * draw* — for the reason the catalogue gives: offering a type that renders
-   * as a labelled placeholder is offering somebody a broken card and calling
-   * it a choice.
-   *
-   * Choosing arms; it does not add. That is the whole difference from the
-   * catalogue in the property panel, which stays (§14.1) and still appends at
-   * the bottom for somebody who would rather pick from a list and not drag.
-   */
-  private palette() {
-    if (!this.editing) return nothing;
-
-    return html`<select
-      class=${this.tool === undefined ? '' : 'armed'}
-      aria-label="Draw a widget"
-      title=${
-        this.tool === undefined
-          ? 'Pick a widget, then drag on the page to draw it'
-          : `Drag on the page to draw a ${humanise(this.tool)}, or press Escape`
-      }
-      .value=${this.tool ?? ''}
-      @change=${(e: Event) => {
-        const type = (e.target as HTMLSelectElement).value;
-        this.tool = type === '' ? undefined : type;
-      }}
-    >
-      <option value="">Draw…</option>
-      ${knownTypes().map((t) => html`<option value=${t}>${humanise(t)}</option>`)}
-      ${
-        // Templates alongside the types, because placing a second instance is
-        // the point of having made the first (§5.4). Prefixed so a template
-        // called `toggle` cannot be mistaken for the widget type.
-        this.authored
-          .templates()
-          .list()
-          .map((t) => html`<option value=${`${TEMPLATE_TOOL}${t.id}`}>Template · ${t.id}</option>`)
-      }
-    </select>`;
-  }
-
   /**
    * Group and ungroup what the page has in hand (§14.1).
    *
@@ -2294,17 +2536,176 @@ export class HcApp extends LitElement {
     });
   }
 
-  private pageControls() {
-    if (!this.mayWriteDashboards()) return nothing;
+  /** The page picker, in both bars. */
+  private pagePicker() {
+    return html`<select
+      class="pages"
+      aria-label="Page"
+      @change=${(e: Event) => {
+        const id = (e.target as HTMLSelectElement).value;
+        this.current = this.docs.find((d) => d.id === id);
+      }}
+    >
+      ${this.docs.map(
+        (d) =>
+          // Marked from `current`, because the page is no longer only ever
+          // changed here: a breadcrumb's `on_tap` moves it too, and a picker
+          // that says otherwise is lying about what is on the screen.
+          html`<option value=${d.id} ?selected=${d.id === this.current?.id}>${d.name}</option>`,
+      )}
+    </select>`;
+  }
+
+  /** Live, or how long ago the house last spoke. */
+  private status() {
+    return html`<span class="status">
+        <span class="dot" ?data-live=${this.live}></span>
+        ${this.live ? 'live' : `last heard ${sinceHeard(this.lastHeard)}`}
+      </span>
+      ${
+        // Only when it is true, and only when it costs the household
+        // something: a key without the content scopes gives this panel its
+        // *own* icon rules and templates rather than the house's, and two
+        // devices quietly disagreeing about what a mark means is worse than
+        // one that says so.
+        this.panelLimit !== undefined
+          ? html`<span class="status error" title=${this.panelLimit.why}>
+              ${this.panelLimit.text}
+            </span>`
+          : nothing
+      }`;
+  }
+
+  /**
+   * The bar somebody *using* the house sees.
+   *
+   * **Which page, whether it is live, and a way in to edit it** — nothing
+   * else. It used to carry every authoring verb, the skin and the breakpoint
+   * at all times, so a household opening a page to turn a lamp on was looking
+   * at the editor's toolbar. Those live in the editor now. Edit is offered to
+   * anyone whose session may write pages (§5.11's rule: not offered rather
+   * than offered and refused).
+   */
+  private viewerBar() {
+    return html`<header ?hidden=${this.kiosk}>
+      <span class="brand">homeCore</span>
+      ${this.phase === 'ready' ? this.pagePicker() : nothing}
+      <span class="spacer"></span>
+      ${this.phase === 'ready' ? this.status() : nothing}
+      ${
+        this.phase === 'ready' && this.mayWriteDashboards() && this.current !== undefined
+          ? html`<button class="primary" title="Edit this page" @click=${() => this.enterArrange()}>
+              Edit
+            </button>`
+          : nothing
+      }
+    </header>`;
+  }
+
+  /**
+   * The editor's own bar, in place of the viewer's.
+   *
+   * Left to right: get out, which page, undo, how it is being looked at (the
+   * screen size, the zoom, the skin), and Preview. What acts on a *selection*
+   * is not here — it is in the inspector, beside the thing it acts on.
+   */
+  private editorBar() {
+    return html`<header class="editor">
+      <button class="primary" title="Finish editing" @click=${() => this.leaveArrange()}>
+        Done
+      </button>
+      ${
+        // **Offered once there is something to put back**: before the first
+        // edit, Done is already the way out that changes nothing.
+        this.arranged
+          ? html`<button
+              title="Put the page back the way it was before you started editing"
+              @click=${this.cancelArrange}
+            >
+              Cancel
+            </button>`
+          : nothing
+      }
+      <span class="sep"></span>
+      ${this.pageActions()}
+      <span class="sep"></span>
+      <button
+        title="Undo the last change"
+        aria-label="Undo"
+        ?disabled=${!this.undoStack.canUndo}
+        @click=${() => this.stepHistory('undo')}
+      >
+        ↶
+      </button>
+      <button
+        title="Redo"
+        aria-label="Redo"
+        ?disabled=${!this.undoStack.canRedo}
+        @click=${() => this.stepHistory('redo')}
+      >
+        ↷
+      </button>
+      <span class="spacer"></span>
+      <span class="segmented" role="group" aria-label="Screen size">
+        ${(['mobile', 'tablet', 'desktop', 'tv'] as const).map(
+          (b) =>
+            html`<button
+              aria-pressed=${b === this.breakpoint ? 'true' : 'false'}
+              title=${`Edit the ${b} arrangement`}
+              @click=${() => {
+                this.breakpoint = b;
+              }}
+            >
+              ${b === 'mobile' ? 'Phone' : b === 'tv' ? 'TV' : humanise(b)}
+            </button>`,
+        )}
+      </span>
+      ${this.zoomControls()}
+      <select
+        aria-label="Skin"
+        title="Skin"
+        @change=${(e: Event) => {
+          this.skin = (e.target as HTMLSelectElement).value;
+        }}
+      >
+        ${Object.keys(builtInSeeds).map(
+          (n) => html`<option value=${n} ?selected=${n === this.skin}>${humanise(n)}</option>`,
+        )}
+      </select>
+      <button
+        class=${this.previewing ? 'armed' : ''}
+        aria-pressed=${this.previewing ? 'true' : 'false'}
+        title=${
+          this.previewing
+            ? 'Back to editing'
+            : 'Use the page as it will be used — controls reach the house'
+        }
+        @click=${() => {
+          this.previewing = !this.previewing;
+          this.tool = undefined;
+        }}
+      >
+        ${this.previewing ? 'Previewing' : 'Preview'}
+      </button>
+      ${this.status()}
+    </header>`;
+  }
+
+  /**
+   * Make a page, copy one, rename one, forget one.
+   *
+   * In the chrome rather than on a page, because these are things you do *to*
+   * a page and a widget that could delete the page it is on is a widget that
+   * can delete itself mid-render.
+   */
+  private pageActions() {
     const id = this.current?.id;
 
     if (this.renaming && this.current !== undefined) {
       // **Both ways out are on screen.** Escape and Enter are free for a
       // keyboard and were the *only* way out, which is a rename nobody can
       // back out of on a wall panel — and the box committed on blur, so
-      // tapping anywhere else saved the words somebody was abandoning. A
-      // rename that has been opened by accident now stays open and says so
-      // until it is told which.
+      // tapping anywhere else saved the words somebody was abandoning.
       const typed = (): string =>
         this.renderRoot.querySelector<HTMLInputElement>('.rename')?.value ??
         this.current?.name ??
@@ -2329,45 +2730,7 @@ export class HcApp extends LitElement {
         </button>`;
     }
 
-    return html`${this.palette()}${this.groupControls()}${this.zoomControls()}
-      <button
-        title="Undo the last change"
-        ?disabled=${!this.undoStack.canUndo}
-        @click=${() => this.stepHistory('undo')}
-      >
-        ↶
-      </button>
-      <button
-        title="Redo"
-        ?disabled=${!this.undoStack.canRedo}
-        @click=${() => this.stepHistory('redo')}
-      >
-        ↷
-      </button>
-      <button
-        class=${this.editing ? 'armed' : ''}
-        title="Arrange this page"
-        aria-pressed=${this.editing ? 'true' : 'false'}
-        @click=${() => {
-          if (this.editing) this.leaveArrange();
-          else this.enterArrange();
-        }}
-      >
-        ${this.editing ? 'Done' : 'Arrange'}
-      </button>
-      ${
-        // **Offered once there is something to put back**, which is the rule
-        // every control in this row follows: before the first edit, Done is
-        // already the way out that changes nothing.
-        this.editing && this.arranged
-          ? html`<button
-              title="Put the page back the way it was before you started arranging"
-              @click=${this.cancelArrange}
-            >
-              Cancel
-            </button>`
-          : nothing
-      }
+    return html`${this.pagePicker()}
       <button
         title="Rename this page"
         @click=${() => {
@@ -2377,7 +2740,6 @@ export class HcApp extends LitElement {
         Rename
       </button>
       <button title="Make a page" @click=${this.addPage}>+ Page</button>
-      ${this.readability()}
       ${
         id === undefined
           ? nothing
@@ -2406,7 +2768,133 @@ export class HcApp extends LitElement {
                 >
                   Delete
                 </button>`
-      }`;
+      }
+      ${this.readability()}`;
+  }
+
+  /**
+   * The right rail: whatever is selected, or the page when nothing is.
+   *
+   * **The property panel is drawn here, as the editor's inspector**, rather
+   * than as a widget a page had to carry (`hc-property-panel`'s `inspector`).
+   * One selected thing shows its fields; several show what can be done to
+   * them together; none shows the page.
+   */
+  private inspector() {
+    const doc = this.current;
+    if (doc === undefined) return nothing;
+    const ids = this.held.ids;
+    const layout = layoutToDraw(doc, this.breakpoint);
+
+    if (ids.length === 1) {
+      const w = (doc.widgets ?? []).find((x) => x.id === ids[0]);
+      if (w !== undefined) {
+        return html`<div class="insp-head">
+            <div class="insp-title">
+              <span class="insp-kind">${typeName(w.type)}</span>
+              <span class="insp-name">${layerName(w, this.deviceName)}</span>
+            </div>
+            <button class="danger" title="Take this off the page" @click=${this.deleteHeld}>
+              Delete
+            </button>
+          </div>
+          ${this.showAs(w)}
+          ${keyed(
+            `${w.id}:${w.type}`,
+            html`<hc-property-panel
+              inspector
+              .subjectId=${w.id}
+              .config=${{}}
+              .env=${{ ...this.overlayEnv(), breakpoint: this.breakpoint }}
+              .devices=${this.store.list()}
+              .vocabulary=${this.vocabulary}
+              .pages=${this.pageList()}
+              .templates=${this.authored.templates()}
+              .onMakeTemplate=${this.makeTemplate}
+              .assets=${this.assets}
+              .onUploadAsset=${this.uploadAsset}
+              .pageWidgets=${doc.widgets ?? []}
+              .onSaveWidget=${this.saveWidget}
+              .onPlaceWidget=${this.placeWidgetOnPage}
+              .pagePlacements=${layout?.layout}
+            ></hc-property-panel>`,
+          )}`;
+      }
+    }
+
+    if (ids.length > 1) {
+      return html`<div class="insp-head">
+          <div class="insp-title">
+            <span class="insp-kind">Selection</span>
+            <span class="insp-name">${ids.length} things</span>
+          </div>
+          <button class="danger" title="Take all of these off the page" @click=${this.deleteHeld}>
+            Delete
+          </button>
+        </div>
+        <div class="insp-actions">${this.groupControls()}</div>
+        <p class="insp-note">
+          Drag any one of them to move them together. Shift-click adds or removes one.
+        </p>`;
+    }
+
+    const composed = this.free();
+    return html`<div class="insp-head">
+        <div class="insp-title">
+          <span class="insp-kind">Page</span>
+          <span class="insp-name">${doc.name}</span>
+        </div>
+      </div>
+      <dl class="insp-facts">
+        <dt>Layout</dt>
+        <dd>${composed ? 'Composed — placed freely' : 'Grid — cards snap to cells'}</dd>
+        <dt>Arrangement</dt>
+        <dd>
+          ${layout?.borrowedFrom === undefined ? this.breakpoint : `${this.breakpoint}, using the ${layout.borrowedFrom} one`}
+        </dd>
+        <dt>Widgets</dt>
+        <dd>${doc.widgets?.length ?? 0}</dd>
+      </dl>
+      <p class="insp-note">
+        Click something on the page, or in Layers, to edit it. Drag a device from Insert onto the
+        page to add it.
+      </p>`;
+  }
+
+  /**
+   * The page with the editor round it: what to add and what is there on the
+   * left, the page in the middle, what is selected on the right.
+   *
+   * The rails are sticky columns rather than a scrolling box round the page,
+   * because the document is what scrolls — the zoom pans by scrolling the
+   * window (§14.2), and every device already knows how to do that.
+   */
+  private workspace(page: unknown) {
+    return html`<div class="workspace">
+      <aside class="rail left" aria-label="Insert and layers">
+        <hc-editor-rail
+          .doc=${this.current}
+          .breakpoint=${this.breakpoint}
+          .tool=${this.previewing ? undefined : this.tool}
+          .held=${this.held.ids}
+          .templateIds=${this.authored
+            .templates()
+            .list()
+            .map((t) => t.id)}
+          .deviceName=${this.deviceName}
+          .devices=${this.store.list()}
+          @hc-tool=${(e: CustomEvent<{ type: string | undefined }>) => {
+            this.previewing = false;
+            this.tool = e.detail.type;
+          }}
+          @hc-select=${this.selectFromRail}
+        ></hc-editor-rail>
+      </aside>
+      <div class="canvas">${page}</div>
+      <aside class="rail right" aria-label="Inspector">
+        ${this.previewing ? html`<p class="insp-note">Previewing — controls reach the house. Press Previewing to go back to editing.</p>` : this.inspector()}
+      </aside>
+    </div>`;
   }
 
   private body() {
@@ -2424,6 +2912,54 @@ export class HcApp extends LitElement {
     if (this.phase === 'connecting') return html`<div class="note">Connecting…</div>`;
     if (this.phase === 'failed') return html`<div class="note error">${this.message}</div>`;
 
+    const page = html`<hc-page
+      @hc-open-room=${(e: CustomEvent<{ room: string; page?: string }>) => this.openRoom(e)}
+      @hc-picked=${(e: CustomEvent<{ ids: string[]; inside?: string }>) => {
+        this.held = e.detail;
+      }}
+      @hc-zoom=${(e: CustomEvent<{ zoom: number }>) => {
+        this.zoom = e.detail.zoom;
+      }}
+      .doc=${this.current}
+      .store=${this.store}
+      .onCommand=${this.command}
+      .onFetch=${this.history}
+      .onEvents=${this.events}
+      .onDetails=${this.details}
+      .onArt=${this.art}
+      .plugins=${this.plugins}
+      .onUpdateDevice=${this.updateDevice}
+      .onSaveIconRules=${this.saveIconRules}
+      .onSavePreferences=${this.savePreferences}
+      .vocabulary=${this.vocabulary}
+      .pages=${this.pageList()}
+      .onSaveWidget=${this.mayWriteDashboards() ? this.saveWidget : undefined}
+      .onAddWidget=${this.mayWriteDashboards() ? this.addWidgetToPage : undefined}
+      .onRemoveWidget=${this.mayWriteDashboards() ? this.removeWidgetFromPage : undefined}
+      .onPlaceWidget=${this.mayWriteDashboards() ? this.placeWidgetOnPage : undefined}
+      .onPlaceWidgets=${this.mayWriteDashboards() ? this.placeWidgetsOnPage : undefined}
+      .onDropWidgets=${this.mayWriteDashboards() ? this.dropWidgetsOnPage : undefined}
+      .onPlaceGroup=${this.mayWriteDashboards() ? this.placeGroupOnPage : undefined}
+      .onDropGroup=${this.mayWriteDashboards() ? this.dropGroupOnPage : undefined}
+      .onSizeGroup=${this.mayWriteDashboards() ? this.sizeGroupOnPage : undefined}
+      .onTurnWidget=${this.mayWriteDashboards() ? this.turnWidgetOnPage : undefined}
+      .onTurnWidgets=${this.mayWriteDashboards() ? this.turnWidgetsOnPage : undefined}
+      .onDrawWidget=${this.mayWriteDashboards() ? this.drawWidgetOnPage : undefined}
+      .tool=${this.tool}
+      .toolSize=${this.toolSize()}
+      mode=${this.arranging ? 'edit' : 'view'}
+      .extensions=${this.extensions}
+      .onInstallExtension=${this.mayWriteDashboards() ? this.installExtension : undefined}
+      .assets=${this.assets}
+      .onMakeTemplate=${this.mayWriteDashboards() ? this.makeTemplate : undefined}
+      .onUploadAsset=${this.mayWriteDashboards() ? this.uploadAsset : undefined}
+      .scopes=${this.panelScopes}
+      .templates=${this.authored.templates()}
+      .onAction=${this.runAction}
+      .context=${this.roomContext}
+      breakpoint=${this.breakpoint}
+    ></hc-page>`;
+
     return html`
       ${this.message !== '' ? html`<div class="note error">${this.message}</div>` : nothing}
       ${
@@ -2437,52 +2973,7 @@ export class HcApp extends LitElement {
             </div>`
           : nothing
       }
-      <hc-page
-        @hc-open-room=${(e: CustomEvent<{ room: string; page?: string }>) => this.openRoom(e)}
-        @hc-picked=${(e: CustomEvent<{ ids: string[]; inside?: string }>) => {
-          this.held = e.detail;
-        }}
-        @hc-zoom=${(e: CustomEvent<{ zoom: number }>) => {
-          this.zoom = e.detail.zoom;
-        }}
-        .doc=${this.current}
-        .store=${this.store}
-        .onCommand=${this.command}
-        .onFetch=${this.history}
-        .onEvents=${this.events}
-        .onDetails=${this.details}
-        .onArt=${this.art}
-        .plugins=${this.plugins}
-        .onUpdateDevice=${this.updateDevice}
-        .onSaveIconRules=${this.saveIconRules}
-        .onSavePreferences=${this.savePreferences}
-        .vocabulary=${this.vocabulary}
-        .pages=${this.pageList()}
-        .onSaveWidget=${this.mayWriteDashboards() ? this.saveWidget : undefined}
-        .onAddWidget=${this.mayWriteDashboards() ? this.addWidgetToPage : undefined}
-        .onRemoveWidget=${this.mayWriteDashboards() ? this.removeWidgetFromPage : undefined}
-        .onPlaceWidget=${this.mayWriteDashboards() ? this.placeWidgetOnPage : undefined}
-        .onPlaceWidgets=${this.mayWriteDashboards() ? this.placeWidgetsOnPage : undefined}
-        .onDropWidgets=${this.mayWriteDashboards() ? this.dropWidgetsOnPage : undefined}
-        .onPlaceGroup=${this.mayWriteDashboards() ? this.placeGroupOnPage : undefined}
-        .onDropGroup=${this.mayWriteDashboards() ? this.dropGroupOnPage : undefined}
-        .onSizeGroup=${this.mayWriteDashboards() ? this.sizeGroupOnPage : undefined}
-        .onTurnWidget=${this.mayWriteDashboards() ? this.turnWidgetOnPage : undefined}
-        .onTurnWidgets=${this.mayWriteDashboards() ? this.turnWidgetsOnPage : undefined}
-        .onDrawWidget=${this.mayWriteDashboards() ? this.drawWidgetOnPage : undefined}
-        .tool=${this.tool}
-        mode=${this.editing ? 'edit' : 'view'}
-        .extensions=${this.extensions}
-        .onInstallExtension=${this.mayWriteDashboards() ? this.installExtension : undefined}
-        .assets=${this.assets}
-        .onMakeTemplate=${this.mayWriteDashboards() ? this.makeTemplate : undefined}
-        .onUploadAsset=${this.mayWriteDashboards() ? this.uploadAsset : undefined}
-        .scopes=${this.panelScopes}
-        .templates=${this.authored.templates()}
-        .onAction=${this.runAction}
-        .context=${this.roomContext}
-        breakpoint=${this.breakpoint}
-      ></hc-page>
+      ${this.editing ? this.workspace(page) : page}
       <hc-overlay .env=${this.overlayEnv()}></hc-overlay>
     `;
   }

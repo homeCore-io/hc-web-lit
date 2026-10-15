@@ -48,14 +48,10 @@ describe('a page id', () => {
 describe('a new page', () => {
   const page = newPage('Upstairs', [], 'user-1');
 
-  it('can be edited the moment it exists', () => {
-    // An empty page cannot be given a widget — placing one is the designer's
-    // job and the designer is Phase 10 — so a page ships with the tool for
-    // editing itself. The alternative is "you can make a page and then
-    // nothing".
-    expect(page.widgets?.map((w) => w.type)).toEqual(['heading', 'property_panel']);
-    const panel = page.widgets?.find((w) => w.type === 'property_panel');
-    expect(panel?.config?.['edits']).toBe('title');
+  it('starts with a heading and no editor of its own', () => {
+    // The editor's inspector edits it; a page carrying a property panel would
+    // show a second editor inside the first.
+    expect(page.widgets?.map((w) => w.type)).toEqual(['heading']);
   });
 
   it('is named what somebody typed, and addressed by a slug', () => {
@@ -67,7 +63,7 @@ describe('a new page', () => {
     // `layoutFor` falls back across breakpoints, so writing four copies of one
     // layout would be writing three of them wrong.
     expect(page.layouts).toHaveLength(1);
-    expect(layoutToDraw(page, 'mobile')?.layout.placements).toHaveLength(2);
+    expect(layoutToDraw(page, 'mobile')?.layout.placements).toHaveLength(1);
     expect(layoutToDraw(page, 'mobile')?.borrowedFrom).toBe('desktop');
   });
 });

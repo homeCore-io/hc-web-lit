@@ -139,3 +139,15 @@ export function tagForDevice(d: {
   if (d.schema === undefined) return undefined;
   return byCapability.find((c) => c.test(d as DeviceState))?.tag;
 }
+
+/**
+ * The widget type an element draws, for going from "what draws this device"
+ * back to something a page can store.
+ *
+ * The first registered wins, which only matters for an element registered
+ * under two types — and then either is a faithful name for it.
+ */
+export function typeForTag(tag: WidgetTag): string | undefined {
+  for (const [type, t] of registry) if (t === tag) return type;
+  return undefined;
+}

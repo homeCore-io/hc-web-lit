@@ -2772,6 +2772,47 @@ not a failure of it.
       nothing. The snapshot is the whole list of pages rather than the one on
       screen, for the reason the undo stack is: a page made or deleted while
       arranging is part of what "the way it was" means
+- [x] **An editor round the page, not a toolbar over it** (2026-10-15). The
+      household's verdict on everything above was that the editing experience
+      is poor, and the reasons were structural rather than polish. The bar at
+      the top carried every authoring verb, the skin and the breakpoint for
+      somebody who had opened a page to turn a lamp on; Arrange added a
+      fifty-entry "Draw…" list beside them; and **the property panel was a
+      widget a page had to carry**, from before the designer existed — so on
+      the household's own pages, which carry none, a widget drawn from the
+      palette landed as an unconfigured grey box that could be selected and
+      not edited. Now: a viewer bar with the page, its liveness and **Edit**
+      (for any session that may write pages); and in place, an editor with a
+      bar of its own (Done, Cancel, page verbs, undo, screen size, zoom, skin,
+      **Preview**), a left rail (`hc-editor-rail`: Insert, grouped by what
+      somebody is trying to do and searchable; Layers, the page as a list,
+      which is how the hairline and the shape behind everything become
+      selectable), and a right rail that is the property panel drawn as an
+      **inspector** — bound to the selection, the page itself as the preview,
+      writing as it is edited because every write is already one undo step.
+      A drawn widget is **selected the moment it exists**, so the inspector
+      opens on its empty fields. Delete acts on the selection as one step.
+      Preview is the page used without leaving the editor, and commands reach
+      the house there and nowhere else in edit mode. A composed page is fitted
+      between the rails on the way in. New pages no longer ship with a panel
+      pointed at their heading.
+- [x] **Device first: the house is the palette** (2026-10-15). The first
+      round of the editor still offered widget *types* — lock, keypad, timer,
+      fifty of them on shelves — and the household's verdict was that nobody
+      creates a lock in the UI: homeCore already has one, and the page is for
+      controlling it. So Insert now lists rooms and their devices (search,
+      collapsed by room), dragged onto the page with a ghost the size the
+      thing will be; `core/insert.ts` chooses the widget (`waysToShow` — the
+      same `tagForDevice` dispatch a device grid uses, then card, switch,
+      sliders, pill, reading, chart, only where the device can fill them) and
+      binds it, including the keys core's vocabulary requires (`scene_id`, a
+      card's manual `device_ids`). The inspector's **Show as** changes the way
+      and resizes from the same corner. Types a device brings with it are not
+      offered on their own; eight page items stay (heading, text, image, icon,
+      shape, line, link, web page) and the rest fold under More. Also fixed
+      here: `placementAt` took the first hit in document order, which on every
+      composed page was the full-page ground shape — so a widget dropped onto
+      such a page could never be selected again. It asks for the topmost now.
 - [x] Undo/redo stack. Whole documents rather than inverse operations
       (`core/undo.ts`): an inverse that is *nearly* right leaves a household
       with a page subtly different from the one they had, and snapshots cannot

@@ -72,12 +72,10 @@ export function pageId(name: string, taken: readonly string[]): string {
 /**
  * A new page, ready to be edited.
  *
- * **It comes with a heading and a property panel pointed at that heading**,
- * which looks like a strange default until you try the alternative: an empty
- * page cannot be given a widget, because placing one is the designer's job and
- * the designer is Phase 10. A page that ships with the tool for editing itself
- * is the difference between "you can make a page" and "you can make a page and
- * then nothing".
+ * **A heading and nothing else.** It used to carry a property panel pointed
+ * at that heading, because an empty page could not be given a widget before
+ * the designer existed. The editor's inspector is that tool now, and a page
+ * that brought its own editor along would show a second one inside the first.
  *
  * One `desktop` layout and no others: `layoutFor` falls back across
  * breakpoints, so a phone draws the desktop arrangement rather than nothing,
@@ -91,11 +89,6 @@ export function newPage(
   const id = pageId(name, taken);
   const widgets: DashboardWidget[] = [
     { id: 'title', type: 'heading', config: { text: name, level: 'h1' } },
-    {
-      id: 'panel',
-      type: 'property_panel',
-      config: { widget: { type: 'heading', config: { text: name, level: 'h1' } }, edits: 'title' },
-    },
   ];
 
   return {
@@ -109,10 +102,7 @@ export function newPage(
         columns: 12,
         row_height: 120,
         gap: 12,
-        placements: [
-          { widget_id: 'title', x: 0, y: 0, w: 12, h: 1 },
-          { widget_id: 'panel', x: 0, y: 1, w: 6, h: 4 },
-        ],
+        placements: [{ widget_id: 'title', x: 0, y: 0, w: 12, h: 1 }],
       },
     ],
     widgets,
@@ -227,6 +217,35 @@ export function addWidget(
  * held together on the wall is held together on the phone, so it lives in the
  * widget's config where there is one copy of it rather than one per layout.
  */
+/**
+ * A widget shown another way: the same thing on the page, a different type.
+ *
+ * What it *is* survives — its id, its place in every layout, its group and
+ * its title — and what it draws is replaced. Config the old type kept and the
+ * new one does not read would sit in the document meaning nothing, so only the
+ * keys that belong to the widget rather than to its type are carried over.
+ */
+export function reshapeWidget(
+  doc: DashboardDefinition,
+  id: string,
+  type: string,
+  config: Record<string, unknown>,
+): DashboardDefinition {
+  return {
+    ...doc,
+    widgets: (doc.widgets ?? []).map((w) => {
+      if (w.id !== id) return w;
+      const kept = Object.fromEntries(
+        Object.entries(w.config ?? {}).filter(([k]) => KEPT_ON_RESHAPE.has(k)),
+      );
+      return { ...w, type, config: { ...kept, ...config } };
+    }),
+  };
+}
+
+/** Config that is the widget's own and not its type's. */
+const KEPT_ON_RESHAPE = new Set(['group', 'title', 'label', 'hide_unless', 'hide_with', 'layer']);
+
 export function regroupWidgets(
   doc: DashboardDefinition,
   paths: ReadonlyMap<string, string | undefined>,

@@ -364,6 +364,16 @@ describe('what may actuate while a page is being arranged', () => {
     expect(sent).toEqual([]);
   });
 
+  it('except in Preview, which is the page used without leaving the editor', async () => {
+    const { el, sent } = await shell(true);
+    (el as unknown as { previewing: boolean }).previewing = true;
+    await (el as unknown as { command: (r: unknown) => Promise<void> }).command({
+      deviceId: 'plug',
+      patch: { on: false },
+    });
+    expect(sent).toEqual([{ id: 'plug', patch: { on: false } }]);
+  });
+
   it('and it says so rather than doing nothing quietly', async () => {
     // A control that silently does nothing is the worst kind — the same rule
     // the safety refusal already keeps. The overlay is the app's own element,
@@ -378,7 +388,7 @@ describe('what may actuate while a page is being arranged', () => {
       deviceId: 'plug',
       patch: { on: false },
     });
-    expect(said.join(' ')).toMatch(/arrang/i);
+    expect(said.join(' ')).toMatch(/editing/i);
   });
 
   it('everything that did before, the moment arranging stops', async () => {

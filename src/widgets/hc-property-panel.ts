@@ -339,6 +339,32 @@ export class HcPropertyPanel extends LitElement {
     .opaque {
       color: var(--hc-ink-muted, #8b95a4);
     }
+    /* **In the inspector, a field sits under its name.** The rail is a
+       third of the width the panel was drawn for on a page, and a label
+       column beside a field column left the field forty pixels wide. The
+       inputs are the editor's desk size too (§15.0), not a tap target on a
+       wall. */
+    :host([inspector]) {
+      --hc-density-min-tap: 32px;
+      height: auto;
+      overflow: visible;
+    }
+    :host([inspector]) .row {
+      grid-template-columns: 1fr;
+      gap: 0.25rem;
+      padding: 0.5rem 0;
+    }
+    :host([inspector]) .name {
+      padding-top: 0;
+    }
+    :host([inspector]) .axis {
+      flex: 1 1 40%;
+    }
+    :host([inspector]) .axis input {
+      width: auto;
+      flex: 1;
+      min-width: 0;
+    }
     .axis {
       display: inline-flex;
       align-items: center;
@@ -379,6 +405,24 @@ export class HcPropertyPanel extends LitElement {
 
   /** The panel's own config. `widget` is the subject it edits. */
   @property({ attribute: false }) config: Record<string, unknown> = {};
+
+  /**
+   * Drawn as the editor's inspector rather than as a widget on a page.
+   *
+   * The panel began as a widget a page had to carry, pointed at one other
+   * widget, because there was no editor to hold it. The editor holds it now:
+   * the subject is whatever is selected (`subjectId`), the page itself is the
+   * preview, and an edit is written as it is made — every change already
+   * goes through the undo stack, so a Save button would be a second question
+   * about something the page has already shown.
+   */
+  @property({ type: Boolean, reflect: true }) inspector = false;
+
+  /** The widget the inspector is showing, from the editor's selection. */
+  @property({ attribute: false }) subjectId: string | undefined;
+
+  /** The pending inspector write, so typing is one undo step rather than ten. */
+  private autosave: ReturnType<typeof setTimeout> | undefined;
   @property({ attribute: false }) devices: readonly DeviceState[] = [];
   @property({ attribute: false }) env: MountEnv | undefined;
   /** Core's table, when this session has reached core. Absent is workable. */
@@ -610,7 +654,59 @@ export class HcPropertyPanel extends LitElement {
 
   /** The widget id this panel is pointed at, chosen or configured. */
   private get target(): string {
+    if (this.inspector) return this.subjectId ?? '';
     return this.chosen ?? this.setting('edits');
+  }
+
+  override willUpdate(changed: Map<string, unknown>): void {
+    // Another selection is another subject. What was being typed into the
+    // last one is written now rather than dropped or carried across.
+    if (changed.has('subjectId')) {
+      const was = changed.get('subjectId') as string | undefined;
+      this.flushAutosave(was);
+      this.draft = undefined;
+      this.saved = '';
+      this.trouble = '';
+      this.confirmingRemove = false;
+    }
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.flushAutosave(this.target);
+  }
+
+  /** Write the inspector's draft into `widgetId` straight away, if there is one. */
+  private flushAutosave(widgetId: string | undefined): void {
+    if (this.autosave === undefined) return;
+    clearTimeout(this.autosave);
+    this.autosave = undefined;
+    if (widgetId !== undefined && widgetId !== '') void this.save(widgetId);
+  }
+
+  /**
+   * Write the inspector's edit once typing pauses.
+   *
+   * A config outside the shared vocabulary still is not written — the rule
+   * the Save button enforced — and the field says why rather than the edit
+   * vanishing.
+   */
+  private scheduleAutosave(): void {
+    const target = this.target;
+    if (this.onSaveWidget === undefined || target === '') return;
+    if (this.autosave !== undefined) clearTimeout(this.autosave);
+    this.autosave = setTimeout(() => {
+      this.autosave = undefined;
+      const subject = this.subject;
+      const spec = subject === undefined ? undefined : widgetSpec(this.vocabulary, subject.type);
+      const problems = propertiesFor(spec, this.current).filter((p) => p.problem !== undefined);
+      if (problems.length > 0) {
+        this.saved = '';
+        this.trouble = 'Not saved yet — fix the fields marked below.';
+        return;
+      }
+      void this.save(target);
+    }, 400);
   }
 
   /**
@@ -640,6 +736,7 @@ export class HcPropertyPanel extends LitElement {
     if (subject === undefined) return;
     const spec: WidgetSpec = { type: subject.type, config: next };
     this.onEditWidget?.(spec);
+    if (this.inspector) this.scheduleAutosave();
     // Composed, because the panel may be several shadow roots deep inside
     // whatever surface opened it, and the thing that persists is above all of
     // them.
@@ -1668,7 +1765,7 @@ export class HcPropertyPanel extends LitElement {
     const problems = properties.filter((p) => p.problem !== undefined).length;
 
     const preview =
-      this.env !== undefined && this.config['preview'] !== false
+      !this.inspector && this.env !== undefined && this.config['preview'] !== false
         ? mountChildren([{ type: subject.type, config }], this.env, this.cache)
         : [];
 
@@ -1687,8 +1784,8 @@ export class HcPropertyPanel extends LitElement {
               }
             </div>`
       }
-      ${this.renderPicker()} ${this.renderCatalogue()} ${this.renderPlacement()}
-      ${this.templateRow()}
+      ${this.inspector ? nothing : html`${this.renderPicker()} ${this.renderCatalogue()}`}
+      ${this.renderPlacement()} ${this.templateRow()}
 
       <div class="subject" part="state">
         ${subject.type}${
@@ -1754,7 +1851,7 @@ export class HcPropertyPanel extends LitElement {
           }</span
         >
         ${
-          this.draft === undefined
+          this.draft === undefined || this.inspector
             ? nothing
             : html`<button
                   part="action"

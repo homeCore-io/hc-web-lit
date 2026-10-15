@@ -54,6 +54,7 @@ import type { HistoryFetch } from '../widgets/hc-history-chart.js';
 import { leastFor as leastOfType, tagFor } from '../core/registry.js';
 import type { ActionConfig } from '../core/actions.js';
 import type { TemplateStore } from '../core/templates.js';
+import { DRAG_TOOL, type StartSize } from '../core/insert.js';
 import { mountWidget, specFor, type MountEnv, type MountTarget } from './mount.js';
 
 /**
@@ -64,6 +65,9 @@ import { mountWidget, specFor, type MountEnv, type MountTarget } from './mount.j
  * two, and on a wall panel every press would otherwise be a tiny drag.
  */
 const NUDGE = 4;
+
+/** The grid a dropped thing lands on, on a free page, in frame pixels. */
+const SNAP = 8;
 
 /**
  * How far in and out the arranging zoom goes.
@@ -821,6 +825,13 @@ export class HcPage extends LitElement {
   @property({ type: String }) tool: string | undefined;
 
   /**
+   * How big the held thing starts, when the shell knows better than a flat
+   * default — a lock is not the size of a chart, and a device dropped on a
+   * page should arrive the size it is useful at rather than be resized next.
+   */
+  @property({ attribute: false }) toolSize: StartSize | undefined;
+
+  /**
    * Make the held widget at the box somebody dragged out.
    *
    * Separate from `onAddWidget`, which appends at the bottom and is what the
@@ -954,6 +965,8 @@ export class HcPage extends LitElement {
   };
 
   override willUpdate(changed: Map<string, unknown>): void {
+    // A drag that ended somewhere other than here leaves no ghost behind.
+    if (changed.has('tool') && this.tool === undefined) this.drawing = undefined;
     // A selection is about this surface, right now. Leaving edit mode ends the
     // gesture it belonged to, and a page that came back from being *used* with
     // six cards still highlighted would be offering to move things somebody
@@ -1184,6 +1197,9 @@ export class HcPage extends LitElement {
           ?data-armed=${this.armed}
           ?data-editing=${this.mode === 'edit'}
           @pointerdown=${(e: PointerEvent) => this.onSurfacePress(e)}
+          @dragover=${this.onDragOver}
+          @dragleave=${this.onDragLeave}
+          @drop=${this.onDrop}
           style="width:${frame.width}px;height:${tall}px;transform:scale(${scale});--hc-zoom:${scale}"
         >
           ${this.frameBodies(items)} ${this.drawPreview()} ${this.groupFrame()}
@@ -2298,6 +2314,20 @@ export class HcPage extends LitElement {
     if (!same) this.fitted = next;
   }
 
+  /**
+   * Put exactly these in hand, from outside the surface.
+   *
+   * The editor's rails select too — the Layers list, and a widget that has
+   * just been drawn — and a selection the page did not make is still the
+   * page's selection, so it is set here rather than mirrored in the shell.
+   * Ids the page does not place are dropped rather than held invisibly.
+   */
+  select(ids: readonly string[]): void {
+    const placed = new Set((this.doc?.widgets ?? []).map((w) => w.id));
+    this.inside = undefined;
+    this.picked = new Set(ids.filter((id) => placed.has(id)));
+  }
+
   private pick(id: string, extend: boolean): void {
     const held = this.clusterOf(id);
     if (!extend) {
@@ -3211,13 +3241,28 @@ export class HcPage extends LitElement {
 
   /** Which placement is under a point on screen, if any. */
   private placementAt(x: number, y: number): string | undefined {
-    for (const el of this.shadowRoot?.querySelectorAll('[data-widget]') ?? []) {
+    // **The one on top, not the first in the document.** Every composed page
+    // in this house starts with a ground — a shape the size of the page,
+    // behind everything — and a first-match hit test picked it for every
+    // press, so a widget drawn onto such a page could never be selected again.
+    // The browser knows what is painted where, layers and all, so ask it.
+    const root = this.shadowRoot;
+    const painted =
+      typeof root?.elementsFromPoint === 'function' ? root.elementsFromPoint(x, y) : [];
+    for (const el of painted) {
+      const placed = el.closest('[data-widget]');
+      if (placed !== null) return placed.getAttribute('data-widget') ?? undefined;
+    }
+    // A test environment that lays nothing out has no paint order to ask;
+    // the last box that contains the point is the latest drawn.
+    let last: string | undefined;
+    for (const el of root?.querySelectorAll('[data-widget]') ?? []) {
       const at = el.getBoundingClientRect();
       if (x >= at.left && x <= at.right && y >= at.top && y <= at.bottom) {
-        return el.getAttribute('data-widget') ?? undefined;
+        last = el.getAttribute('data-widget') ?? undefined;
       }
     }
-    return undefined;
+    return last;
   }
 
   /**
@@ -3312,11 +3357,67 @@ export class HcPage extends LitElement {
   private atPoint(from: { x: number; y: number }): Box {
     const layout =
       this.doc === undefined ? undefined : layoutToDraw(this.doc, this.breakpoint)?.layout;
-    // The same defaults `placeBelow` uses, so a widget is the size somebody is
-    // used to whichever way they made it.
-    const size = this.free ? { w: 360, h: 200 } : { w: Math.min(6, layout?.columns || 12), h: 2 };
-    return { x: Math.max(0, Math.round(from.x)), y: Math.max(0, Math.round(from.y)), ...size };
+    const columns = layout?.columns || 12;
+    // The held thing's own size when the shell gave one; otherwise the same
+    // defaults `placeBelow` uses.
+    const given = this.toolSize;
+    if (!this.free) {
+      const w = Math.min(given?.cells.w ?? 6, columns);
+      const h = given?.cells.h ?? 2;
+      // Under the pointer, and kept inside the columns: a card dropped at the
+      // right edge lands against it rather than half off the page.
+      return {
+        x: Math.max(0, Math.min(columns - w, Math.round(from.x))),
+        y: Math.max(0, Math.round(from.y)),
+        w,
+        h,
+      };
+    }
+    const size = given?.free ?? { w: 360, h: 200 };
+    // **Centred on the pointer and on the 8px grid.** What somebody drops is
+    // where they let go of it, not hanging off to the right of that point —
+    // and the grid is what makes two things dropped side by side line up
+    // without a nudge.
+    const snap = (v: number): number => Math.round(v / SNAP) * SNAP;
+    const wide = layout?.frame?.width ?? Infinity;
+    return {
+      x: Math.max(0, Math.min(wide - size.w, snap(from.x - size.w / 2))),
+      y: Math.max(0, snap(from.y - size.h / 2)),
+      ...size,
+    };
   }
+
+  /**
+   * Something from the editor's rail, carried over the page.
+   *
+   * The rail arms the tool when the drag starts, so by the time anything is
+   * over this surface the page already knows what it is and how big — the
+   * drag's own data cannot be read until the drop, and a ghost the right size
+   * is the whole of what makes placing feel like placing.
+   */
+  private readonly onDragOver = (e: DragEvent): void => {
+    if (!this.armed || e.dataTransfer?.types.includes(DRAG_TOOL) !== true) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    const at = this.pointIn(e.clientX, e.clientY);
+    if (at !== undefined) this.drawing = this.atPoint(at);
+  };
+
+  private readonly onDragLeave = (e: DragEvent): void => {
+    const into = e.relatedTarget as Node | null;
+    if (into !== null && (e.currentTarget as Node).contains(into)) return;
+    this.drawing = undefined;
+  };
+
+  private readonly onDrop = (e: DragEvent): void => {
+    const type = this.tool;
+    if (!this.armed || type === undefined) return;
+    e.preventDefault();
+    const at = this.pointIn(e.clientX, e.clientY);
+    const box = at === undefined ? this.drawing : this.atPoint(at);
+    this.drawing = undefined;
+    if (box !== undefined) void this.onDrawWidget?.(type, box);
+  };
 
   /** The rectangle being drawn, drawn — in the grid, or in the frame. */
   private drawPreview() {
@@ -3362,6 +3463,9 @@ export class HcPage extends LitElement {
         ?data-armed=${this.armed}
         ?data-editing=${this.mode === 'edit'}
         @pointerdown=${(e: PointerEvent) => this.onSurfacePress(e)}
+        @dragover=${this.onDragOver}
+        @dragleave=${this.onDragLeave}
+        @drop=${this.onDrop}
         style="grid-template-columns:repeat(${columns},1fr);
                grid-auto-rows:${rowHeight}px;
                gap:${gap}px;${room}"
