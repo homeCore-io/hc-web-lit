@@ -1,3 +1,6 @@
+> **Retired (2026-10-29).** hc-web-lit is no longer developed; the homeCore web
+> app is hc-web-svelte. What follows is the design record as it stood.
+
 # hc-web — UI Architecture
 
 > Design record and implementation context for the homeCore web UI.
